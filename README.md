@@ -46,7 +46,7 @@ AmWF es una herramienta que permite controlar el modo monitor de la interfaz WiF
 
 ### Desde APK (Recomendado)
 
-1. Descarga la última versión desde [Releases](../../releases)
+1. Descarga la última versión desde [Releases](https://github.com/Hitomatito/AmWF/releases)
 2. Instala el APK en tu dispositivo
 3. Activa el modo monitor desde la app
 
@@ -54,7 +54,7 @@ AmWF es una herramienta que permite controlar el modo monitor de la interfaz WiF
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/your-repo/AmWF.git
+git clone https://github.com/Hitomatito/AmWF.git
 cd AmWF
 
 # Abrir en Android Studio
@@ -254,13 +254,13 @@ Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para
 
 ## 📞 Soporte
 
-- 🐛 **Bugs**: Abre un [Issue](../../issues)
-- 💡 **Features**: Solicita en [Discussions](../../discussions)
+- 🐛 **Bugs**: Abre un [Issue](https://github.com/Hitomatito/AmWF/issues)
+- 💡 **Features**: Solicita en [Discussions](https://github.com/Hitomatito/AmWF/discussions)
 - 📖 **Documentación**: Mejora este README
 
 ---
 
 <div align="center">
   <p>Hecho con ❤️ para la comunidad de Android</p>
-  <p>© 2024 AmWF</p>
+  <p>© 2026 AmWF</p>
 </div>

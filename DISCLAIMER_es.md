@@ -1,6 +1,6 @@
 # Descargo de Responsabilidad (Disclaimer)
 
-**Última actualización: Marzo 2024**
+**Última actualización: Marzo 2026**
 
 ## ⚠️ Aviso Importante
 
@@ -118,8 +118,8 @@ El desarrollador se reserva el derecho de:
 
 Para reportar bugs, sugerir mejoras o reportar uso indebido:
 
-- **GitHub Issues**: [Reportar problema](../../issues)
-- **GitHub Discussions**: [Discutir características](../../discussions)
+- **GitHub Issues**: [Reportar problema](https://github.com/Hitomatito/AmWF/issues)
+- **GitHub Discussions**: [Discutir características](https://github.com/Hitomatito/AmWF/discussions)
 
 ## 📋 Confirmación
 
@@ -158,6 +158,6 @@ Al instalar esta aplicación, confirmar que:
 
 ---
 
-© 2024 AmWF. Todos los derechos reservados.
+© 2026 AmWF. Todos los derechos reservados.
 
 </div>
