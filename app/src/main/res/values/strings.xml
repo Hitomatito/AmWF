@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">AmWF</string>
+    <string name="monitor_mode">Control de Modo Monitor WiFi</string>
+    <string name="status">Estado</string>
+    <string name="interface_info">Informacion</string>
+    <string name="waiting">Esperando…</string>
+    <string name="checking">Verificando…</string>
+    <string name="activating">Activando…</string>
+    <string name="deactivating">Desactivando…</string>
+    <string name="enable_monitor">ACTIVAR MONITOR</string>
+    <string name="disable_monitor">VOLVER A NORMAL</string>
+    <string name="retry">REINTENTAR</string>
+    <string name="wifi_mode">Modo WiFi</string>
+    
+    <string name="device_compatibility">Compatibilidad del Dispositivo</string>
+    <string name="checking_compatibility">Verificando…</string>
+    <string name="device_compatible">Dispositivo Compatible</string>
+    <string name="device_incompatible">Dispositivo No Compatible</string>
+    <string name="root_required">Root Requerido</string>
+    <string name="root_missing">Root no detectado</string>
+    
+    <string name="label_chipset">Chipset</string>
+    <string name="label_driver">Driver WiFi</string>
+    <string name="label_root">Acceso Root</string>
+    <string name="label_sysfs">Archivo con_mode</string>
+    <string name="label_capabilities">Capacidades</string>
+    
+    <string name="capability_passive">Solo escaneo pasivo</string>
+    <string name="capability_full">Monitor completo</string>
+    <string name="capability_injection">Inyeccion de paquetes</string>
+    <string name="capability_capture">Captura completa</string>
+    <string name="capability_unknown">Por verificar</string>
+    
+    <string name="check_pass">OK</string>
+    <string name="check_fail">Falla</string>
+    <string name="check_na">N/A</string>
+    <string name="no">No</string>
+    <string name="not_found">No encontrado</string>
+    <string name="not_compatible">NO COMPATIBLE</string>
+    <string name="ready_to_use">Listo para usar</string>
+    
+    <string name="monitor_mode_on">Modo Monitor ACTIVADO</string>
+    <string name="monitor_mode_off">Modo Monitor DESACTIVADO</string>
+    <string name="monitor_mode_normal">Modo Normal</string>
+    <string name="error_root">Acceso root denegado</string>
+    <string name="error_selinux">Restriccion SELinux</string>
+    <string name="error_unknown">Error desconocido</string>
+    <string name="status_unknown">Estado desconocido</string>
+</resources>

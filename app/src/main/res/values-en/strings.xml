@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AmWF</string>
+    <string name="monitor_mode">WiFi Monitor Control</string>
+    <string name="status">Status</string>
+    <string name="interface_info">Information</string>
+    <string name="waiting">Waiting…</string>
+    <string name="checking">Checking…</string>
+    <string name="activating">Activating…</string>
+    <string name="deactivating">Deactivating…</string>
+    <string name="enable_monitor">ENABLE MONITOR</string>
+    <string name="disable_monitor">BACK TO NORMAL</string>
+    <string name="retry">RETRY</string>
+    <string name="wifi_mode">WiFi Mode</string>
+    
+    <string name="device_compatibility">Device Compatibility</string>
+    <string name="checking_compatibility">Checking…</string>
+    <string name="device_compatible">Device Compatible</string>
+    <string name="device_incompatible">Device Not Compatible</string>
+    <string name="root_required">Root Required</string>
+    <string name="root_missing">Root not detected</string>
+    
+    <string name="label_chipset">Chipset</string>
+    <string name="label_driver">WiFi Driver</string>
+    <string name="label_root">Root Access</string>
+    <string name="label_sysfs">con_mode file</string>
+    <string name="label_capabilities">Capabilities</string>
+    
+    <string name="capability_passive">Passive scan only</string>
+    <string name="capability_full">Full monitor</string>
+    <string name="capability_injection">Packet injection</string>
+    <string name="capability_capture">Full capture</string>
+    <string name="capability_unknown">To verify</string>
+    
+    <string name="check_pass">OK</string>
+    <string name="check_fail">Fail</string>
+    <string name="check_na">N/A</string>
+    <string name="no">No</string>
+    <string name="not_found">Not found</string>
+    <string name="not_compatible">NOT COMPATIBLE</string>
+    <string name="ready_to_use">Ready to use</string>
+    
+    <string name="monitor_mode_on">Monitor Mode ON</string>
+    <string name="monitor_mode_off">Monitor Mode OFF</string>
+    <string name="monitor_mode_normal">Normal Mode</string>
+    <string name="error_root">Root access denied</string>
+    <string name="error_selinux">SELinux restriction</string>
+    <string name="error_unknown">Unknown error</string>
+    <string name="status_unknown">Unknown status</string>
+</resources>
