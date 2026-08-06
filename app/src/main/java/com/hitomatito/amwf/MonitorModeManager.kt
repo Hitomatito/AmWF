@@ -10,7 +10,8 @@ class MonitorModeManager {
 
     companion object {
         private const val TAG = "MonitorMode"
-        private const val COMMAND_TIMEOUT = 5000L
+        private const val COMMAND_TIMEOUT = 10000L  // Increased for slow devices
+        private const val INTERFACE_DOWN_TIMEOUT = 3000L
     }
 
     fun isRootAvailable(): Boolean {
@@ -35,10 +36,26 @@ class MonitorModeManager {
         }
 
         return try {
+            // Step 1: Bring interface DOWN and verify it actually went down
+            Log.d(TAG, "Bringing $interfaceName DOWN...")
             execCommand("ip link set $interfaceName down")
+            
+            // Wait and verify interface is actually DOWN
+            val downVerified = verifyInterfaceState(desiredState = false)
+            if (!downVerified) {
+                Log.e(TAG, "Failed to bring $interfaceName DOWN")
+                return MonitorResult(
+                    type = MonitorMode.UNKNOWN,
+                    statusRes = R.string.error_unknown,
+                    info = "No se pudo desactivar la interfaz WiFi"
+                )
+            }
+            Log.d(TAG, "$interfaceName is DOWN, proceeding...")
 
             val conModePath = resolveConModePath()
             if (conModePath == null) {
+                // Restore interface before returning error
+                execCommand("ip link set $interfaceName up")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
@@ -46,8 +63,14 @@ class MonitorModeManager {
                 )
             }
 
+            // Step 2: Write con_mode=4 (monitor mode)
+            Log.d(TAG, "Writing con_mode=4 to $conModePath...")
             val writeResult = execCommand("echo 4 > $conModePath")
-            if (writeResult.error.contains("denied") || writeResult.error.contains("readonly")) {
+            if (writeResult.exitCode != 0 || writeResult.error.contains("denied") || 
+                writeResult.error.contains("readonly") || writeResult.error.contains("Permission")) {
+                Log.e(TAG, "Failed to write con_mode: ${writeResult.error}")
+                // Restore interface before returning error
+                execCommand("ip link set $interfaceName up")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_selinux,
@@ -55,6 +78,8 @@ class MonitorModeManager {
                 )
             }
 
+            // Step 3: Bring interface UP
+            Log.d(TAG, "Bringing $interfaceName UP...")
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
 
@@ -73,6 +98,9 @@ class MonitorModeManager {
                 )
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Exception in enableMonitorMode: ${e.message}", e)
+            // Try to restore interface on exception
+            try { execCommand("ip link set $interfaceName up") } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
@@ -93,10 +121,33 @@ class MonitorModeManager {
         }
 
         return try {
+            // Step 1: Bring interface DOWN and verify
+            Log.d(TAG, "Bringing $interfaceName DOWN...")
             execCommand("ip link set $interfaceName down")
+            
+            val downVerified = verifyInterfaceState(desiredState = false)
+            if (!downVerified) {
+                Log.e(TAG, "Failed to bring $interfaceName DOWN")
+                return MonitorResult(
+                    type = MonitorMode.UNKNOWN,
+                    statusRes = R.string.error_unknown,
+                    info = "No se pudo desactivar la interfaz WiFi"
+                )
+            }
+            Log.d(TAG, "$interfaceName is DOWN, proceeding...")
 
-            resolveConModePath()?.let { execCommand("echo 0 > $it") }
+            // Step 2: Write con_mode=0 (managed mode)
+            val conModePath = resolveConModePath()
+            if (conModePath != null) {
+                Log.d(TAG, "Writing con_mode=0 to $conModePath...")
+                val writeResult = execCommand("echo 0 > $conModePath")
+                if (writeResult.exitCode != 0) {
+                    Log.w(TAG, "Warning writing con_mode=0: ${writeResult.error}")
+                }
+            }
 
+            // Step 3: Bring interface UP
+            Log.d(TAG, "Bringing $interfaceName UP...")
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
 
@@ -115,6 +166,9 @@ class MonitorModeManager {
                 )
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Exception in disableMonitorMode: ${e.message}", e)
+            // Try to restore interface on exception
+            try { execCommand("ip link set $interfaceName up") } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
@@ -151,6 +205,29 @@ class MonitorModeManager {
                 info = e.stackTraceToString()
             )
         }
+    }
+
+    /**
+     * Verifies that the interface reached the desired state (UP or DOWN).
+     * Retries multiple times with sleep to account for driver latency.
+     */
+    private fun verifyInterfaceState(desiredState: Boolean): Boolean {
+        val stateStr = if (desiredState) "UP" else "DOWN"
+        val maxRetries = 5
+        val retryDelay = INTERFACE_DOWN_TIMEOUT / maxRetries
+
+        for (attempt in 1..maxRetries) {
+            Thread.sleep(retryDelay)
+            val result = execCommand("ip link show $interfaceName")
+            val isUp = result.output.contains("state UP", ignoreCase = true)
+            
+            Log.d(TAG, "Interface state check attempt $attempt: isUp=$isUp, desired=$desiredState")
+            
+            if (isUp == desiredState) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun getCurrentState(): Pair<MonitorMode, String> {

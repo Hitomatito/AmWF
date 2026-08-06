@@ -94,7 +94,7 @@ class DeviceCompatibilityChecker {
 
     companion object {
         private const val TAG = "CompatChecker"
-        private const val COMMAND_TIMEOUT = 5000L
+        private const val COMMAND_TIMEOUT = 10000L  // Increased for slow devices
         
         private val SU_PATHS = listOf(
             "/system/xbin/su",
@@ -360,18 +360,33 @@ class DeviceCompatibilityChecker {
     private fun testConModeWrite(path: String): Boolean {
         Log.d(TAG, "Testing con_mode write at $path")
         
-        val testResult = execCommand("echo 4 > $path 2>&1; echo \$?")
+        // Save original value before testing
+        val originalValue = execCommand("cat $path 2>/dev/null").output.trim()
+        Log.d(TAG, "Original con_mode value: $originalValue")
         
-        if (testResult.output.contains("1") || testResult.error.contains("denied") || 
-            testResult.error.contains("Permission") || testResult.error.contains("readonly")) {
-            Log.d(TAG, "Write test failed: ${testResult.error}")
-            execCommand("echo 0 > $path 2>&1")
+        try {
+            val testResult = execCommand("echo 4 > $path 2>&1; echo \$?")
+            
+            if (testResult.output.contains("1") || testResult.error.contains("denied") || 
+                testResult.error.contains("Permission") || testResult.error.contains("readonly")) {
+                Log.d(TAG, "Write test failed: ${testResult.error}")
+                return false
+            }
+            
+            Log.d(TAG, "Write test passed")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during write test: ${e.message}", e)
             return false
+        } finally {
+            // CRITICAL: Always restore original value
+            Log.d(TAG, "Restoring con_mode to: $originalValue")
+            try {
+                execCommand("echo $originalValue > $path 2>&1")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore con_mode: ${e.message}", e)
+            }
         }
-        
-        execCommand("echo 0 > $path 2>&1")
-        Log.d(TAG, "Write test passed")
-        return true
     }
 
     private fun detectRoot(): RootInfo {
@@ -499,29 +514,48 @@ class DeviceCompatibilityChecker {
             )
         }
 
+        // Save original mode BEFORE making any changes
         val originalMode = execCommand("cat $conModePath 2>/dev/null").output.trim()
+        Log.d(TAG, "Original con_mode value: $originalMode")
 
-        execCommand("echo 4 > $conModePath 2>/dev/null")
-        Thread.sleep(500)
-        
-        val interfaceName = execCommand("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
-        
-        val canInject = testPacketInjection(interfaceName)
-        val canCapture = testCaptureCapability(interfaceName)
-        
-        execCommand("echo $originalMode > $conModePath 2>/dev/null")
-        Thread.sleep(300)
+        try {
+            // Set to monitor mode (4)
+            execCommand("echo 4 > $conModePath 2>/dev/null")
+            Thread.sleep(500)
+            
+            val interfaceName = execCommand("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
+            
+            val canInject = testPacketInjection(interfaceName)
+            val canCapture = testCaptureCapability(interfaceName)
+            
+            val isPassiveOnly = !canInject && !canCapture
 
-        val isPassiveOnly = !canInject && !canCapture
+            Log.d(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, Passive: $isPassiveOnly")
 
-        Log.d(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, Passive: $isPassiveOnly")
-
-        return CapabilitiesInfo(
-            canInject = canInject,
-            canCapture = canCapture,
-            isPassiveOnly = isPassiveOnly,
-            tested = true
-        )
+            return CapabilitiesInfo(
+                canInject = canInject,
+                canCapture = canCapture,
+                isPassiveOnly = isPassiveOnly,
+                tested = true
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during capability test: ${e.message}", e)
+            return CapabilitiesInfo(
+                canInject = null,
+                canCapture = null,
+                isPassiveOnly = true,
+                tested = false
+            )
+        } finally {
+            // CRITICAL: Always restore original mode, even if tests fail
+            Log.d(TAG, "Restoring con_mode to original value: $originalMode")
+            try {
+                execCommand("echo $originalMode > $conModePath 2>/dev/null")
+                Thread.sleep(300)
+            } catch (e: Exception) {
+                Log.e(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
+            }
+        }
     }
 
     private fun testPacketInjection(interfaceName: String): Boolean {
