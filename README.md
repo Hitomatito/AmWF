@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" alt="AmWF Logo" width="120">
+</div>
+
 # AmWF - Android WiFi Monitor Mode Controller
 
 <div align="center">
