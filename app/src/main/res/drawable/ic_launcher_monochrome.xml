@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Monochrome version of the logo (single color, system tints it) -->
+    <path android:pathData="M25,54 a29,29 0 1,1 58,0 a29,29 0 1,1 -58,0"
+        android:strokeColor="#FF000000" android:strokeWidth="4" android:fillColor="#00000000"/>
+    <path android:pathData="M58.93,69.7 A8,8 0 0 1 49.07,69.7"
+        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
+    <path android:pathData="M63.85,63.39 A16,16 0 0 1 44.15,63.39"
+        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
+    <path android:pathData="M68.47,57.48 A23.5,23.5 0 0 1 39.53,57.48"
+        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
+    <path android:pathData="M48.5,76 a5.5,5.5 0 1,1 11.0,0 a5.5,5.5 0 1,1 -11.0,0"
+        android:fillColor="#FF000000"/>
+</vector>
