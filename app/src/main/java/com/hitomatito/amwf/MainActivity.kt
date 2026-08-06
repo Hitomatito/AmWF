@@ -12,8 +12,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,7 +122,7 @@ class MainActivity : AppCompatActivity() {
         setToggleEnabled(false)
         tvCompatStatus.text = getString(R.string.checking_compatibility)
         
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 compatibilityChecker.checkCompatibility()
             }
@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkCurrentMode() {
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             setToggleEnabled(false)
             tvStatus.text = getString(R.string.checking)
 
@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             setLoading(true, isActivating = true)
             tvStatus.text = getString(R.string.activating)
             tvInfo.text = ""
@@ -249,7 +249,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disableMonitorMode() {
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             setLoading(true, isActivating = false)
             tvStatus.text = getString(R.string.deactivating)
             tvInfo.text = ""

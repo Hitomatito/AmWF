@@ -286,7 +286,9 @@ class MonitorModeManager {
 
     private fun execCommand(command: String): ExecResult {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "su -c '$command'"))
+            // Use su directly (not sh -c "su -c 'cmd'") to prevent shell injection.
+            // su internally runs through sh, so pipes/redirects work.
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             
             val output = StringBuilder()
             val error = StringBuilder()

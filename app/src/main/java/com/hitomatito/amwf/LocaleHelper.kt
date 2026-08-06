@@ -14,7 +14,7 @@ object LocaleHelper {
     const val SPANISH = "es"
     const val ENGLISH = "en"
     
-    private var prefs: SharedPreferences? = null
+    private lateinit var prefs: SharedPreferences
     
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -26,15 +26,25 @@ object LocaleHelper {
     }
     
     fun getLocale(context: Context): String {
-        return prefs?.getString(KEY_LANGUAGE, getSystemLanguage()) ?: getSystemLanguage()
+        return if (::prefs.isInitialized) {
+            prefs.getString(KEY_LANGUAGE, getSystemLanguage()) ?: getSystemLanguage()
+        } else {
+            getSystemLanguage()
+        }
     }
     
     fun getCurrentLocale(context: Context): String {
-        return prefs?.getString(KEY_LANGUAGE, SPANISH) ?: SPANISH
+        return if (::prefs.isInitialized) {
+            prefs.getString(KEY_LANGUAGE, SPANISH) ?: SPANISH
+        } else {
+            SPANISH
+        }
     }
     
     private fun saveLanguage(language: String) {
-        prefs?.edit()?.putString(KEY_LANGUAGE, language)?.apply()
+        if (::prefs.isInitialized) {
+            prefs.edit().putString(KEY_LANGUAGE, language).apply()
+        }
     }
     
     private fun getSystemLanguage(): String {
