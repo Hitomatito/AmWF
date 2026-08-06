@@ -53,7 +53,12 @@ class MonitorModeManager {
         }
 
         return try {
-            // Step 1: Bring interface DOWN and verify it actually went down
+            // Step 1: Disable WiFi service to ensure clean state
+            Log.d(TAG, "Disabling WiFi service...")
+            execCommand("svc wifi disable")
+            Thread.sleep(1000)
+
+            // Step 2: Bring interface DOWN and verify it actually went down
             Log.d(TAG, "Bringing $interfaceName DOWN...")
             execCommand("ip link set $interfaceName down")
             
@@ -61,6 +66,8 @@ class MonitorModeManager {
             val downVerified = verifyInterfaceState(desiredState = false)
             if (!downVerified) {
                 Log.e(TAG, "Failed to bring $interfaceName DOWN")
+                // Try to restore WiFi on failure
+                execCommand("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
@@ -71,8 +78,9 @@ class MonitorModeManager {
 
             val conModePath = resolveConModePath()
             if (conModePath == null) {
-                // Restore interface before returning error
+                // Restore interface and WiFi before returning error
                 execCommand("ip link set $interfaceName up")
+                execCommand("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
@@ -80,7 +88,7 @@ class MonitorModeManager {
                 )
             }
 
-            // Step 2: Write con_mode=4 (monitor mode)
+            // Step 3: Write con_mode=4 (monitor mode)
             Log.d(TAG, "Writing con_mode=4 to $conModePath...")
             val writeResult = execCommand("echo 4 > $conModePath")
             if (writeResult.exitCode != 0 || writeResult.error.contains("denied") || 
@@ -89,8 +97,9 @@ class MonitorModeManager {
                 writeResult.error.contains("Operation not permitted") ||
                 writeResult.error.contains("Input/output error")) {
                 Log.e(TAG, "Failed to write con_mode: ${writeResult.error}")
-                // Restore interface before returning error
+                // Restore interface and WiFi before returning error
                 execCommand("ip link set $interfaceName up")
+                execCommand("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_selinux,
@@ -98,7 +107,7 @@ class MonitorModeManager {
                 )
             }
 
-            // Step 3: Bring interface UP
+            // Step 4: Bring interface UP
             Log.d(TAG, "Bringing $interfaceName UP...")
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
@@ -119,8 +128,11 @@ class MonitorModeManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Exception in enableMonitorMode: ${e.message}", e)
-            // Try to restore interface on exception
-            try { execCommand("ip link set $interfaceName up") } catch (_: Exception) {}
+            // Try to restore interface and WiFi on exception
+            try { 
+                execCommand("ip link set $interfaceName up")
+                execCommand("svc wifi enable")
+            } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
@@ -171,6 +183,12 @@ class MonitorModeManager {
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
 
+            // Step 4: Restart WiFi service to fully restore managed mode
+            // After changing con_mode, Android's WiFi framework needs to reinitialize
+            Log.d(TAG, "Restarting WiFi service...")
+            restartWifiService()
+            Thread.sleep(2000)
+
             val (mode, info) = getCurrentState()
 
             when (mode) {
@@ -187,14 +205,31 @@ class MonitorModeManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Exception in disableMonitorMode: ${e.message}", e)
-            // Try to restore interface on exception
-            try { execCommand("ip link set $interfaceName up") } catch (_: Exception) {}
+            // Try to restore interface and WiFi on exception
+            try { 
+                execCommand("ip link set $interfaceName up")
+                execCommand("svc wifi enable")
+            } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
                 info = e.stackTraceToString()
             )
         }
+    }
+
+    /**
+     * Restarts the Android WiFi service to reinitialize the driver
+     * after changing con_mode. This ensures the WiFi radio is properly
+     * activated in managed mode.
+     */
+    private fun restartWifiService() {
+        // Disable WiFi
+        execCommand("svc wifi disable")
+        Thread.sleep(1000)
+        // Re-enable WiFi
+        execCommand("svc wifi enable")
+        Thread.sleep(1000)
     }
 
     fun getCurrentMode(): MonitorResult {
