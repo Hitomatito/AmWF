@@ -136,17 +136,6 @@ Results vary by device and driver. The app reports these capabilities in the com
 2. Install the APK on your rooted Android device
 3. Grant root access when prompted
 
-### Build from Source
-
-```bash
-git clone https://github.com/Hitomatito/AmWF.git
-cd AmWF
-./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
-```
-
-Requirements: Android Studio 2024+, JDK 17+, Gradle 8+.
-
 ## Usage
 
 ### Main Screen
