@@ -2,6 +2,7 @@ package com.hitomatito.amwf
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -45,6 +46,12 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "AmWF"
+        
+        // Cache compatibility result to avoid re-running on configuration changes
+        // (language switch, rotation, etc.). This prevents testCapabilities() from
+        // disrupting WiFi unnecessarily when the Activity is recreated.
+        private var cachedCompatResult: CompatibilityResult? = null
+        private var cachedMode: MonitorMode? = null
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -61,7 +68,33 @@ class MainActivity : AppCompatActivity() {
         setupWindowInsets()
         setupListeners()
         updateLanguageButton()
-        checkDeviceCompatibility()
+
+        // Use cached result if available (e.g., after language change via recreate()).
+        // This prevents re-running testCapabilities() which disrupts WiFi.
+        val cached = cachedCompatResult
+        if (cached != null) {
+            Log.d(TAG, "Using cached compatibility result")
+            isDeviceCompatible = cached.isCompatible
+            updateCompatibilityUI(cached)
+            if (isDeviceCompatible) {
+                // Restore cached mode or check current
+                val mode = cachedMode
+                if (mode != null) {
+                    currentMode = mode
+                    // Re-check actual state in case it changed externally
+                    checkCurrentMode()
+                } else {
+                    checkCurrentMode()
+                }
+            } else {
+                tvStatus.text = getString(R.string.device_incompatible)
+                setToggleEnabled(false)
+                btnToggle.text = getString(R.string.not_compatible)
+                btnToggle.setBackgroundColor(getColor(R.color.unknown))
+            }
+        } else {
+            checkDeviceCompatibility()
+        }
     }
 
     private fun initViews() {
@@ -128,6 +161,7 @@ class MainActivity : AppCompatActivity() {
             }
             
             isDeviceCompatible = result.isCompatible
+            cachedCompatResult = result  // Cache for configuration changes
             updateCompatibilityUI(result)
             
             if (isDeviceCompatible) {
@@ -219,6 +253,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
+            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
         }
     }
@@ -239,6 +274,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
+            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
             setLoading(false)
 
@@ -259,6 +295,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
+            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
             setLoading(false)
 

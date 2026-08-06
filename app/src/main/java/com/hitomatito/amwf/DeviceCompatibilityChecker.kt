@@ -275,6 +275,20 @@ class DeviceCompatibilityChecker {
         logD(TAG, "=== Compatibility check complete ===")
         logD(TAG, "Compatible: $isCompatible")
 
+        // Restart WiFi service ONCE after ALL con_mode tests complete.
+        // Both testCapabilities() and testConModeWrite() modify con_mode,
+        // which disrupts WiFi. A single restart here ensures WiFi is
+        // properly restored after all tests finish.
+        logD(TAG, "Restarting WiFi service to restore managed mode after all tests")
+        try {
+            execRoot("svc wifi disable")
+            Thread.sleep(1000)
+            execRoot("svc wifi enable")
+            Thread.sleep(1000)
+        } catch (e: Exception) {
+            logE(TAG, "Failed to restart WiFi service: ${e.message}", e)
+        }
+
         return CompatibilityResult(
             isCompatible = isCompatible,
             issues = issues,
@@ -490,6 +504,8 @@ class DeviceCompatibilityChecker {
             } catch (e: Exception) {
                 logE(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
             }
+            // Note: WiFi service is restarted ONCE at the end of checkCompatibility(),
+            // after ALL tests complete, to avoid redundant restarts.
         }
     }
 
