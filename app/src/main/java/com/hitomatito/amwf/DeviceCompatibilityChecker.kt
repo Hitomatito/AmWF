@@ -227,25 +227,28 @@ class DeviceCompatibilityChecker {
             val errorReader = BufferedReader(InputStreamReader(process.errorStream))
             
             val startTime = System.currentTimeMillis()
-            var running = true
             
-            while (running && System.currentTimeMillis() - startTime < timeoutMs) {
-                if (process.inputStream.available() > 0) {
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                // Use ready() instead of available() - more reliable for data availability
+                if (outputReader.ready()) {
                     val line = outputReader.readLine()
-                    if (line != null) {
-                        output.appendLine(line)
-                    }
+                    if (line != null) output.appendLine(line)
                 }
-                if (process.errorStream.available() > 0) {
+                if (errorReader.ready()) {
                     val line = errorReader.readLine()
-                    if (line != null) {
-                        error.appendLine(line)
-                    }
+                    if (line != null) error.appendLine(line)
                 }
                 try {
                     val exitCode = process.exitValue()
-                    while (outputReader.ready()) output.appendLine(outputReader.readLine())
-                    while (errorReader.ready()) error.appendLine(errorReader.readLine())
+                    // Process finished: drain remaining data from streams
+                    while (outputReader.ready()) {
+                        val line = outputReader.readLine()
+                        if (line != null) output.appendLine(line)
+                    }
+                    while (errorReader.ready()) {
+                        val line = errorReader.readLine()
+                        if (line != null) error.appendLine(line)
+                    }
                     return ExecResult(exitCode, output.toString().trim(), error.toString().trim())
                 } catch (e: IllegalThreadStateException) {
                     Thread.sleep(50)
@@ -264,17 +267,23 @@ class DeviceCompatibilityChecker {
             val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
             
             val output = StringBuilder()
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
             val startTime = System.currentTimeMillis()
             
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
             while (System.currentTimeMillis() - startTime < timeoutMs) {
-                if (process.inputStream.available() > 0) {
-                    output.append(reader.readText())
-                    break
+                // Use ready() instead of available() - more reliable for data availability
+                if (reader.ready()) {
+                    val line = reader.readLine()
+                    if (line != null) output.appendLine(line)
                 }
                 try {
-                    process.exitValue()
-                    break
+                    val exitCode = process.exitValue()
+                    // Process finished: drain remaining data
+                    while (reader.ready()) {
+                        val line = reader.readLine()
+                        if (line != null) output.appendLine(line)
+                    }
+                    return ExecResult(exitCode, output.toString().trim(), "")
                 } catch (e: IllegalThreadStateException) {
                     Thread.sleep(50)
                 }
@@ -523,7 +532,17 @@ class DeviceCompatibilityChecker {
             execCommand("echo 4 > $conModePath 2>/dev/null")
             Thread.sleep(500)
             
-            val interfaceName = execCommand("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
+            // Detect WiFi interface dynamically (try common names)
+            val interfaceName = findWifiInterface()
+            if (interfaceName.isEmpty()) {
+                Log.w(TAG, "No WiFi interface found for capability test")
+                return CapabilitiesInfo(
+                    canInject = null,
+                    canCapture = null,
+                    isPassiveOnly = true,
+                    tested = false
+                )
+            }
             
             val canInject = testPacketInjection(interfaceName)
             val canCapture = testCaptureCapability(interfaceName)
@@ -747,6 +766,29 @@ class DeviceCompatibilityChecker {
             driverPath.contains("wlan") -> "Qualcomm WCNSS"
             else -> "Unknown"
         }
+    }
+
+    /**
+     * Detects the WiFi interface dynamically.
+     * Tries common interface names and returns first found, or empty string if none.
+     */
+    private fun findWifiInterface(): String {
+        val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
+        for (iface in candidates) {
+            val result = execCommand("ip link show $iface 2>/dev/null")
+            if (result.exitCode == 0 && result.output.isNotEmpty()) {
+                Log.d(TAG, "Found WiFi interface: $iface")
+                return iface
+            }
+        }
+        // Fallback: try to find any wlan interface
+        val anyWlan = execCommand("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
+        if (anyWlan.isNotEmpty()) {
+            Log.d(TAG, "Found WiFi interface (fallback): $anyWlan")
+            return anyWlan
+        }
+        Log.w(TAG, "No WiFi interface found")
+        return ""
     }
 
     private fun isSnapdragon(chipset: String): Boolean {

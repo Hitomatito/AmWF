@@ -6,12 +6,29 @@ import java.io.InputStreamReader
 
 class MonitorModeManager {
 
-    private val interfaceName = "wlan0"
+    private val interfaceName: String by lazy { findWifiInterface() }
 
     companion object {
         private const val TAG = "MonitorMode"
         private const val COMMAND_TIMEOUT = 10000L  // Increased for slow devices
         private const val INTERFACE_DOWN_TIMEOUT = 3000L
+    }
+
+    /**
+     * Detects the WiFi interface dynamically.
+     * Tries wlan0, wlan1, p2p0, etc. Returns first found or "wlan0" as fallback.
+     */
+    private fun findWifiInterface(): String {
+        val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
+        for (iface in candidates) {
+            val result = execCommand("ip link show $iface 2>/dev/null")
+            if (result.exitCode == 0 && result.output.isNotEmpty()) {
+                Log.d(TAG, "Found WiFi interface: $iface")
+                return iface
+            }
+        }
+        Log.w(TAG, "No WiFi interface found, using fallback wlan0")
+        return "wlan0"
     }
 
     fun isRootAvailable(): Boolean {
@@ -67,7 +84,10 @@ class MonitorModeManager {
             Log.d(TAG, "Writing con_mode=4 to $conModePath...")
             val writeResult = execCommand("echo 4 > $conModePath")
             if (writeResult.exitCode != 0 || writeResult.error.contains("denied") || 
-                writeResult.error.contains("readonly") || writeResult.error.contains("Permission")) {
+                writeResult.error.contains("readonly") || writeResult.error.contains("Permission") ||
+                writeResult.error.contains("Read-only file system") ||
+                writeResult.error.contains("Operation not permitted") ||
+                writeResult.error.contains("Input/output error")) {
                 Log.e(TAG, "Failed to write con_mode: ${writeResult.error}")
                 // Restore interface before returning error
                 execCommand("ip link set $interfaceName up")
@@ -277,16 +297,26 @@ class MonitorModeManager {
             val startTime = System.currentTimeMillis()
             
             while (System.currentTimeMillis() - startTime < COMMAND_TIMEOUT) {
-                if (process.inputStream.available() > 0) {
-                    output.append(outputReader.readText())
+                // Use ready() instead of available() - more reliable for data availability
+                if (outputReader.ready()) {
+                    val line = outputReader.readLine()
+                    if (line != null) output.appendLine(line)
                 }
-                if (process.errorStream.available() > 0) {
-                    error.append(errorReader.readText())
+                if (errorReader.ready()) {
+                    val line = errorReader.readLine()
+                    if (line != null) error.appendLine(line)
                 }
                 try {
                     val exitCode = process.exitValue()
-                    if (outputReader.ready()) output.append(outputReader.readText())
-                    if (errorReader.ready()) error.append(errorReader.readText())
+                    // Process finished: drain remaining data from streams
+                    while (outputReader.ready()) {
+                        val line = outputReader.readLine()
+                        if (line != null) output.appendLine(line)
+                    }
+                    while (errorReader.ready()) {
+                        val line = errorReader.readLine()
+                        if (line != null) error.appendLine(line)
+                    }
                     return ExecResult(exitCode, output.toString().trim(), error.toString().trim())
                 } catch (e: IllegalThreadStateException) {
                     Thread.sleep(50)
