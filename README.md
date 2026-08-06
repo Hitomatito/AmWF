@@ -7,260 +7,213 @@
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License">
 </div>
 
-> Aplicación Android para activar y desactivar el modo monitor WiFi en dispositivos Qualcomm Snapdragon con root.
+> Control the WiFi monitor mode on rooted Android devices with Qualcomm Snapdragon chipsets.
 
-## 📱 Descripción
+## What is AmWF
 
-AmWF es una herramienta que permite controlar el modo monitor de la interfaz WiFi en dispositivos Android con chipset Qualcomm Snapdragon. El modo monitor es necesario para realizar análisis de redes inalámbricas y capturar handshakes WPA/WPA2.
+AmWF is an Android application that enables and disables WiFi monitor mode using Qualcomm's `con_mode` driver parameter. Monitor mode is required for wireless network analysis, packet capture, and WPA/WPA2 handshake capture.
 
-## ✨ Características
+The app automatically detects your device's chipset, root method, WiFi driver, and tests injection/capture capabilities before enabling monitor mode.
 
-- 🔘 **Control de Modo Monitor** - Activa/Desactiva el modo monitor WiFi con un solo toque
-- 🔍 **Verificación de Compatibilidad** - Detecta automáticamente si el dispositivo es compatible
-- 📊 **Información del Sistema** - Muestra chipset, driver WiFi, estado de root y archivo con_mode
-- 🌐 **Soporte Multilingüe** - Español e Inglés
-- 🎨 **Material Design 3** - Interfaz moderna y elegante
-- 🔒 **Seguridad** - Verificación de root y restricciones SELinux
+## Supported Devices
 
-## 📋 Requisitos
+### Chipsets
 
-### Requisitos del Dispositivo
+AmWF identifies Snapdragon chipsets by codename and CPU part number. The following are explicitly recognized:
 
-| Requisito | Mínimo | Recomendado |
-|-----------|--------|-------------|
-| Android | 10 (API 29) | 13+ (API 33) |
-| Root | Magisk / KernelSU / APatch / SuperSU | Magisk |
-| Chipset | Qualcomm Snapdragon | Snapdragon 855+ |
-| Arquitectura | aarch64 (ARM64) | aarch64 |
+| Generation | Chipset | Codename |
+|------------|---------|----------|
+| Flagship | Snapdragon 8 Gen 3 | `kalama` |
+| Flagship | Snapdragon 8 Gen 2 | `cape` |
+| Flagship | Snapdragon 8+ Gen 2 | - |
+| Flagship | Snapdragon 8 Gen 1 | `taro` |
+| Flagship | Snapdragon 8+ Gen 1 | - |
+| Flagship | Snapdragon 888 / 888+ | `lahaina`, `haydn` |
+| Flagship | Snapdragon 870 | `kona`, `alioth`, `cpu7pro` |
+| Flagship | Snapdragon 865 | `kona`, `msmnile` |
+| Flagship | Snapdragon 860 | `vayu` |
+| Flagship | Snapdragon 855 / 855+ | `msmnile` |
+| High-end | Snapdragon 8s Gen 3 | `crown` |
+| High-end | Snapdragon 780G | `waipio` |
+| High-end | Snapdragon 778G / 778G+ | `waipio` |
+| High-end | Snapdragon 768G | `lito` |
+| High-end | Snapdragon 750G | `atoll`, `sm7225` |
+| Mid-range | Snapdragon 7 Gen 2 | `pineapple` |
+| Mid-range | Snapdragon 7 Gen 1 | `pineapple`, `yupik` |
+| Mid-range | Snapdragon 730G | `holi` |
+| Mid-range | Snapdragon 720G | `corona` |
+| Mid-range | Snapdragon 695 | `sm6350` |
+| Mid-range | Snapdragon 6 Gen 1/2 | `qsm` |
+| Entry | Snapdragon 680 | `bengal` |
+| Entry | Snapdragon 665/670/675 | `trinket` |
+| Entry | Snapdragon 662 | `bengal` |
+| Laptop | Snapdragon 7c Gen 2 | `saipan` |
 
-### Requisitos del Sistema (Desarrollo)
+Other Snapdragon chipsets may work if they expose `con_mode` through the Qualcomm WiFi driver (QCACLD). The app checks for `con_mode` at runtime and reports compatibility automatically.
 
-| Requisito | Versión |
-|------------|---------|
-| Android Studio | 2024.0+ |
-| Kotlin | 1.9+ |
-| Gradle | 8.0+ |
-| JDK | 17+ |
+### Root Methods
 
-## 🚀 Instalación
+| Method | Supported |
+|--------|-----------|
+| Magisk | Yes |
+| KernelSU | Yes |
+| APatch | Yes |
+| phh-su | Yes |
+| SuperSU | Yes |
+| Generic su | Yes |
 
-### Desde APK (Recomendado)
+### WiFi Drivers
 
-1. Descarga la última versión desde [Releases](https://github.com/Hitomatito/AmWF/releases)
-2. Instala el APK en tu dispositivo
-3. Activa el modo monitor desde la app
+The app searches for `con_mode` across multiple Qualcomm driver modules:
 
-### Desde Código Fuente
+| Module Path | Typical Hardware |
+|-------------|------------------|
+| `/sys/module/wlan/parameters/con_mode` | Older Snapdragon (855, 865, 860) |
+| `/sys/module/hdd/parameters/con_mode` | Snapdragon 888, 8 Gen series |
+| `/sys/module/kiwi_v2/parameters/con_mode` | Snapdragon 8 Gen 2+ |
+| `/sys/module/kiwi/parameters/con_mode` | Snapdragon 6/7 series |
+| `/sys/module/wcn/parameters/con_mode` | Qualcomm WCN6xxx |
+
+### System Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| Android version | 7.0 (API 24) |
+| Root access | Required |
+| Architecture | ARM64 (aarch64) |
+
+## How It Works
+
+### Activation Flow
+
+```
+1. App launches
+   └─> Detects root, chipset, WiFi driver, con_mode path
+   └─> Tests write access to con_mode
+   └─> Tests injection and capture capabilities
+
+2. User taps "ACTIVAR MONITOR"
+   └─> Disables WiFi service (svc wifi disable)
+   └─> Writes con_mode = 4 (monitor mode)
+   └─> Brings wlan0 DOWN
+   └─> Sets interface to monitor mode (iw dev wlan0 set monitor)
+   └─> Brings wlan0 UP
+   └─> Re-enables WiFi service (svc wifi enable)
+
+3. User taps "VOLVER A NORMAL"
+   └─> Disables WiFi service
+   └─> Writes con_mode = 0 (managed mode)
+   └─> Brings wlan0 DOWN
+   └─> Sets interface to managed mode (iw dev wlan0 set type managed)
+   └─> Brings wlan0 UP
+   └─> Re-enables WiFi service
+```
+
+### con_mode Values
+
+| Value | Mode | Description |
+|-------|------|-------------|
+| 0 | STA | Managed / Normal mode |
+| 4 | Monitor | Monitor mode (used by AmWF) |
+
+### Capability Detection
+
+The app tests your device's actual capabilities before enabling monitor mode:
+
+| Capability | What It Means |
+|------------|---------------|
+| Injection | Device can transmit custom packets |
+| Capture | Device can capture all WiFi traffic |
+| Passive only | Device can only listen to traffic passively |
+
+Results vary by device and driver. The app reports these capabilities in the compatibility section at startup.
+
+## Installation
+
+### From APK
+
+1. Download the latest release from [Releases](https://github.com/Hitomatito/AmWF/releases)
+2. Install the APK on your rooted Android device
+3. Grant root access when prompted
+
+### Build from Source
 
 ```bash
-# Clonar repositorio
 git clone https://github.com/Hitomatito/AmWF.git
 cd AmWF
-
-# Abrir en Android Studio
-# File > Open > seleccionar carpeta del proyecto
-
-# Compilar
 ./gradlew assembleDebug
-
-# El APK estará en: app/build/outputs/apk/debug/app-debug.apk
+# APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 📖 Uso
+Requirements: Android Studio 2024+, JDK 17+, Gradle 8+.
 
-### Interfaz Principal
+## Usage
 
-```
-┌────────────────────────────────────┐
-│ AmWF                    [🌐 ES]   │  ← Selector de idioma
-│ Control de Modo Monitor WiFi       │
-│                                    │
-│ ┌────────────────────────────────┐│
-│ │ ● Compatibilidad del Dispositivo ││
-│ │   ✓ Listo para usar            ││
-│ │────────────────────────────────││
-│ │ 🔲 Snapdragon 855/855+         ││
-│ │ 🛡️ Qualcomm WCNSS             ││
-│ │ 🔒 Magisk v27.0               ││
-│ │ 📁 con_mode                    ││
-│ └────────────────────────────────┘│
-│                                    │
-│ ┌────────────────────────────────┐│
-│ │ ○ Modo WiFi                    ││
-│ │   Modo Normal                  ││
-│ │────────────────────────────────││
-│ │ 📶 Interface: wlan0            ││
-│ │    MAC: bc:6a:d1:b6:21:6c     ││
-│ └────────────────────────────────┘│
-│                                    │
-│    [    ACTIVAR MONITOR    ]       │
-│                                    │
-└────────────────────────────────────┘
-```
+### Main Screen
 
-### Indicadores de Estado
+The app has two sections:
 
-| Estado | Color | Significado |
-|--------|-------|-------------|
-| 🟢 Verde | Cyan | Modo Monitor activo / Compatible |
-| 🟠 Naranja | Coral | Modo Normal / No compatible |
-| ⚪ Gris | Neutral | Error / Verificando |
+**Device Compatibility** - Shows your device's chipset, WiFi driver, root status, con_mode path, and tested capabilities.
 
-### Pasos para Activar Modo Monitor
+**WiFi Mode** - Shows the current mode (Normal / Monitor) with interface details (name, MAC address, frequency).
 
-1. **Verificar Compatibilidad** - La app verifica automáticamente al iniciar
-2. **Otorgar Permisos Root** - Aprobar la solicitud de Magisk/KernelSU
-3. **Presionar "ACTIVAR MONITOR"** - El botón cambiará a "VOLVER A NORMAL"
-4. **¡Listo!** - La antena está en modo monitor
+### Controls
 
-### Cambiar Idioma
+- **ACTIVAR MONITOR** - Switches the WiFi interface to monitor mode
+- **VOLVER A NORMAL** - Returns to managed mode
+- **Language button (ES/EN)** - Toggles between Spanish and English
 
-1. Presiona el botón con el código de idioma (ES/EN) en la esquina superior derecha
-2. La app se reiniciará con el nuevo idioma seleccionado
+### First Launch
 
-## 🔧 Detalles Técnicos
+On first launch, the app automatically runs a compatibility check. This involves temporarily switching to monitor mode to test capabilities, then restoring normal mode. WiFi may briefly disconnect during this process -- this is expected behavior.
 
-### Método de Activación
-
-La app utiliza el método `con_mode` de Qualcomm para activar el modo monitor:
-
-```bash
-# Desactivar interfaz
-ip link set wlan0 down
-
-# Activar modo monitor (con_mode = 4)
-echo 4 > /sys/module/wlan/parameters/con_mode
-
-# Reactivar interfaz
-ip link set wlan0 up
-
-# Verificar modo
-iw dev wlan0 info
-```
-
-### Valores de con_mode
-
-| Valor | Modo | Descripción |
-|-------|-------|-------------|
-| 0 | STA | Station (Normal) |
-| 1 | Monitor | Modo monitor raw |
-| 4 | AP | Access Point |
-| 5 | P2P | Wi-Fi Direct |
-
-### Verificación de Compatibilidad
-
-La app verifica:
-
-1. **Acceso Root** - Detecta Magisk, KernelSU, APatch, SuperSU, phh-su
-2. **Chipset** - Verifica que sea Qualcomm Snapdragon
-3. **Driver** - Confirma que `/sys/module/wlan/parameters/con_mode` existe
-4. **Escritura** - Prueba escribir en con_mode
-
-### Detección de Chipset
-
-La app detecta el chipset usando múltiples fuentes:
-
-- `ro.hardware` - Nombre interno del SoC
-- `/proc/cpuinfo` - Información del CPU (Hardware, CPU part)
-- `ro.product.board` - Plataforma de la placa
-
-Tabla de identificación por CPU part (hex):
-
-| CPU Part | Snapdragon |
-|---------|------------|
-| 0x070 | 855 |
-| 0x072 | 865/870 |
-| 0x080 | 888 |
-| 0x081 | 8 Gen 1 |
-| 0x084 | 8 Gen 2 |
-| 0x086 | 8 Gen 3 |
-
-## 📂 Estructura del Proyecto
+## Project Structure
 
 ```
-AmWF/
-├── app/
-│   ├── src/main/
-│   │   ├── java/com/hitomatito/amwf/
-│   │   │   ├── MainActivity.kt           # Actividad principal
-│   │   │   ├── MonitorModeManager.kt      # Gestión de modo monitor
-│   │   │   ├── DeviceCompatibilityChecker.kt  # Verificación de compatibilidad
-│   │   │   └── LocaleHelper.kt           # Helper de idiomas
-│   │   ├── res/
-│   │   │   ├── layout/
-│   │   │   │   ├── activity_main.xml
-│   │   │   │   ├── item_row_*.xml        # Items de información
-│   │   │   ├── drawable/                 # Iconos vectoriales
-│   │   │   ├── values/                   # Strings español
-│   │   │   └── values-en/               # Strings inglés
-│   │   └── AndroidManifest.xml
-│   └── build.gradle.kts
-├── build.gradle.kts
-├── settings.gradle.kts
-└── gradle.properties
+app/src/main/java/com/hitomatito/amwf/
+├── MainActivity.kt              # UI and activity lifecycle
+├── MonitorModeManager.kt        # Monitor mode enable/disable logic
+├── DeviceCompatibilityChecker.kt # Chipset, root, driver detection
+├── ShellExecutor.kt             # Root shell execution
+└── LocaleHelper.kt              # Language switching
 ```
 
-## 🛠️ Tecnologías
+## Tech Stack
 
-| Tecnología | Propósito |
-|------------|-----------|
-| Kotlin | Lenguaje principal |
-| Material Design 3 | Sistema de diseño UI |
-| Coroutines | Programación asíncrona |
-| SharedPreferences | Persistencia de configuración |
-| View Binding | Acceso a vistas tipado |
+| Technology | Purpose |
+|------------|---------|
+| Kotlin | Primary language |
+| Material Design 3 | UI components |
+| Coroutines | Async shell commands |
+| View Binding | Type-safe view access |
 
-## ⚠️ Limitaciones
+## Limitations
 
-- **Solo Qualcomm Snapdragon** - No funciona en MediaTek, Exynos, etc.
-- **Requiere Root** - Sin root no es posible modificar el modo WiFi
-- **SELinux** - Algunas configuraciones pueden bloquear el acceso
-- **No todas las redes** - Captura de handshakes depende de muchos factores
-- **Modo Monitor Pasivo** - El método `con_mode` solo permite escaneo pasivo en la mayoría de dispositivos
-- **Sin Inyección de Paquetes** - Generalmente no es posible inyectar/tranmitir paquetes en este modo
-- **Captura Limitada** - Algunos drivers solo permiten captura pasiva sin modificación de tramas
+- **Qualcomm only** -- Does not work on MediaTek, Exynos, or other chipsets
+- **Root required** -- Cannot modify WiFi driver parameters without root
+- **Driver dependent** -- Newer Qualcomm drivers (cnss_pci/WCN) may not expose `con_mode`
+- **SELinux** -- Strict SELinux policies may block access to `con_mode`
+- **Injection not guaranteed** -- Most devices support passive capture only; packet injection depends on the specific driver and chipset
 
-### Sobre el Modo Monitor
+## License
 
-El método `con_mode` de Qualcomm tiene limitaciones importantes:
+MIT License. See [LICENSE](LICENSE).
 
-| Característica | Disponibilidad |
-|----------------|----------------|
-| Escaneo pasivo | ✅ Generalmente disponible |
-| Captura de tramas | ⚠️ Depende del driver |
-| Inyección de paquetes | ❌ Generalmente no disponible |
-| Transmisión | ❌ No disponible |
+## Contributing
 
-La app incluye una verificación automática de estas capacidades. Algunos dispositivos con drivers específicos pueden soportar funcionalidades adicionales.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes
+4. Push to the branch (`git push origin feature/my-feature`)
+5. Open a Pull Request
 
-## 🔒 Seguridad
+## Support
 
-- Los datos se almacenan únicamente en SharedPreferences local
-- No se envían datos a ningún servidor
-- No se requiere internet para funcionar
-- Root es necesario únicamente para modificar parámetros del kernel
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## 🤝 Contribuir
-
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcion`)
-3. Commit tus cambios (`git commit -m 'Agregar nueva función'`)
-4. Push a la rama (`git push origin feature/nueva-funcion`)
-5. Abre un Pull Request
-
-## 📞 Soporte
-
-- 🐛 **Bugs**: Abre un [Issue](https://github.com/Hitomatito/AmWF/issues)
-- 💡 **Features**: Solicita en [Discussions](https://github.com/Hitomatito/AmWF/discussions)
-- 📖 **Documentación**: Mejora este README
+- Bug reports: [Issues](https://github.com/Hitomatito/AmWF/issues)
+- Feature requests: [Discussions](https://github.com/Hitomatito/AmWF/discussions)
 
 ---
 
 <div align="center">
-  <p>Hecho con ❤️ para la comunidad de Android</p>
-  <p>© 2026 AmWF</p>
+  <p>AmWF &copy; 2026</p>
 </div>
