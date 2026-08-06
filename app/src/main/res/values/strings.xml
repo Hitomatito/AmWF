@@ -30,6 +30,7 @@
     <string name="capability_injection">Inyeccion de paquetes</string>
     <string name="capability_capture">Captura completa</string>
     <string name="capability_unknown">Por verificar</string>
+    <string name="capability_unavailable">Sin con_mode (driver nuevo)</string>
     
     <string name="check_pass">OK</string>
     <string name="check_fail">Falla</string>

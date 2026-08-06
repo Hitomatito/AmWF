@@ -5,6 +5,27 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 
+/**
+ * Encuentra la ruta real del archivo con_mode del driver WiFi Qualcomm (QCACLD).
+ * El nombre del módulo varia segun el chip/dispositivo: "wlan" (POCO X3, Snapdragon 860),
+ * "hdd" (Xiaomi 11T Pro / Snapdragon 888), "kiwi_v2" (Snapdragon 8 Gen 2), etc.
+ * Sin esto el metodo con_mode falla en HW mas reciente.
+ */
+fun resolveConModePath(): String? {
+    val knownModules = listOf("wlan", "hdd", "kiwi_v2", "kiwi", "wcn")
+    for (module in knownModules) {
+        val path = "/sys/module/$module/parameters/con_mode"
+        if (File(path).exists()) return path
+    }
+    File("/sys/module").listFiles().orEmpty().forEach { dir ->
+        if (dir.isDirectory) {
+            val path = File(dir, "parameters/con_mode")
+            if (path.exists()) return path.absolutePath
+        }
+    }
+    return null
+}
+
 data class CompatibilityResult(
     val isCompatible: Boolean,
     val issues: List<CompatibilityIssue>,
@@ -70,8 +91,6 @@ enum class Severity {
 }
 
 class DeviceCompatibilityChecker {
-
-    private val conModeFile = "/sys/module/wlan/parameters/con_mode"
 
     companion object {
         private const val TAG = "CompatChecker"
@@ -302,11 +321,17 @@ class DeviceCompatibilityChecker {
         }
 
         if (deviceInfo.conModePath == null) {
+            val legacyDriver = File("/sys/module/wlan").exists()
             issues.add(CompatibilityIssue(
                 type = IssueType.SYSFS,
                 severity = Severity.CRITICAL,
                 message = "Archivo con_mode no encontrado",
-                suggestion = "El driver WiFi no es compatible con el método de modo monitor"
+                suggestion = if (legacyDriver) {
+                    "El driver WiFi no expone con_mode en este dispositivo (revisa permisos o SELinux)"
+                } else {
+                    "Este dispositivo usa un driver Qualcomm de nueva generación (cnss_pci/WCN) " +
+                    "que no expone con_mode. El método de modo monitor de esta app no está soportado en este hardware."
+                }
             ))
         } else {
             val testResult = testConModeWrite(deviceInfo.conModePath)
@@ -444,7 +469,7 @@ class DeviceCompatibilityChecker {
         val kernelArch = execCommandNoRoot("uname -m").output.ifEmpty { "Unknown" }
         val cpuAbi = getSystemProperty("ro.product.cpu.abi")
         val wlanDriver = detectWlanDriver()
-        val conMode = if (File(conModeFile).exists()) conModeFile else null
+        val conMode = resolveConModePath()
         val rootInfo = detectRoot()
         val capabilities = testCapabilities()
 
@@ -464,7 +489,7 @@ class DeviceCompatibilityChecker {
     private fun testCapabilities(): CapabilitiesInfo {
         Log.d(TAG, "=== Testing injection/capture capabilities ===")
         
-        val conModePath = if (File(conModeFile).exists()) conModeFile else null
+        val conModePath = resolveConModePath()
         if (conModePath == null) {
             return CapabilitiesInfo(
                 canInject = null,
@@ -677,14 +702,15 @@ class DeviceCompatibilityChecker {
     }
 
     private fun detectWlanDriver(): String {
-        val drivers = execCommand("ls -la /sys/class/net/wlan*/device/driver 2>/dev/null").output
+        val driverPath = execCommand("readlink /sys/class/net/wlan0/device/driver 2>/dev/null").output.lowercase()
         val modules = execCommand("ls /sys/module/ 2>/dev/null | grep -i wlan").output
         
         return when {
-            drivers.contains("bcmdhd") -> "Broadcom BCMDHD"
-            drivers.contains("brcmfmac") || drivers.contains("brcm") -> "Broadcom BRCM"
-            drivers.contains("wlan") -> "Qualcomm WCNSS"
-            modules.contains("wlan") -> "WiFi Module"
+            driverPath.contains("bcmdhd") -> "Broadcom BCMDHD"
+            driverPath.contains("brcmfmac") || driverPath.contains("/brcm") -> "Broadcom BRCM"
+            driverPath.contains("cnss") -> "Qualcomm cnss_pci (WCN6)"
+            modules.contains("wlan") -> "Qualcomm QCACLD (wlan)"
+            driverPath.contains("wlan") -> "Qualcomm WCNSS"
             else -> "Unknown"
         }
     }
@@ -700,7 +726,7 @@ class DeviceCompatibilityChecker {
     fun getQuickCheck(): Boolean {
         return try {
             val rootInfo = detectRoot()
-            val hasConMode = File(conModeFile).exists()
+            val hasConMode = resolveConModePath() != null
             rootInfo.isRooted && hasConMode
         } catch (e: Exception) {
             false

@@ -118,6 +118,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkDeviceCompatibility() {
+        // El boton no debe verse clickeable mientras se verifica.
+        setToggleEnabled(false)
         tvCompatStatus.text = getString(R.string.checking_compatibility)
         
         CoroutineScope(Dispatchers.Main).launch {
@@ -132,13 +134,15 @@ class MainActivity : AppCompatActivity() {
                 checkCurrentMode()
             } else {
                 tvStatus.text = getString(R.string.device_incompatible)
-                btnToggle.isEnabled = false
+                setToggleEnabled(false)
                 btnToggle.text = getString(R.string.not_compatible)
                 btnToggle.setBackgroundColor(getColor(R.color.unknown))
-                
-                result.issues.find { it.severity == Severity.CRITICAL }?.let {
-                    Toast.makeText(this@MainActivity, getString(R.string.root_missing), Toast.LENGTH_LONG).show()
-                }
+
+                val reason = result.issues.find { it.severity == Severity.CRITICAL }
+                    ?.let { it.suggestion.ifBlank { it.message } }
+                    ?: getString(R.string.not_compatible)
+                tvInfo.text = reason
+                Toast.makeText(this@MainActivity, reason, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -176,7 +180,7 @@ class MainActivity : AppCompatActivity() {
         
         val capInfo = result.deviceInfo.capabilities
         val capText = when {
-            !capInfo.tested -> getString(R.string.capability_unknown)
+            !capInfo.tested -> getString(R.string.capability_unavailable)
             capInfo.canInject == true && capInfo.canCapture == true -> getString(R.string.capability_full)
             capInfo.canInject == true -> getString(R.string.capability_injection)
             capInfo.canCapture == true -> getString(R.string.capability_capture)
@@ -207,6 +211,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkCurrentMode() {
         CoroutineScope(Dispatchers.Main).launch {
+            setToggleEnabled(false)
             tvStatus.text = getString(R.string.checking)
 
             val result = withContext(Dispatchers.IO) {
@@ -263,8 +268,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Centraliza el estado del boton: ademas de bloquear el click, lo atenua
+    // visualmente para que el usuario vea que no esta disponible.
+    private fun setToggleEnabled(enabled: Boolean) {
+        btnToggle.isEnabled = enabled
+        btnToggle.alpha = if (enabled) 1f else 0.45f
+    }
+
     private fun setLoading(loading: Boolean, isActivating: Boolean = true) {
-        btnToggle.isEnabled = !loading
+        setToggleEnabled(!loading)
         if (loading) {
             btnToggle.text = if (isActivating) getString(R.string.activating) else getString(R.string.deactivating)
         }
@@ -280,21 +292,21 @@ class MainActivity : AppCompatActivity() {
                 btnToggle.text = getString(R.string.disable_monitor)
                 btnToggle.setBackgroundColor(getColor(R.color.managed))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                btnToggle.isEnabled = true
+                setToggleEnabled(true)
             }
             MonitorMode.MANAGED -> {
                 tvStatus.setTextColor(getColor(R.color.managed))
                 btnToggle.text = getString(R.string.enable_monitor)
                 btnToggle.setBackgroundColor(getColor(R.color.monitor_active))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                btnToggle.isEnabled = true
+                setToggleEnabled(true)
             }
             MonitorMode.UNKNOWN -> {
                 tvStatus.setTextColor(getColor(R.color.unknown))
                 btnToggle.text = getString(R.string.retry)
                 btnToggle.setBackgroundColor(getColor(R.color.unknown))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                btnToggle.isEnabled = true
+                setToggleEnabled(true)
             }
             else -> {}
         }

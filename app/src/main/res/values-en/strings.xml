@@ -31,6 +31,7 @@
     <string name="capability_injection">Packet injection</string>
     <string name="capability_capture">Full capture</string>
     <string name="capability_unknown">To verify</string>
+    <string name="capability_unavailable">No con_mode (new driver)</string>
     
     <string name="check_pass">OK</string>
     <string name="check_fail">Fail</string>

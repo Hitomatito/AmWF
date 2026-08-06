@@ -7,7 +7,6 @@ import java.io.InputStreamReader
 class MonitorModeManager {
 
     private val interfaceName = "wlan0"
-    private val conModePath = "/sys/module/wlan/parameters/con_mode"
 
     companion object {
         private const val TAG = "MonitorMode"
@@ -37,7 +36,16 @@ class MonitorModeManager {
 
         return try {
             execCommand("ip link set $interfaceName down")
-            
+
+            val conModePath = resolveConModePath()
+            if (conModePath == null) {
+                return MonitorResult(
+                    type = MonitorMode.UNKNOWN,
+                    statusRes = R.string.error_unknown,
+                    info = "con_mode no disponible en este driver WiFi"
+                )
+            }
+
             val writeResult = execCommand("echo 4 > $conModePath")
             if (writeResult.error.contains("denied") || writeResult.error.contains("readonly")) {
                 return MonitorResult(
@@ -46,12 +54,11 @@ class MonitorModeManager {
                     info = writeResult.error
                 )
             }
-            
+
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
 
-            val info = execCommand("iw dev $interfaceName info").output
-            val mode = parseMode(info)
+            val (mode, info) = getCurrentState()
 
             when (mode) {
                 MonitorMode.MONITOR -> MonitorResult(
@@ -87,14 +94,13 @@ class MonitorModeManager {
 
         return try {
             execCommand("ip link set $interfaceName down")
-            
-            execCommand("echo 0 > $conModePath")
-            
+
+            resolveConModePath()?.let { execCommand("echo 0 > $it") }
+
             execCommand("ip link set $interfaceName up")
             Thread.sleep(500)
 
-            val info = execCommand("iw dev $interfaceName info").output
-            val mode = parseMode(info)
+            val (mode, info) = getCurrentState()
 
             when (mode) {
                 MonitorMode.MANAGED -> MonitorResult(
@@ -129,15 +135,14 @@ class MonitorModeManager {
         }
 
         return try {
-            val info = execCommand("iw dev $interfaceName info").output
-            val mode = parseMode(info)
-            
+            val (mode, info) = getCurrentState()
+
             val statusRes = when (mode) {
                 MonitorMode.MONITOR -> R.string.monitor_mode_on
                 MonitorMode.MANAGED -> R.string.monitor_mode_normal
                 MonitorMode.UNKNOWN -> R.string.status_unknown
             }
-            
+
             MonitorResult(type = mode, statusRes = statusRes, info = info)
         } catch (e: Exception) {
             MonitorResult(
@@ -146,6 +151,30 @@ class MonitorModeManager {
                 info = e.stackTraceToString()
             )
         }
+    }
+
+    private fun getCurrentState(): Pair<MonitorMode, String> {
+        // 1) Intentar con "iw" (si el binario existe en el dispositivo)
+        val iwInfo = execCommand("iw dev $interfaceName info").output
+        if (iwInfo.isNotEmpty()) {
+            return parseMode(iwInfo) to briefInfo(parseMode(iwInfo))
+        }
+        // 2) Sin "iw": el tipo de enlace radiotap (802.11 crudo) es la
+        //    señal de que con_mode=4 esta activo.
+        val linkInfo = execCommand("ip -d link show $interfaceName").output
+        val mode = when {
+            linkInfo.contains("ieee802.11/radiotap", ignoreCase = true) -> MonitorMode.MONITOR
+            linkInfo.contains("link/ether", ignoreCase = true) -> MonitorMode.MANAGED
+            else -> MonitorMode.UNKNOWN
+        }
+        return mode to briefInfo(mode)
+    }
+
+    // Resumen corto para la tarjeta de informacion (evita el volcado bruto de ip/iw)
+    private fun briefInfo(mode: MonitorMode): String = when (mode) {
+        MonitorMode.MONITOR -> "$interfaceName en modo monitor (802.11 radiotap)"
+        MonitorMode.MANAGED -> "$interfaceName en modo gestionado (managed)"
+        MonitorMode.UNKNOWN -> "No se pudo determinar el estado de $interfaceName"
     }
 
     private fun parseMode(output: String): MonitorMode {
