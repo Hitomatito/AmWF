@@ -1,8 +1,9 @@
 package com.hitomatito.amwf
 
-import android.util.Log
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import com.hitomatito.amwf.ShellExecutor.execRoot
+import com.hitomatito.amwf.ShellExecutor.logD
+import com.hitomatito.amwf.ShellExecutor.logE
+import com.hitomatito.amwf.ShellExecutor.logW
 
 class MonitorModeManager {
 
@@ -10,7 +11,6 @@ class MonitorModeManager {
 
     companion object {
         private const val TAG = "MonitorMode"
-        private const val COMMAND_TIMEOUT = 10000L  // Increased for slow devices
         private const val INTERFACE_DOWN_TIMEOUT = 3000L
     }
 
@@ -21,28 +21,28 @@ class MonitorModeManager {
     private fun findWifiInterface(): String {
         val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
         for (iface in candidates) {
-            val result = execCommand("ip link show $iface 2>/dev/null")
+            val result = execRoot("ip link show $iface 2>/dev/null")
             if (result.exitCode == 0 && result.output.isNotEmpty()) {
-                Log.d(TAG, "Found WiFi interface: $iface")
+                logD(TAG, "Found WiFi interface: $iface")
                 return iface
             }
         }
-        Log.w(TAG, "No WiFi interface found, using fallback wlan0")
+        logW(TAG, "No WiFi interface found, using fallback wlan0")
         return "wlan0"
     }
 
     fun isRootAvailable(): Boolean {
         return try {
-            val result = execCommand("id")
+            val result = execRoot("id")
             result.output.contains("uid=0") || result.output.contains("root")
         } catch (e: Exception) {
-            Log.e(TAG, "Root check failed: ${e.message}")
+            logE(TAG, "Root check failed: ${e.message}")
             false
         }
     }
 
     fun enableMonitorMode(): MonitorResult {
-        Log.d(TAG, "=== enableMonitorMode() ===")
+        logD(TAG, "=== enableMonitorMode() ===")
         
         if (!isRootAvailable()) {
             return MonitorResult(
@@ -54,33 +54,33 @@ class MonitorModeManager {
 
         return try {
             // Step 1: Disable WiFi service to ensure clean state
-            Log.d(TAG, "Disabling WiFi service...")
-            execCommand("svc wifi disable")
+            logD(TAG, "Disabling WiFi service...")
+            execRoot("svc wifi disable")
             Thread.sleep(1000)
 
             // Step 2: Bring interface DOWN and verify it actually went down
-            Log.d(TAG, "Bringing $interfaceName DOWN...")
-            execCommand("ip link set $interfaceName down")
+            logD(TAG, "Bringing $interfaceName DOWN...")
+            execRoot("ip link set $interfaceName down")
             
             // Wait and verify interface is actually DOWN
             val downVerified = verifyInterfaceState(desiredState = false)
             if (!downVerified) {
-                Log.e(TAG, "Failed to bring $interfaceName DOWN")
+                logE(TAG, "Failed to bring $interfaceName DOWN")
                 // Try to restore WiFi on failure
-                execCommand("svc wifi enable")
+                execRoot("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
                     info = "No se pudo desactivar la interfaz WiFi"
                 )
             }
-            Log.d(TAG, "$interfaceName is DOWN, proceeding...")
+            logD(TAG, "$interfaceName is DOWN, proceeding...")
 
             val conModePath = resolveConModePath()
             if (conModePath == null) {
                 // Restore interface and WiFi before returning error
-                execCommand("ip link set $interfaceName up")
-                execCommand("svc wifi enable")
+                execRoot("ip link set $interfaceName up")
+                execRoot("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
@@ -89,17 +89,17 @@ class MonitorModeManager {
             }
 
             // Step 3: Write con_mode=4 (monitor mode)
-            Log.d(TAG, "Writing con_mode=4 to $conModePath...")
-            val writeResult = execCommand("echo 4 > $conModePath")
+            logD(TAG, "Writing con_mode=4 to $conModePath...")
+            val writeResult = execRoot("echo 4 > $conModePath")
             if (writeResult.exitCode != 0 || writeResult.error.contains("denied") || 
                 writeResult.error.contains("readonly") || writeResult.error.contains("Permission") ||
                 writeResult.error.contains("Read-only file system") ||
                 writeResult.error.contains("Operation not permitted") ||
                 writeResult.error.contains("Input/output error")) {
-                Log.e(TAG, "Failed to write con_mode: ${writeResult.error}")
+                logE(TAG, "Failed to write con_mode: ${writeResult.error}")
                 // Restore interface and WiFi before returning error
-                execCommand("ip link set $interfaceName up")
-                execCommand("svc wifi enable")
+                execRoot("ip link set $interfaceName up")
+                execRoot("svc wifi enable")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_selinux,
@@ -108,8 +108,8 @@ class MonitorModeManager {
             }
 
             // Step 4: Bring interface UP
-            Log.d(TAG, "Bringing $interfaceName UP...")
-            execCommand("ip link set $interfaceName up")
+            logD(TAG, "Bringing $interfaceName UP...")
+            execRoot("ip link set $interfaceName up")
             Thread.sleep(500)
 
             val (mode, info) = getCurrentState()
@@ -127,11 +127,11 @@ class MonitorModeManager {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception in enableMonitorMode: ${e.message}", e)
+            logE(TAG, "Exception in enableMonitorMode: ${e.message}", e)
             // Try to restore interface and WiFi on exception
             try { 
-                execCommand("ip link set $interfaceName up")
-                execCommand("svc wifi enable")
+                execRoot("ip link set $interfaceName up")
+                execRoot("svc wifi enable")
             } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
@@ -142,7 +142,7 @@ class MonitorModeManager {
     }
 
     fun disableMonitorMode(): MonitorResult {
-        Log.d(TAG, "=== disableMonitorMode() ===")
+        logD(TAG, "=== disableMonitorMode() ===")
         
         if (!isRootAvailable()) {
             return MonitorResult(
@@ -154,38 +154,38 @@ class MonitorModeManager {
 
         return try {
             // Step 1: Bring interface DOWN and verify
-            Log.d(TAG, "Bringing $interfaceName DOWN...")
-            execCommand("ip link set $interfaceName down")
+            logD(TAG, "Bringing $interfaceName DOWN...")
+            execRoot("ip link set $interfaceName down")
             
             val downVerified = verifyInterfaceState(desiredState = false)
             if (!downVerified) {
-                Log.e(TAG, "Failed to bring $interfaceName DOWN")
+                logE(TAG, "Failed to bring $interfaceName DOWN")
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
                     info = "No se pudo desactivar la interfaz WiFi"
                 )
             }
-            Log.d(TAG, "$interfaceName is DOWN, proceeding...")
+            logD(TAG, "$interfaceName is DOWN, proceeding...")
 
             // Step 2: Write con_mode=0 (managed mode)
             val conModePath = resolveConModePath()
             if (conModePath != null) {
-                Log.d(TAG, "Writing con_mode=0 to $conModePath...")
-                val writeResult = execCommand("echo 0 > $conModePath")
+                logD(TAG, "Writing con_mode=0 to $conModePath...")
+                val writeResult = execRoot("echo 0 > $conModePath")
                 if (writeResult.exitCode != 0) {
-                    Log.w(TAG, "Warning writing con_mode=0: ${writeResult.error}")
+                    logW(TAG, "Warning writing con_mode=0: ${writeResult.error}")
                 }
             }
 
             // Step 3: Bring interface UP
-            Log.d(TAG, "Bringing $interfaceName UP...")
-            execCommand("ip link set $interfaceName up")
+            logD(TAG, "Bringing $interfaceName UP...")
+            execRoot("ip link set $interfaceName up")
             Thread.sleep(500)
 
             // Step 4: Restart WiFi service to fully restore managed mode
             // After changing con_mode, Android's WiFi framework needs to reinitialize
-            Log.d(TAG, "Restarting WiFi service...")
+            logD(TAG, "Restarting WiFi service...")
             restartWifiService()
             Thread.sleep(2000)
 
@@ -204,11 +204,11 @@ class MonitorModeManager {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Exception in disableMonitorMode: ${e.message}", e)
+            logE(TAG, "Exception in disableMonitorMode: ${e.message}", e)
             // Try to restore interface and WiFi on exception
             try { 
-                execCommand("ip link set $interfaceName up")
-                execCommand("svc wifi enable")
+                execRoot("ip link set $interfaceName up")
+                execRoot("svc wifi enable")
             } catch (_: Exception) {}
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
@@ -225,15 +225,15 @@ class MonitorModeManager {
      */
     private fun restartWifiService() {
         // Disable WiFi
-        execCommand("svc wifi disable")
+        execRoot("svc wifi disable")
         Thread.sleep(1000)
         // Re-enable WiFi
-        execCommand("svc wifi enable")
+        execRoot("svc wifi enable")
         Thread.sleep(1000)
     }
 
     fun getCurrentMode(): MonitorResult {
-        Log.d(TAG, "=== getCurrentMode() ===")
+        logD(TAG, "=== getCurrentMode() ===")
         
         if (!isRootAvailable()) {
             return MonitorResult(
@@ -273,10 +273,10 @@ class MonitorModeManager {
 
         for (attempt in 1..maxRetries) {
             Thread.sleep(retryDelay)
-            val result = execCommand("ip link show $interfaceName")
+            val result = execRoot("ip link show $interfaceName")
             val isUp = result.output.contains("state UP", ignoreCase = true)
             
-            Log.d(TAG, "Interface state check attempt $attempt: isUp=$isUp, desired=$desiredState")
+            logD(TAG, "Interface state check attempt $attempt: isUp=$isUp, desired=$desiredState")
             
             if (isUp == desiredState) {
                 return true
@@ -287,13 +287,13 @@ class MonitorModeManager {
 
     private fun getCurrentState(): Pair<MonitorMode, String> {
         // 1) Intentar con "iw" (si el binario existe en el dispositivo)
-        val iwInfo = execCommand("iw dev $interfaceName info").output
+        val iwInfo = execRoot("iw dev $interfaceName info").output
         if (iwInfo.isNotEmpty()) {
             return parseMode(iwInfo) to briefInfo(parseMode(iwInfo))
         }
         // 2) Sin "iw": el tipo de enlace radiotap (802.11 crudo) es la
         //    señal de que con_mode=4 esta activo.
-        val linkInfo = execCommand("ip -d link show $interfaceName").output
+        val linkInfo = execRoot("ip -d link show $interfaceName").output
         val mode = when {
             linkInfo.contains("ieee802.11/radiotap", ignoreCase = true) -> MonitorMode.MONITOR
             linkInfo.contains("link/ether", ignoreCase = true) -> MonitorMode.MANAGED
@@ -314,56 +314,6 @@ class MonitorModeManager {
             output.contains("type monitor", ignoreCase = true) -> MonitorMode.MONITOR
             output.contains("type managed", ignoreCase = true) -> MonitorMode.MANAGED
             else -> MonitorMode.UNKNOWN
-        }
-    }
-
-    private data class ExecResult(val exitCode: Int, val output: String, val error: String)
-
-    private fun execCommand(command: String): ExecResult {
-        return try {
-            // Use su directly (not sh -c "su -c 'cmd'") to prevent shell injection.
-            // su internally runs through sh, so pipes/redirects work.
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            
-            val output = StringBuilder()
-            val error = StringBuilder()
-            
-            val outputReader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-            
-            val startTime = System.currentTimeMillis()
-            
-            while (System.currentTimeMillis() - startTime < COMMAND_TIMEOUT) {
-                // Use ready() instead of available() - more reliable for data availability
-                if (outputReader.ready()) {
-                    val line = outputReader.readLine()
-                    if (line != null) output.appendLine(line)
-                }
-                if (errorReader.ready()) {
-                    val line = errorReader.readLine()
-                    if (line != null) error.appendLine(line)
-                }
-                try {
-                    val exitCode = process.exitValue()
-                    // Process finished: drain remaining data from streams
-                    while (outputReader.ready()) {
-                        val line = outputReader.readLine()
-                        if (line != null) output.appendLine(line)
-                    }
-                    while (errorReader.ready()) {
-                        val line = errorReader.readLine()
-                        if (line != null) error.appendLine(line)
-                    }
-                    return ExecResult(exitCode, output.toString().trim(), error.toString().trim())
-                } catch (e: IllegalThreadStateException) {
-                    Thread.sleep(50)
-                }
-            }
-            
-            process.destroyForcibly()
-            ExecResult(-1, output.toString().trim(), "Timeout")
-        } catch (e: Exception) {
-            ExecResult(-1, "", e.message ?: "Unknown error")
         }
     }
 }

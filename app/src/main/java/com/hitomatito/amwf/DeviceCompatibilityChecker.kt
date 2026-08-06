@@ -1,9 +1,11 @@
 package com.hitomatito.amwf
 
-import android.util.Log
-import java.io.BufferedReader
+import com.hitomatito.amwf.ShellExecutor.execNoRoot
+import com.hitomatito.amwf.ShellExecutor.execRoot
+import com.hitomatito.amwf.ShellExecutor.logD
+import com.hitomatito.amwf.ShellExecutor.logE
+import com.hitomatito.amwf.ShellExecutor.logW
 import java.io.File
-import java.io.InputStreamReader
 
 /**
  * Encuentra la ruta real del archivo con_mode del driver WiFi Qualcomm (QCACLD).
@@ -94,7 +96,6 @@ class DeviceCompatibilityChecker {
 
     companion object {
         private const val TAG = "CompatChecker"
-        private const val COMMAND_TIMEOUT = 10000L  // Increased for slow devices
         
         private val SU_PATHS = listOf(
             "/system/xbin/su",
@@ -216,102 +217,15 @@ class DeviceCompatibilityChecker {
         )
     }
 
-    private fun execCommand(command: String, timeoutMs: Long = COMMAND_TIMEOUT): ExecResult {
-        return try {
-            // Use su directly (not sh -c "su -c 'cmd'") to prevent shell injection.
-            // su internally runs through sh, so pipes/redirects work.
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            
-            val output = StringBuilder()
-            val error = StringBuilder()
-            
-            val outputReader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-            
-            val startTime = System.currentTimeMillis()
-            
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
-                // Use ready() instead of available() - more reliable for data availability
-                if (outputReader.ready()) {
-                    val line = outputReader.readLine()
-                    if (line != null) output.appendLine(line)
-                }
-                if (errorReader.ready()) {
-                    val line = errorReader.readLine()
-                    if (line != null) error.appendLine(line)
-                }
-                try {
-                    val exitCode = process.exitValue()
-                    // Process finished: drain remaining data from streams
-                    while (outputReader.ready()) {
-                        val line = outputReader.readLine()
-                        if (line != null) output.appendLine(line)
-                    }
-                    while (errorReader.ready()) {
-                        val line = errorReader.readLine()
-                        if (line != null) error.appendLine(line)
-                    }
-                    return ExecResult(exitCode, output.toString().trim(), error.toString().trim())
-                } catch (e: IllegalThreadStateException) {
-                    Thread.sleep(50)
-                }
-            }
-            
-            process.destroyForcibly()
-            ExecResult(-1, output.toString().trim(), "Command timeout")
-        } catch (e: Exception) {
-            ExecResult(-1, "", e.message ?: "Unknown error")
-        }
-    }
-
-    private fun execCommandNoRoot(command: String, timeoutMs: Long = COMMAND_TIMEOUT): ExecResult {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
-            
-            val output = StringBuilder()
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val startTime = System.currentTimeMillis()
-            
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
-                // Use ready() instead of available() - more reliable for data availability
-                if (reader.ready()) {
-                    val line = reader.readLine()
-                    if (line != null) output.appendLine(line)
-                }
-                try {
-                    val exitCode = process.exitValue()
-                    // Process finished: drain remaining data
-                    while (reader.ready()) {
-                        val line = reader.readLine()
-                        if (line != null) output.appendLine(line)
-                    }
-                    return ExecResult(exitCode, output.toString().trim(), "")
-                } catch (e: IllegalThreadStateException) {
-                    Thread.sleep(50)
-                }
-            }
-            
-            if (process.isAlive) {
-                process.destroyForcibly()
-            }
-            
-            ExecResult(0, output.toString().trim(), "")
-        } catch (e: Exception) {
-            ExecResult(-1, "", e.message ?: "Unknown error")
-        }
-    }
-
-    data class ExecResult(val exitCode: Int, val output: String, val error: String)
-
     fun checkCompatibility(): CompatibilityResult {
         val issues = mutableListOf<CompatibilityIssue>()
         
-        Log.d(TAG, "=== Starting compatibility check ===")
+        logD(TAG, "=== Starting compatibility check ===")
 
         val deviceInfo = gatherDeviceInfo()
-        Log.d(TAG, "Device: ${deviceInfo.manufacturer} ${deviceInfo.model}")
-        Log.d(TAG, "Chipset: ${deviceInfo.chipset}")
-        Log.d(TAG, "Root: ${deviceInfo.rootInfo.rootName} v${deviceInfo.rootInfo.version}")
+        logD(TAG, "Device: ${deviceInfo.manufacturer} ${deviceInfo.model}")
+        logD(TAG, "Chipset: ${deviceInfo.chipset}")
+        logD(TAG, "Root: ${deviceInfo.rootInfo.rootName} v${deviceInfo.rootInfo.version}")
 
         if (!deviceInfo.rootInfo.isRooted) {
             issues.add(CompatibilityIssue(
@@ -358,8 +272,8 @@ class DeviceCompatibilityChecker {
 
         val isCompatible = issues.none { it.severity == Severity.CRITICAL }
         
-        Log.d(TAG, "=== Compatibility check complete ===")
-        Log.d(TAG, "Compatible: $isCompatible")
+        logD(TAG, "=== Compatibility check complete ===")
+        logD(TAG, "Compatible: $isCompatible")
 
         return CompatibilityResult(
             isCompatible = isCompatible,
@@ -369,45 +283,45 @@ class DeviceCompatibilityChecker {
     }
 
     private fun testConModeWrite(path: String): Boolean {
-        Log.d(TAG, "Testing con_mode write at $path")
+        logD(TAG, "Testing con_mode write at $path")
         
         // Save original value before testing
-        val originalValue = execCommand("cat $path 2>/dev/null").output.trim()
-        Log.d(TAG, "Original con_mode value: $originalValue")
+        val originalValue = execRoot("cat $path 2>/dev/null").output.trim()
+        logD(TAG, "Original con_mode value: $originalValue")
         
         try {
-            val testResult = execCommand("echo 4 > $path 2>&1; echo \$?")
+            val testResult = execRoot("echo 4 > $path 2>&1; echo \$?")
             
             if (testResult.output.contains("1") || testResult.error.contains("denied") || 
                 testResult.error.contains("Permission") || testResult.error.contains("readonly")) {
-                Log.d(TAG, "Write test failed: ${testResult.error}")
+                logD(TAG, "Write test failed: ${testResult.error}")
                 return false
             }
             
-            Log.d(TAG, "Write test passed")
+            logD(TAG, "Write test passed")
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during write test: ${e.message}", e)
+            logE(TAG, "Exception during write test: ${e.message}", e)
             return false
         } finally {
             // CRITICAL: Always restore original value
-            Log.d(TAG, "Restoring con_mode to: $originalValue")
+            logD(TAG, "Restoring con_mode to: $originalValue")
             try {
-                execCommand("echo $originalValue > $path 2>&1")
+                execRoot("echo $originalValue > $path 2>&1")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to restore con_mode: ${e.message}", e)
+                logE(TAG, "Failed to restore con_mode: ${e.message}", e)
             }
         }
     }
 
     private fun detectRoot(): RootInfo {
-        Log.d(TAG, "=== Detecting root type ===")
+        logD(TAG, "=== Detecting root type ===")
         
         for ((rootType, indicators) in ROOT_INDICATORS) {
             for (path in indicators) {
                 if (File(path).exists()) {
                     val version = getRootVersion(rootType)
-                    Log.d(TAG, "Found $rootType at $path, version: $version")
+                    logD(TAG, "Found $rootType at $path, version: $version")
                     return RootInfo(
                         isRooted = true,
                         rootType = rootType,
@@ -418,7 +332,7 @@ class DeviceCompatibilityChecker {
             }
         }
         
-        Log.d(TAG, "No known root dirs found, testing su commands...")
+        logD(TAG, "No known root dirs found, testing su commands...")
         
         val suCommands = listOf(
             "su -c id",
@@ -430,8 +344,8 @@ class DeviceCompatibilityChecker {
         )
         
         for (command in suCommands) {
-            val result = execCommandNoRoot(command)
-            Log.d(TAG, "Testing '$command': ${result.output}")
+            val result = execNoRoot(command)
+            logD(TAG, "Testing '$command': ${result.output}")
             if (result.output.contains("uid=0") || result.output.contains("root")) {
                 val rootType = when {
                     command.contains("ksu") -> RootType.KERNELSU
@@ -448,7 +362,7 @@ class DeviceCompatibilityChecker {
             }
         }
         
-        Log.d(TAG, "=== No root detected ===")
+        logD(TAG, "=== No root detected ===")
         return RootInfo(
             isRooted = false,
             rootType = RootType.NONE,
@@ -460,17 +374,17 @@ class DeviceCompatibilityChecker {
     private fun getRootVersion(rootType: RootType): String {
         return when (rootType) {
             RootType.MAGISK -> {
-                execCommandNoRoot("magisk -v").output.ifEmpty {
+                execNoRoot("magisk -v").output.ifEmpty {
                     File("/data/adb/magisk/util_functions.sh").let { 
                         if (it.exists()) "Installed" else "Unknown"
                     }
                 }
             }
             RootType.KERNELSU -> {
-                execCommandNoRoot("cat /proc/ksu/version 2>/dev/null").output.ifEmpty { "Installed" }
+                execNoRoot("cat /proc/ksu/version 2>/dev/null").output.ifEmpty { "Installed" }
             }
             RootType.APATCH -> {
-                execCommandNoRoot("cat /data/adb/ap/version 2>/dev/null").output.ifEmpty { "Installed" }
+                execNoRoot("cat /data/adb/ap/version 2>/dev/null").output.ifEmpty { "Installed" }
             }
             else -> "Installed"
         }
@@ -492,7 +406,7 @@ class DeviceCompatibilityChecker {
         val manufacturer = getSystemProperty("ro.product.manufacturer")
         val model = getSystemProperty("ro.product.model")
         val chipset = detectChipset()
-        val kernelArch = execCommandNoRoot("uname -m").output.ifEmpty { "Unknown" }
+        val kernelArch = execNoRoot("uname -m").output.ifEmpty { "Unknown" }
         val cpuAbi = getSystemProperty("ro.product.cpu.abi")
         val wlanDriver = detectWlanDriver()
         val conMode = resolveConModePath()
@@ -513,7 +427,7 @@ class DeviceCompatibilityChecker {
     }
 
     private fun testCapabilities(): CapabilitiesInfo {
-        Log.d(TAG, "=== Testing injection/capture capabilities ===")
+        logD(TAG, "=== Testing injection/capture capabilities ===")
         
         val conModePath = resolveConModePath()
         if (conModePath == null) {
@@ -526,18 +440,18 @@ class DeviceCompatibilityChecker {
         }
 
         // Save original mode BEFORE making any changes
-        val originalMode = execCommand("cat $conModePath 2>/dev/null").output.trim()
-        Log.d(TAG, "Original con_mode value: $originalMode")
+        val originalMode = execRoot("cat $conModePath 2>/dev/null").output.trim()
+        logD(TAG, "Original con_mode value: $originalMode")
 
         try {
             // Set to monitor mode (4)
-            execCommand("echo 4 > $conModePath 2>/dev/null")
+            execRoot("echo 4 > $conModePath 2>/dev/null")
             Thread.sleep(500)
             
             // Detect WiFi interface dynamically (try common names)
             val interfaceName = findWifiInterface()
             if (interfaceName.isEmpty()) {
-                Log.w(TAG, "No WiFi interface found for capability test")
+                logW(TAG, "No WiFi interface found for capability test")
                 return CapabilitiesInfo(
                     canInject = null,
                     canCapture = null,
@@ -551,7 +465,7 @@ class DeviceCompatibilityChecker {
             
             val isPassiveOnly = !canInject && !canCapture
 
-            Log.d(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, Passive: $isPassiveOnly")
+            logD(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, Passive: $isPassiveOnly")
 
             return CapabilitiesInfo(
                 canInject = canInject,
@@ -560,7 +474,7 @@ class DeviceCompatibilityChecker {
                 tested = true
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during capability test: ${e.message}", e)
+            logE(TAG, "Exception during capability test: ${e.message}", e)
             return CapabilitiesInfo(
                 canInject = null,
                 canCapture = null,
@@ -569,12 +483,12 @@ class DeviceCompatibilityChecker {
             )
         } finally {
             // CRITICAL: Always restore original mode, even if tests fail
-            Log.d(TAG, "Restoring con_mode to original value: $originalMode")
+            logD(TAG, "Restoring con_mode to original value: $originalMode")
             try {
-                execCommand("echo $originalMode > $conModePath 2>/dev/null")
+                execRoot("echo $originalMode > $conModePath 2>/dev/null")
                 Thread.sleep(300)
             } catch (e: Exception) {
-                Log.e(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
+                logE(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
             }
         }
     }
@@ -582,7 +496,7 @@ class DeviceCompatibilityChecker {
     private fun testPacketInjection(interfaceName: String): Boolean {
         if (interfaceName.isEmpty()) return false
         
-        val rawSocketTest = execCommand(
+        val rawSocketTest = execRoot(
             "ip link set $interfaceName up 2>&1 && " +
             "timeout 1 iw dev $interfaceName set monitor control 2>&1"
         ).output
@@ -590,139 +504,139 @@ class DeviceCompatibilityChecker {
         if (rawSocketTest.contains("Operation not supported") ||
             rawSocketTest.contains("no such device") ||
             rawSocketTest.contains("Invalid argument")) {
-            Log.d(TAG, "Raw injection not supported: $rawSocketTest")
+            logD(TAG, "Raw injection not supported: $rawSocketTest")
             return false
         }
 
-        execCommand("iw dev $interfaceName set type managed 2>&1")
+        execRoot("iw dev $interfaceName set type managed 2>&1")
 
-        val injectCheck = execCommand(
+        val injectCheck = execRoot(
             "cat /sys/class/net/$interfaceName/device/inject 2>/dev/null || " +
             "cat /proc/net/tcp6 2>/dev/null | head -3 || echo 'none'"
         ).output
 
         if (injectCheck.contains("no such file") || injectCheck == "none") {
-            Log.d(TAG, "No injection interface found")
+            logD(TAG, "No injection interface found")
             return false
         }
 
-        val txTest = execCommand(
+        val txTest = execRoot(
             "timeout 2 iw dev $interfaceName set txpower fixed 3000 2>&1"
         ).output
 
         if (!txTest.contains("command failed") && !txTest.contains("not supported")) {
-            Log.d(TAG, "Tx power injection supported")
+            logD(TAG, "Tx power injection supported")
             return true
         }
 
-        val monitorInject = execCommand(
+        val monitorInject = execRoot(
             "iw dev $interfaceName set monitor 4addr 2>&1"
         ).output
 
         if (!monitorInject.contains("command failed") && 
             !monitorInject.contains("not supported")) {
-            Log.d(TAG, "4addr monitor injection supported")
+            logD(TAG, "4addr monitor injection supported")
             return true
         }
 
-        Log.d(TAG, "Packet injection not confirmed")
+        logD(TAG, "Packet injection not confirmed")
         return false
     }
 
     private fun testCaptureCapability(interfaceName: String): Boolean {
         if (interfaceName.isEmpty()) return false
         
-        val monitorTypeTest = execCommand(
+        val monitorTypeTest = execRoot(
             "iw dev $interfaceName set type monitor 2>&1"
         ).output
 
         if (monitorTypeTest.contains("command failed") || 
             monitorTypeTest.contains("Operation not supported") ||
             monitorTypeTest.contains("no such device")) {
-            Log.d(TAG, "Monitor type not supported: $monitorTypeTest")
+            logD(TAG, "Monitor type not supported: $monitorTypeTest")
             return false
         }
 
-        val activeTest = execCommand(
+        val activeTest = execRoot(
             "iw dev $interfaceName set type monitor 2>&1 && " +
             "iw dev $interfaceName info 2>&1 | grep -c 'type monitor'"
         ).output
 
-        val setBackResult = execCommand(
+        val setBackResult = execRoot(
             "iw dev $interfaceName set type managed 2>&1"
         ).output
 
         val monitorCount = activeTest.trim().toIntOrNull() ?: 0
         if (monitorCount > 0) {
-            Log.d(TAG, "Capture test passed - can set monitor type")
+            logD(TAG, "Capture test passed - can set monitor type")
             return true
         }
 
-        val freqTest = execCommand(
+        val freqTest = execRoot(
             "timeout 2 iw dev $interfaceName scan trigger 2>&1"
         ).output
         
         if (freqTest.contains("MLME") || freqTest.contains("command failed")) {
-            Log.d(TAG, "Scan trigger failed: $freqTest")
+            logD(TAG, "Scan trigger failed: $freqTest")
             return false
         }
 
-        val channelTest = execCommand(
+        val channelTest = execRoot(
             "timeout 2 iw dev $interfaceName scan 2>&1 | head -20"
         ).output
 
         if (channelTest.isNotEmpty() && 
             !channelTest.contains("command failed") &&
             !channelTest.contains("no such device")) {
-            Log.d(TAG, "Active scan works - capture capability confirmed")
+            logD(TAG, "Active scan works - capture capability confirmed")
             return true
         }
 
-        Log.d(TAG, "Capture test: passive scan only")
+        logD(TAG, "Capture test: passive scan only")
         return false
     }
 
     private fun getSystemProperty(prop: String): String {
-        return execCommandNoRoot("getprop $prop").output.ifEmpty {
-            execCommand("getprop $prop").output
+        return execNoRoot("getprop $prop").output.ifEmpty {
+            execRoot("getprop $prop").output
         }
     }
 
     private fun detectChipset(): String {
-        Log.d(TAG, "=== Detecting chipset with root access ===")
+        logD(TAG, "=== Detecting chipset with root access ===")
         
         val socLine = getSystemProperty("ro.hardware")
-        Log.d(TAG, "ro.hardware: $socLine")
+        logD(TAG, "ro.hardware: $socLine")
         
         val socLower = socLine.lowercase()
         
         for ((codename, chipName) in SNAPDRAGON_CODENAMES) {
             if (socLower.contains(codename.lowercase())) {
-                Log.d(TAG, "Found Snapdragon codename: $codename -> $chipName")
+                logD(TAG, "Found Snapdragon codename: $codename -> $chipName")
                 return chipName
             }
         }
         
-        val cpuInfoHardware = execCommand("cat /proc/cpuinfo 2>/dev/null").output
-        Log.d(TAG, "Full cpuinfo:\n$cpuInfoHardware")
+        val cpuInfoHardware = execRoot("cat /proc/cpuinfo 2>/dev/null").output
+        logD(TAG, "Full cpuinfo:\n$cpuInfoHardware")
         
         val hardwareLine = cpuInfoHardware.lines().find { it.contains("Hardware", ignoreCase = true) || it.contains("hardware", ignoreCase = true) }
         val cpuInfoModel = cpuInfoHardware.lines().find { it.contains("model name", ignoreCase = true) }
         val cpuPartLine = cpuInfoHardware.lines().find { it.contains("CPU part", ignoreCase = true) }
         
-        Log.d(TAG, "cpuinfo Hardware: $hardwareLine")
-        Log.d(TAG, "cpuinfo model: $cpuInfoModel")
-        Log.d(TAG, "cpuinfo CPU part: $cpuPartLine")
+        logD(TAG, "cpuinfo Hardware: $hardwareLine")
+        logD(TAG, "cpuinfo model: $cpuInfoModel")
+        logD(TAG, "cpuinfo CPU part: $cpuPartLine")
         
         val socModel = getSystemProperty("ro.product.board")
             .ifEmpty { getSystemProperty("ro.board.platform") }
-        Log.d(TAG, "ro.product.board: $socModel")
+        logD(TAG, "ro.product.board: $socModel")
         
         val cpuInfoLower = (cpuInfoHardware + (cpuInfoModel ?: "")).lowercase()
         
         for ((codename, chipName) in SNAPDRAGON_CODENAMES) {
             if (cpuInfoLower.contains(codename.lowercase()) || socLower.contains(codename.lowercase())) {
-                Log.d(TAG, "Found in cpuinfo: $codename -> $chipName")
+                logD(TAG, "Found in cpuinfo: $codename -> $chipName")
                 return chipName
             }
         }
@@ -731,7 +645,7 @@ class DeviceCompatibilityChecker {
         if (cpuPartHex.isNotEmpty()) {
             val snapdragonCpuPart = SNAPDRAGON_CPU_PARTS[cpuPartHex]
             if (snapdragonCpuPart != null) {
-                Log.d(TAG, "Found by CPU part: $cpuPartHex -> $snapdragonCpuPart")
+                logD(TAG, "Found by CPU part: $cpuPartHex -> $snapdragonCpuPart")
                 return snapdragonCpuPart
             }
         }
@@ -757,8 +671,8 @@ class DeviceCompatibilityChecker {
     }
 
     private fun detectWlanDriver(): String {
-        val driverPath = execCommand("readlink /sys/class/net/wlan0/device/driver 2>/dev/null").output.lowercase()
-        val modules = execCommand("ls /sys/module/ 2>/dev/null | grep -i wlan").output
+        val driverPath = execRoot("readlink /sys/class/net/wlan0/device/driver 2>/dev/null").output.lowercase()
+        val modules = execRoot("ls /sys/module/ 2>/dev/null | grep -i wlan").output
         
         return when {
             driverPath.contains("bcmdhd") -> "Broadcom BCMDHD"
@@ -777,19 +691,19 @@ class DeviceCompatibilityChecker {
     private fun findWifiInterface(): String {
         val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
         for (iface in candidates) {
-            val result = execCommand("ip link show $iface 2>/dev/null")
+            val result = execRoot("ip link show $iface 2>/dev/null")
             if (result.exitCode == 0 && result.output.isNotEmpty()) {
-                Log.d(TAG, "Found WiFi interface: $iface")
+                logD(TAG, "Found WiFi interface: $iface")
                 return iface
             }
         }
         // Fallback: try to find any wlan interface
-        val anyWlan = execCommand("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
+        val anyWlan = execRoot("ls /sys/class/net/ 2>/dev/null | grep -E '^wlan' | head -1").output.trim()
         if (anyWlan.isNotEmpty()) {
-            Log.d(TAG, "Found WiFi interface (fallback): $anyWlan")
+            logD(TAG, "Found WiFi interface (fallback): $anyWlan")
             return anyWlan
         }
-        Log.w(TAG, "No WiFi interface found")
+        logW(TAG, "No WiFi interface found")
         return ""
     }
 
