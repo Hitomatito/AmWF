@@ -215,12 +215,30 @@ class DeviceCompatibilityChecker {
             "0x0B0" to "Snapdragon 4 Gen 1",
             "0x0B1" to "Snapdragon 4 Gen 2"
         )
+
+        /**
+         * Busca el nombre comercial de un Snapdragon por su "CPU part" de
+         * /proc/cpuinfo. Comparación insensible a mayúsculas para que el prefijo
+         * funcione tanto como "0x..." (estándar) como "0X..." (tras un uppercase).
+         */
+        internal fun resolveSnapdragonByCpuPart(cpuPart: String): String? =
+            SNAPDRAGON_CPU_PARTS.entries
+                .firstOrNull { it.key.uppercase() == cpuPart.trim().uppercase() }
+                ?.value
     }
 
     fun checkCompatibility(): CompatibilityResult {
         val issues = mutableListOf<CompatibilityIssue>()
         
         logD(TAG, "=== Starting compatibility check ===")
+
+        // Apaga el radio WiFi ANTES de los tests de escritura a con_mode.
+        // Con el cliente conectado, "echo 4 > con_mode" falla con
+        // "Operation not permitted", lo que marcaría un dispositivo
+        // realmente compatible como no compatible. El radio se restaura
+        // una única vez al final de checkCompatibility().
+        execRoot("svc wifi disable")
+        Thread.sleep(1000)
 
         val deviceInfo = gatherDeviceInfo()
         logD(TAG, "Device: ${deviceInfo.manufacturer} ${deviceInfo.model}")
@@ -526,16 +544,6 @@ class DeviceCompatibilityChecker {
 
         execRoot("iw dev $interfaceName set type managed 2>&1")
 
-        val injectCheck = execRoot(
-            "cat /sys/class/net/$interfaceName/device/inject 2>/dev/null || " +
-            "cat /proc/net/tcp6 2>/dev/null | head -3 || echo 'none'"
-        ).output
-
-        if (injectCheck.contains("no such file") || injectCheck == "none") {
-            logD(TAG, "No injection interface found")
-            return false
-        }
-
         val txTest = execRoot(
             "timeout 2 iw dev $interfaceName set txpower fixed 3000 2>&1"
         ).output
@@ -657,9 +665,9 @@ class DeviceCompatibilityChecker {
             }
         }
         
-        val cpuPartHex = cpuPartLine?.substringAfter(":")?.trim()?.uppercase() ?: ""
+        val cpuPartHex = cpuPartLine?.substringAfter(":")?.trim() ?: ""
         if (cpuPartHex.isNotEmpty()) {
-            val snapdragonCpuPart = SNAPDRAGON_CPU_PARTS[cpuPartHex]
+            val snapdragonCpuPart = resolveSnapdragonByCpuPart(cpuPartHex)
             if (snapdragonCpuPart != null) {
                 logD(TAG, "Found by CPU part: $cpuPartHex -> $snapdragonCpuPart")
                 return snapdragonCpuPart

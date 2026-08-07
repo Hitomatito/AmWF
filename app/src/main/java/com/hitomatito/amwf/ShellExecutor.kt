@@ -1,8 +1,10 @@
 package com.hitomatito.amwf
 
+import android.os.Build
 import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 /**
  * Shared utility for executing shell commands via su or sh.
@@ -31,47 +33,69 @@ object ShellExecutor {
     }
 
     private fun exec(cmdArray: Array<String>, timeoutMs: Long): Result {
-        return try {
-            val process = Runtime.getRuntime().exec(cmdArray)
-
-            val output = StringBuilder()
-            val error = StringBuilder()
-
-            val outputReader = BufferedReader(InputStreamReader(process.inputStream))
-            val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-
-            val startTime = System.currentTimeMillis()
-
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
-                if (outputReader.ready()) {
-                    val line = outputReader.readLine()
-                    if (line != null) output.appendLine(line)
-                }
-                if (errorReader.ready()) {
-                    val line = errorReader.readLine()
-                    if (line != null) error.appendLine(line)
-                }
-                try {
-                    val exitCode = process.exitValue()
-                    // Process finished: drain remaining data
-                    while (outputReader.ready()) {
-                        val line = outputReader.readLine()
-                        if (line != null) output.appendLine(line)
-                    }
-                    while (errorReader.ready()) {
-                        val line = errorReader.readLine()
-                        if (line != null) error.appendLine(line)
-                    }
-                    return Result(exitCode, output.toString().trim(), error.toString().trim())
-                } catch (_: IllegalThreadStateException) {
-                    Thread.sleep(POLL_INTERVAL)
-                }
-            }
-
-            process.destroyForcibly()
-            Result(-1, output.toString().trim(), "Command timeout")
+        val process = try {
+            Runtime.getRuntime().exec(cmdArray)
         } catch (e: Exception) {
-            Result(-1, "", e.message ?: "Unknown error")
+            return Result(-1, "", e.message ?: "Unknown error")
+        }
+
+        val output = StringBuilder()
+        val error = StringBuilder()
+
+        val outputReader = BufferedReader(InputStreamReader(process.inputStream))
+        val errorReader = BufferedReader(InputStreamReader(process.errorStream))
+
+        // Dos hilos lectores que consumen stdout/stderr hasta EOF. Evitan el
+        // deadlock clásico (una pipe llena) y no pierden salida al terminar el
+        // proceso, algo que el muestreo con ready() sí podía cortar. forEachLine
+        // cierra el reader al llegar al final (sin fuga de descriptores).
+        val outputThread = Thread {
+            outputReader.forEachLine { output.appendLine(it) }
+        }
+        val errorThread = Thread {
+            errorReader.forEachLine { error.appendLine(it) }
+        }
+        outputThread.isDaemon = true
+        errorThread.isDaemon = true
+        outputThread.start()
+        errorThread.start()
+
+        val timedOut = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                !process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+            } else {
+                // API 24/25 no expone waitFor(timeout): se sondea exitValue con timeout propio.
+                val startTime = System.currentTimeMillis()
+                var finished = false
+                while (System.currentTimeMillis() - startTime < timeoutMs) {
+                    try {
+                        process.exitValue()
+                        finished = true
+                        break
+                    } catch (_: IllegalThreadStateException) {
+                        Thread.sleep(POLL_INTERVAL)
+                    }
+                }
+                !finished
+            }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            process.destroyForcibly()
+            return Result(-1, output.toString().trim(), "Interrupted")
+        }
+
+        if (timedOut) {
+            process.destroyForcibly()
+        }
+
+        // Deja que los lectores lleguen a EOF (acotado; son daemon threads).
+        outputThread.join(1000)
+        errorThread.join(1000)
+
+        return if (timedOut) {
+            Result(-1, output.toString().trim(), "Command timeout")
+        } else {
+            Result(process.exitValue(), output.toString().trim(), error.toString().trim())
         }
     }
 

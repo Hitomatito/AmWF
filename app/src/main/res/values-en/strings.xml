@@ -48,4 +48,16 @@
     <string name="error_selinux">SELinux restriction</string>
     <string name="error_unknown">Unknown error</string>
     <string name="status_unknown">Unknown status</string>
+
+    <string name="info_mode_monitor">%1$s in monitor mode (802.11 radiotap)</string>
+    <string name="info_mode_managed">%1$s in managed mode</string>
+    <string name="info_mode_unknown">Could not determine the state of %1$s</string>
+    <string name="error_root_required">Root access required</string>
+    <string name="error_root_check_failed">Failed to check root access</string>
+    <string name="error_wifi_interface_down">Could not bring the WiFi interface down</string>
+    <string name="error_con_mode_unavailable">con_mode is not available in this WiFi driver</string>
+    <string name="error_write_mode">Could not write the WiFi interface mode</string>
+    <string name="error_internal_enable">Internal error while enabling monitor mode</string>
+    <string name="error_internal_disable">Internal error while disabling monitor mode</string>
+    <string name="error_internal_status">Internal error while querying the status</string>
 </resources>

@@ -16,6 +16,7 @@ import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -50,8 +51,13 @@ class MainActivity : AppCompatActivity() {
         // Cache compatibility result to avoid re-running on configuration changes
         // (language switch, rotation, etc.). This prevents testCapabilities() from
         // disrupting WiFi unnecessarily when the Activity is recreated.
+        @Volatile
         private var cachedCompatResult: CompatibilityResult? = null
-        private var cachedMode: MonitorMode? = null
+        // True mientras hay una comprobación de compatibilidad en vuelo. Permite
+        // que un recreate() durante la comprobación espere ese resultado en lugar
+        // de lanzar un segundo test que volvería a cortar la WiFi.
+        @Volatile
+        private var compatCheckInProgress = false
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -74,24 +80,11 @@ class MainActivity : AppCompatActivity() {
         val cached = cachedCompatResult
         if (cached != null) {
             Log.d(TAG, "Using cached compatibility result")
-            isDeviceCompatible = cached.isCompatible
-            updateCompatibilityUI(cached)
-            if (isDeviceCompatible) {
-                // Restore cached mode or check current
-                val mode = cachedMode
-                if (mode != null) {
-                    currentMode = mode
-                    // Re-check actual state in case it changed externally
-                    checkCurrentMode()
-                } else {
-                    checkCurrentMode()
-                }
-            } else {
-                tvStatus.text = getString(R.string.device_incompatible)
-                setToggleEnabled(false)
-                btnToggle.text = getString(R.string.not_compatible)
-                btnToggle.setBackgroundColor(getColor(R.color.unknown))
-            }
+            applyCompatResult(cached)
+        } else if (compatCheckInProgress) {
+            // Ya hay una comprobación en vuelo (p. ej. recreate() durante el test):
+            // no relanzar el test, esperar el resultado que se está calculando.
+            waitForCompatCheckInProgress()
         } else {
             checkDeviceCompatibility()
         }
@@ -155,29 +148,63 @@ class MainActivity : AppCompatActivity() {
         setToggleEnabled(false)
         tvCompatStatus.text = getString(R.string.checking_compatibility)
         
+        compatCheckInProgress = true
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    // Cachear desde el hilo IO: si llega un recreate() durante la
+                    // comprobación, la nueva Activity podrá reutilizar el resultado.
+                    compatibilityChecker.checkCompatibility().also { cachedCompatResult = it }
+                }
+                applyCompatResult(result)
+            } finally {
+                compatCheckInProgress = false
+            }
+        }
+    }
+
+    // Espera a que termine una comprobación que ya está en vuelo (lanzada por una
+    // instancia anterior de la Activity) y aplica su resultado. Evita relanzar el
+    // test, que volvería a cortar la WiFi.
+    private fun waitForCompatCheckInProgress() {
+        setToggleEnabled(false)
+        tvCompatStatus.text = getString(R.string.checking_compatibility)
+
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                compatibilityChecker.checkCompatibility()
+                while (compatCheckInProgress) {
+                    delay(100)
+                }
+                cachedCompatResult
             }
-            
-            isDeviceCompatible = result.isCompatible
-            cachedCompatResult = result  // Cache for configuration changes
-            updateCompatibilityUI(result)
-            
-            if (isDeviceCompatible) {
-                checkCurrentMode()
-            } else {
-                tvStatus.text = getString(R.string.device_incompatible)
-                setToggleEnabled(false)
-                btnToggle.text = getString(R.string.not_compatible)
-                btnToggle.setBackgroundColor(getColor(R.color.unknown))
 
-                val reason = result.issues.find { it.severity == Severity.CRITICAL }
-                    ?.let { it.suggestion.ifBlank { it.message } }
-                    ?: getString(R.string.not_compatible)
-                tvInfo.text = reason
-                Toast.makeText(this@MainActivity, reason, Toast.LENGTH_LONG).show()
+            if (result != null) {
+                applyCompatResult(result)
+            } else {
+                // La comprobación en vuelo terminó sin resultado (p. ej. cancelada):
+                // reintentar.
+                checkDeviceCompatibility()
             }
+        }
+    }
+
+    private fun applyCompatResult(result: CompatibilityResult) {
+        isDeviceCompatible = result.isCompatible
+        updateCompatibilityUI(result)
+
+        if (isDeviceCompatible) {
+            checkCurrentMode()
+        } else {
+            tvStatus.text = getString(R.string.device_incompatible)
+            setToggleEnabled(false)
+            btnToggle.text = getString(R.string.not_compatible)
+            btnToggle.setBackgroundColor(getColor(R.color.unknown))
+
+            val reason = result.issues.find { it.severity == Severity.CRITICAL }
+                ?.let { it.suggestion.ifBlank { it.message } }
+                ?: getString(R.string.not_compatible)
+            tvInfo.text = reason
+            Toast.makeText(this@MainActivity, reason, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -253,7 +280,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
-            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
         }
     }
@@ -274,7 +300,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
-            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
             setLoading(false)
 
@@ -295,7 +320,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             currentMode = result.type
-            cachedMode = result.type  // Cache for configuration changes
             updateUI(result)
             setLoading(false)
 
@@ -321,7 +345,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateUI(result: MonitorResult) {
         tvStatus.text = getString(result.statusRes)
-        tvInfo.text = result.info
+        tvInfo.text = if (result.infoRes != 0) {
+            if (result.infoArg.isNotEmpty()) {
+                getString(result.infoRes, result.infoArg)
+            } else {
+                getString(result.infoRes)
+            }
+        } else {
+            result.info
+        }
 
         when (currentMode) {
             MonitorMode.MONITOR -> {

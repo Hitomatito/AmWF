@@ -7,7 +7,10 @@ import com.hitomatito.amwf.ShellExecutor.logW
 
 class MonitorModeManager {
 
-    private val interfaceName: String by lazy { findWifiInterface() }
+    // No es lazy: se refresca al inicio de cada operación. Si se fijara una sola
+    // vez, un cambio del estado del radio (WiFi apagada, driver recargado) dejaría
+    // las operaciones apuntando a una interfaz equivocada.
+    private var interfaceName: String = "wlan0"
 
     companion object {
         private const val TAG = "MonitorMode"
@@ -48,9 +51,10 @@ class MonitorModeManager {
             return MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_root,
-                info = "Root access required"
+                infoRes = R.string.error_root_required
             )
         }
+        interfaceName = findWifiInterface()
 
         return try {
             // Step 1: Disable WiFi service to ensure clean state
@@ -71,7 +75,7 @@ class MonitorModeManager {
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
-                    info = "No se pudo desactivar la interfaz WiFi"
+                    infoRes = R.string.error_wifi_interface_down
                 )
             }
             logD(TAG, "$interfaceName is DOWN, proceeding...")
@@ -84,7 +88,7 @@ class MonitorModeManager {
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
-                    info = "con_mode no disponible en este driver WiFi"
+                    infoRes = R.string.error_con_mode_unavailable
                 )
             }
 
@@ -103,7 +107,7 @@ class MonitorModeManager {
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_selinux,
-                    info = writeResult.error
+                    infoRes = R.string.error_write_mode
                 )
             }
 
@@ -112,18 +116,20 @@ class MonitorModeManager {
             execRoot("ip link set $interfaceName up")
             Thread.sleep(500)
 
-            val (mode, info) = getCurrentState()
+            val mode = getCurrentState()
 
             when (mode) {
                 MonitorMode.MONITOR -> MonitorResult(
                     type = MonitorMode.MONITOR,
                     statusRes = R.string.monitor_mode_on,
-                    info = info
+                    infoRes = infoResFor(mode),
+                    infoArg = interfaceName
                 )
                 else -> MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
-                    info = info
+                    infoRes = infoResFor(mode),
+                    infoArg = interfaceName
                 )
             }
         } catch (e: Exception) {
@@ -136,7 +142,7 @@ class MonitorModeManager {
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
-                info = e.stackTraceToString()
+                infoRes = R.string.error_internal_enable
             )
         }
     }
@@ -148,9 +154,10 @@ class MonitorModeManager {
             return MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_root,
-                info = "Root access required"
+                infoRes = R.string.error_root_required
             )
         }
+        interfaceName = findWifiInterface()
 
         return try {
             // Step 1: Bring interface DOWN and verify
@@ -163,7 +170,7 @@ class MonitorModeManager {
                 return MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
-                    info = "No se pudo desactivar la interfaz WiFi"
+                    infoRes = R.string.error_wifi_interface_down
                 )
             }
             logD(TAG, "$interfaceName is DOWN, proceeding...")
@@ -189,18 +196,20 @@ class MonitorModeManager {
             restartWifiService()
             Thread.sleep(2000)
 
-            val (mode, info) = getCurrentState()
+            val mode = getCurrentState()
 
             when (mode) {
                 MonitorMode.MANAGED -> MonitorResult(
                     type = MonitorMode.MANAGED,
                     statusRes = R.string.monitor_mode_normal,
-                    info = info
+                    infoRes = infoResFor(mode),
+                    infoArg = interfaceName
                 )
                 else -> MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
-                    info = info
+                    infoRes = infoResFor(mode),
+                    infoArg = interfaceName
                 )
             }
         } catch (e: Exception) {
@@ -213,7 +222,7 @@ class MonitorModeManager {
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
-                info = e.stackTraceToString()
+                infoRes = R.string.error_internal_disable
             )
         }
     }
@@ -239,12 +248,13 @@ class MonitorModeManager {
             return MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_root,
-                info = "Root check failed"
+                infoRes = R.string.error_root_check_failed
             )
         }
+        interfaceName = findWifiInterface()
 
         return try {
-            val (mode, info) = getCurrentState()
+            val mode = getCurrentState()
 
             val statusRes = when (mode) {
                 MonitorMode.MONITOR -> R.string.monitor_mode_on
@@ -252,12 +262,18 @@ class MonitorModeManager {
                 MonitorMode.UNKNOWN -> R.string.status_unknown
             }
 
-            MonitorResult(type = mode, statusRes = statusRes, info = info)
+            MonitorResult(
+                type = mode,
+                statusRes = statusRes,
+                infoRes = infoResFor(mode),
+                infoArg = interfaceName
+            )
         } catch (e: Exception) {
+            logE(TAG, "Exception in getCurrentMode: ${e.message}", e)
             MonitorResult(
                 type = MonitorMode.UNKNOWN,
                 statusRes = R.string.error_unknown,
-                info = e.stackTraceToString()
+                infoRes = R.string.error_internal_status
             )
         }
     }
@@ -285,28 +301,28 @@ class MonitorModeManager {
         return false
     }
 
-    private fun getCurrentState(): Pair<MonitorMode, String> {
+    private fun getCurrentState(): MonitorMode {
         // 1) Intentar con "iw" (si el binario existe en el dispositivo)
         val iwInfo = execRoot("iw dev $interfaceName info").output
         if (iwInfo.isNotEmpty()) {
-            return parseMode(iwInfo) to briefInfo(parseMode(iwInfo))
+            return parseMode(iwInfo)
         }
         // 2) Sin "iw": el tipo de enlace radiotap (802.11 crudo) es la
         //    señal de que con_mode=4 esta activo.
         val linkInfo = execRoot("ip -d link show $interfaceName").output
-        val mode = when {
+        return when {
             linkInfo.contains("ieee802.11/radiotap", ignoreCase = true) -> MonitorMode.MONITOR
             linkInfo.contains("link/ether", ignoreCase = true) -> MonitorMode.MANAGED
             else -> MonitorMode.UNKNOWN
         }
-        return mode to briefInfo(mode)
     }
 
-    // Resumen corto para la tarjeta de informacion (evita el volcado bruto de ip/iw)
-    private fun briefInfo(mode: MonitorMode): String = when (mode) {
-        MonitorMode.MONITOR -> "$interfaceName en modo monitor (802.11 radiotap)"
-        MonitorMode.MANAGED -> "$interfaceName en modo gestionado (managed)"
-        MonitorMode.UNKNOWN -> "No se pudo determinar el estado de $interfaceName"
+    // Resumen corto localizado para la tarjeta de informacion
+    // (evita el volcado bruto de ip/iw).
+    private fun infoResFor(mode: MonitorMode): Int = when (mode) {
+        MonitorMode.MONITOR -> R.string.info_mode_monitor
+        MonitorMode.MANAGED -> R.string.info_mode_managed
+        MonitorMode.UNKNOWN -> R.string.info_mode_unknown
     }
 
     private fun parseMode(output: String): MonitorMode {
@@ -321,7 +337,11 @@ class MonitorModeManager {
 data class MonitorResult(
     val type: MonitorMode,
     val statusRes: Int,
-    val info: String = ""
+    val info: String = "",
+    // Recurso localizado para la linea de informacion. Si es 0 se usa `info`.
+    val infoRes: Int = 0,
+    // Argumento de formato (%1$s) para infoRes (normalmente el nombre de la interfaz).
+    val infoArg: String = ""
 )
 
 enum class MonitorMode {
