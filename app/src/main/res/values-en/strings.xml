@@ -26,7 +26,7 @@
     <string name="label_sysfs">con_mode file</string>
     <string name="label_capabilities">Capabilities</string>
     
-    <string name="capability_passive">Passive scan only</string>
+    <string name="capability_not_verified">Capture not verified</string>
     <string name="capability_full">Full monitor</string>
     <string name="capability_injection">Packet injection</string>
     <string name="capability_capture">Full capture</string>

@@ -241,11 +241,12 @@ class MainActivity : AppCompatActivity() {
         
         val capInfo = result.deviceInfo.capabilities
         val capText = when {
-            !capInfo.tested -> getString(R.string.capability_unavailable)
+            result.deviceInfo.conModePath == null -> getString(R.string.capability_unavailable)
+            !capInfo.tested -> getString(R.string.capability_unknown)
             capInfo.canInject == true && capInfo.canCapture == true -> getString(R.string.capability_full)
             capInfo.canInject == true -> getString(R.string.capability_injection)
             capInfo.canCapture == true -> getString(R.string.capability_capture)
-            else -> getString(R.string.capability_passive)
+            else -> getString(R.string.capability_not_verified)
         }
         val capPassed = capInfo.canInject == true && capInfo.canCapture == true
         updateInfoRow(rowCapabilities, getString(R.string.label_capabilities), capText, capPassed)

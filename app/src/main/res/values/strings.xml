@@ -25,7 +25,7 @@
     <string name="label_sysfs">Archivo con_mode</string>
     <string name="label_capabilities">Capacidades</string>
     
-    <string name="capability_passive">Solo escaneo pasivo</string>
+    <string name="capability_not_verified">Captura no verificada</string>
     <string name="capability_full">Monitor completo</string>
     <string name="capability_injection">Inyeccion de paquetes</string>
     <string name="capability_capture">Captura completa</string>

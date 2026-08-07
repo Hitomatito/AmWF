@@ -225,6 +225,14 @@ class DeviceCompatibilityChecker {
             SNAPDRAGON_CPU_PARTS.entries
                 .firstOrNull { it.key.uppercase() == cpuPart.trim().uppercase() }
                 ?.value
+
+        /**
+         * Extrae el número de frames "N packets captured" del resumen de tcpdump.
+         * Función pura (no requiere instancia) para poder unit-testearla.
+         */
+        internal fun countCapturedPackets(output: String): Int =
+            Regex("(\\d+)\\s+packets? captured").find(output)
+                ?.groupValues?.get(1)?.toIntOrNull() ?: 0
     }
 
     fun checkCompatibility(): CompatibilityResult {
@@ -458,18 +466,114 @@ class DeviceCompatibilityChecker {
         )
     }
 
+    /**
+     * Comprueba si una herramienta está invocable. Usa `command -v` (builtin
+     * POSIX) vía el shell raíz — el PATH raíz incluye rutas que el PATH del
+     * shell de la app puede no cubrir — y, como respaldo, busca en las rutas
+     * típicas de binarios en Android.
+     */
+    private fun toolAvailable(tool: String): Boolean {
+        if (execRoot("command -v $tool 2>/dev/null").output.isNotBlank()) return true
+        return listOf(
+            "/system/bin/$tool", "/system/xbin/$tool",
+            "/vendor/bin/$tool", "/sbin/$tool"
+        ).any { File(it).exists() }
+    }
+
+    /**
+     * Detecta "la herramienta no existe" en la salida de una orden. Todos los tests
+     * reales deben fallar (no pasar en falso) cuando el binario requerido no está
+     * instalado: "command not found" no contiene cadenas tipo "command failed" o
+     * "Operation not supported", por lo que los tests heurísticos previos lo
+     * aceptaban como "correcto" — el origen del falso "Monitor completo".
+     */
+    private fun outputHasToolError(out: String): Boolean =
+        out.contains("command not found") || out.contains("not found") ||
+        out.contains("No such file") || out.contains("inaccessible") ||
+        out.contains("can't open") || out.contains("No such device")
+
+    /**
+     * Prueba REAL de captura: con con_mode=4 y la interfaz arriba, comprueba que
+     * de verdad llegan frames 802.11 al sistema.
+     * - Con tcpdump: captura frames reales (-c 2) y cuenta el resumen "packets captured".
+     * - Sin tcpdump: usa el contador rx_packets del kernel como prueba de recepción
+     *   de frames (menos informativo que tcpdump pero mide recepción real, no un flag).
+     */
+    private fun testRealCapture(interfaceName: String): Boolean {
+        // El check arranca con el radio apagado (svc wifi disable) para poder escribir
+        // con_mode sin cliente asociado. Para medir captura REAL hay que encender el
+        // radio; se apaga de nuevo al salir para no alterar el resto del check
+        // (testConModeWrite espera el radio apagado).
+        execRoot("svc wifi enable")
+        Thread.sleep(1000)
+
+        try {
+            // Sube la interfaz; si hay `iw`, la pasa a type monitor (radiotap). Si `iw`
+            // no existe, con con_mode=4 el driver igualmente entrega frames 802.11.
+            execRoot("ip link set $interfaceName up 2>&1")
+            if (toolAvailable("iw")) {
+                execRoot("iw dev $interfaceName set type monitor 2>&1")
+            }
+            Thread.sleep(500)
+
+            if (toolAvailable("tcpdump")) {
+                val out = execRoot("timeout 4 tcpdump -i $interfaceName -c 2 -n 2>&1")
+                logD(TAG, "tcpdump capture: exit=${out.exitCode} out=${out.output.take(200)}")
+                if (outputHasToolError(out.output)) return false
+                val captured = countCapturedPackets(out.output)
+                logD(TAG, if (captured > 0) "Real capture OK: $captured frames"
+                           else "Real capture: 0 frames")
+                return captured > 0
+            }
+
+            // Fallback sin tcpdump: lectura del contador de RX del kernel.
+            val before = execRoot(
+                "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
+            ).output.trim().toLongOrNull() ?: -1L
+            Thread.sleep(3000)
+            val after = execRoot(
+                "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
+            ).output.trim().toLongOrNull() ?: -1L
+            logD(TAG, "rx_packets delta: $before -> $after")
+            return before >= 0 && after > before
+        } finally {
+            execRoot("svc wifi disable")
+        }
+    }
+
+    /**
+     * Prueba REAL de inyección de frames. Sin una herramienta de inyección
+     * (aireplay-ng) no es posible enviar un frame 802.11 arbitrario: `iw` es de
+     * solo-consumo nl80211 y la inyección requiere AF_PACKET/aireplay.
+     * Si no existe la herramienta, canInject queda sin verificar (null), nunca
+     * en falso.
+     */
+    private fun testRealInjection(interfaceName: String): Boolean? {
+        val tool = when {
+            toolAvailable("aireplay-ng") -> "aireplay-ng"
+            else -> {
+                logD(TAG, "No real injection tool (aireplay-ng) found; injection unverified")
+                return null
+            }
+        }
+        // aireplay-ng --test inyecta probe requests y espera ACK ("Injection is working!")
+        val out = execRoot("timeout 6 $tool --test $interfaceName 2>&1")
+        logD(TAG, "injection test: ${out.output.take(300)}")
+        if (outputHasToolError(out.output)) return false
+        return out.output.contains("Injection is working!", ignoreCase = true)
+    }
+
     private fun testCapabilities(): CapabilitiesInfo {
-        logD(TAG, "=== Testing injection/capture capabilities ===")
-        
+        logD(TAG, "=== Testing injection/capture capabilities (real tests) ===")
+
         val conModePath = resolveConModePath()
         if (conModePath == null) {
-            return CapabilitiesInfo(
-                canInject = null,
-                canCapture = null,
-                isPassiveOnly = true,
-                tested = false
-            )
+            return CapabilitiesInfo(null, null, isPassiveOnly = true, tested = false)
         }
+
+        val hasTcpdump = toolAvailable("tcpdump")
+        val hasInjectionTool = toolAvailable("aireplay-ng")
+        logD(TAG, "Tools - tcpdump: $hasTcpdump, aireplay-ng: $hasInjectionTool")
 
         // Save original mode BEFORE making any changes
         val originalMode = execRoot("cat $conModePath 2>/dev/null").output.trim()
@@ -479,40 +583,26 @@ class DeviceCompatibilityChecker {
             // Set to monitor mode (4)
             execRoot("echo 4 > $conModePath 2>/dev/null")
             Thread.sleep(500)
-            
-            // Detect WiFi interface dynamically (try common names)
+
             val interfaceName = findWifiInterface()
             if (interfaceName.isEmpty()) {
                 logW(TAG, "No WiFi interface found for capability test")
-                return CapabilitiesInfo(
-                    canInject = null,
-                    canCapture = null,
-                    isPassiveOnly = true,
-                    tested = false
-                )
+                return CapabilitiesInfo(null, null, isPassiveOnly = true, tested = false)
             }
-            
-            val canInject = testPacketInjection(interfaceName)
-            val canCapture = testCaptureCapability(interfaceName)
-            
-            val isPassiveOnly = !canInject && !canCapture
 
-            logD(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, Passive: $isPassiveOnly")
+            val canCapture = testRealCapture(interfaceName)
+            val canInject = testRealInjection(interfaceName)
 
-            return CapabilitiesInfo(
-                canInject = canInject,
-                canCapture = canCapture,
-                isPassiveOnly = isPassiveOnly,
-                tested = true
-            )
+            val tested = true // al menos la captura siempre se intenta con datos reales
+            val isPassiveOnly = canCapture != true && canInject != true
+
+            logD(TAG, "Capabilities - Inject: $canInject, Capture: $canCapture, " +
+                "Passive: $isPassiveOnly")
+
+            return CapabilitiesInfo(canInject, canCapture, isPassiveOnly, tested)
         } catch (e: Exception) {
             logE(TAG, "Exception during capability test: ${e.message}", e)
-            return CapabilitiesInfo(
-                canInject = null,
-                canCapture = null,
-                isPassiveOnly = true,
-                tested = false
-            )
+            return CapabilitiesInfo(null, null, isPassiveOnly = true, tested = false)
         } finally {
             // CRITICAL: Always restore original mode, even if tests fail
             logD(TAG, "Restoring con_mode to original value: $originalMode")
@@ -525,99 +615,6 @@ class DeviceCompatibilityChecker {
             // Note: WiFi service is restarted ONCE at the end of checkCompatibility(),
             // after ALL tests complete, to avoid redundant restarts.
         }
-    }
-
-    private fun testPacketInjection(interfaceName: String): Boolean {
-        if (interfaceName.isEmpty()) return false
-        
-        val rawSocketTest = execRoot(
-            "ip link set $interfaceName up 2>&1 && " +
-            "timeout 1 iw dev $interfaceName set monitor control 2>&1"
-        ).output
-
-        if (rawSocketTest.contains("Operation not supported") ||
-            rawSocketTest.contains("no such device") ||
-            rawSocketTest.contains("Invalid argument")) {
-            logD(TAG, "Raw injection not supported: $rawSocketTest")
-            return false
-        }
-
-        execRoot("iw dev $interfaceName set type managed 2>&1")
-
-        val txTest = execRoot(
-            "timeout 2 iw dev $interfaceName set txpower fixed 3000 2>&1"
-        ).output
-
-        if (!txTest.contains("command failed") && !txTest.contains("not supported")) {
-            logD(TAG, "Tx power injection supported")
-            return true
-        }
-
-        val monitorInject = execRoot(
-            "iw dev $interfaceName set monitor 4addr 2>&1"
-        ).output
-
-        if (!monitorInject.contains("command failed") && 
-            !monitorInject.contains("not supported")) {
-            logD(TAG, "4addr monitor injection supported")
-            return true
-        }
-
-        logD(TAG, "Packet injection not confirmed")
-        return false
-    }
-
-    private fun testCaptureCapability(interfaceName: String): Boolean {
-        if (interfaceName.isEmpty()) return false
-        
-        val monitorTypeTest = execRoot(
-            "iw dev $interfaceName set type monitor 2>&1"
-        ).output
-
-        if (monitorTypeTest.contains("command failed") || 
-            monitorTypeTest.contains("Operation not supported") ||
-            monitorTypeTest.contains("no such device")) {
-            logD(TAG, "Monitor type not supported: $monitorTypeTest")
-            return false
-        }
-
-        val activeTest = execRoot(
-            "iw dev $interfaceName set type monitor 2>&1 && " +
-            "iw dev $interfaceName info 2>&1 | grep -c 'type monitor'"
-        ).output
-
-        val setBackResult = execRoot(
-            "iw dev $interfaceName set type managed 2>&1"
-        ).output
-
-        val monitorCount = activeTest.trim().toIntOrNull() ?: 0
-        if (monitorCount > 0) {
-            logD(TAG, "Capture test passed - can set monitor type")
-            return true
-        }
-
-        val freqTest = execRoot(
-            "timeout 2 iw dev $interfaceName scan trigger 2>&1"
-        ).output
-        
-        if (freqTest.contains("MLME") || freqTest.contains("command failed")) {
-            logD(TAG, "Scan trigger failed: $freqTest")
-            return false
-        }
-
-        val channelTest = execRoot(
-            "timeout 2 iw dev $interfaceName scan 2>&1 | head -20"
-        ).output
-
-        if (channelTest.isNotEmpty() && 
-            !channelTest.contains("command failed") &&
-            !channelTest.contains("no such device")) {
-            logD(TAG, "Active scan works - capture capability confirmed")
-            return true
-        }
-
-        logD(TAG, "Capture test: passive scan only")
-        return false
     }
 
     private fun getSystemProperty(prop: String): String {
