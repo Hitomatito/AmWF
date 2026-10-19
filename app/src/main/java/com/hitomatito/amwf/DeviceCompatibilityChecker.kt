@@ -690,7 +690,14 @@ class DeviceCompatibilityChecker {
         }
         
         val cpuInfoHardware = execRoot("cat /proc/cpuinfo 2>/dev/null").output
-        logD(TAG, "Full cpuinfo:\n$cpuInfoHardware")
+        // Solo lineas unicas: /proc/cpuinfo repite el mismo bloque por cada
+        // nucleo y llenaba el buffer del informe con ruido, ocultando el resto.
+        val compactCpuInfo = cpuInfoHardware.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString("\n")
+        logD(TAG, "cpuinfo (unique lines):\n$compactCpuInfo")
         
         val hardwareLine = cpuInfoHardware.lines().find { it.contains("Hardware", ignoreCase = true) || it.contains("hardware", ignoreCase = true) }
         val cpuInfoModel = cpuInfoHardware.lines().find { it.contains("model name", ignoreCase = true) }

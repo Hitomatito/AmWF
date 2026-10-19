@@ -15,6 +15,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
+import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -29,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvSubtitle: TextView
     private lateinit var btnToggle: MaterialButton
     private lateinit var btnLanguage: MaterialButton
+    private lateinit var btnExportDiagnostics: MaterialButton
     private lateinit var statusIndicator: View
     private lateinit var ivCompatIcon: ImageView
     private lateinit var layoutDeviceInfo: LinearLayout
@@ -41,6 +44,7 @@ class MainActivity : AppCompatActivity() {
 
     private val monitorManager by lazy { MonitorModeManager() }
     private val compatibilityChecker by lazy { DeviceCompatibilityChecker() }
+    private val diagnosticsCollector by lazy { DiagnosticsCollector() }
     
     private var currentMode = MonitorMode.UNKNOWN
     private var isDeviceCompatible = false
@@ -98,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         tvSubtitle = findViewById(R.id.tvSubtitle)
         btnToggle = findViewById(R.id.btnToggle)
         btnLanguage = findViewById(R.id.btnLanguage)
+        btnExportDiagnostics = findViewById(R.id.btnExportDiagnostics)
         statusIndicator = findViewById(R.id.statusIndicator)
         ivCompatIcon = findViewById(R.id.ivCompatIcon)
         layoutDeviceInfo = findViewById(R.id.layoutDeviceInfo)
@@ -128,6 +133,10 @@ class MainActivity : AppCompatActivity() {
             recreate()
         }
 
+        btnExportDiagnostics.setOnClickListener {
+            exportDiagnostics()
+        }
+
         btnToggle.setOnClickListener {
             when (currentMode) {
                 MonitorMode.MANAGED -> enableMonitorMode()
@@ -141,6 +150,42 @@ class MainActivity : AppCompatActivity() {
     private fun updateLanguageButton() {
         val currentLang = LocaleHelper.getCurrentLocale(this)
         btnLanguage.text = currentLang.uppercase()
+    }
+
+    // Genera el informe de diagnostico (datos pasivos + buffer de logs) y lo
+    // comparte para que el usuario pueda adjuntarlo en un reporte.
+    private fun exportDiagnostics() {
+        btnExportDiagnostics.isEnabled = false
+        val previousText = btnExportDiagnostics.text
+        btnExportDiagnostics.text = getString(R.string.diagnostics_exporting)
+
+        lifecycleScope.launch {
+            try {
+                val uri = withContext(Dispatchers.IO) {
+                    val report = diagnosticsCollector.collect(this@MainActivity, cachedCompatResult)
+                    DiagnosticsExporter.write(
+                        this@MainActivity,
+                        report,
+                        diagnosticsCollector.ssidSecrets
+                    )
+                }
+                DiagnosticsExporter.share(
+                    this@MainActivity,
+                    uri,
+                    getString(R.string.diagnostics_subject)
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to export diagnostics: ${e.message}", e)
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.diagnostics_error),
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                btnExportDiagnostics.isEnabled = true
+                btnExportDiagnostics.text = previousText
+            }
+        }
     }
 
     private fun checkDeviceCompatibility() {

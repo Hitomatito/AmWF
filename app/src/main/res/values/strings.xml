@@ -59,4 +59,8 @@
     <string name="error_internal_enable">Error interno al activar el modo monitor</string>
     <string name="error_internal_disable">Error interno al desactivar el modo monitor</string>
     <string name="error_internal_status">Error interno al consultar el estado</string>
+    <string name="share_diagnostics">Compartir diagnóstico</string>
+    <string name="diagnostics_subject">Diagnóstico de AmWF</string>
+    <string name="diagnostics_exporting">Generando diagnóstico…</string>
+    <string name="diagnostics_error">No se pudo generar el diagnóstico</string>
 </resources>

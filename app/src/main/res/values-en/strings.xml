@@ -60,4 +60,8 @@
     <string name="error_internal_enable">Internal error while enabling monitor mode</string>
     <string name="error_internal_disable">Internal error while disabling monitor mode</string>
     <string name="error_internal_status">Internal error while querying the status</string>
+    <string name="share_diagnostics">Share diagnostics</string>
+    <string name="diagnostics_subject">AmWF diagnostics</string>
+    <string name="diagnostics_exporting">Generating diagnostics…</string>
+    <string name="diagnostics_error">Could not generate diagnostics</string>
 </resources>
