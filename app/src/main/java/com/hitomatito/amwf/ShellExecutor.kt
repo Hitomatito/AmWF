@@ -2,6 +2,7 @@ package com.hitomatito.amwf
 
 import android.os.Build
 import android.util.Log
+import com.hitomatito.amwf.diagnostics.AppLogger
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
@@ -100,8 +101,21 @@ object ShellExecutor {
     }
 
     // --- Structured Logging ---
+    // Ademas de Logcat, cada linea se guarda en el buffer en memoria de AppLogger
+    // para que el informe de diagnostico pueda incluirla aunque logcat no sea accesible.
 
-    fun logD(tag: String, message: String) = Log.d(tag, message)
-    fun logW(tag: String, message: String) = Log.w(tag, message)
-    fun logE(tag: String, message: String, error: Throwable? = null) = Log.e(tag, message, error)
+    fun logD(tag: String, message: String) {
+        Log.d(tag, message)
+        AppLogger.append('D', tag, message)
+    }
+
+    fun logW(tag: String, message: String) {
+        Log.w(tag, message)
+        AppLogger.append('W', tag, message)
+    }
+
+    fun logE(tag: String, message: String, error: Throwable? = null) {
+        Log.e(tag, message, error)
+        AppLogger.append('E', tag, message)
+    }
 }

@@ -156,6 +156,13 @@ The app has two sections:
 - **ACTIVAR MONITOR** - Switches the WiFi interface to monitor mode
 - **VOLVER A NORMAL** - Returns to managed mode
 - **Language button (ES/EN)** - Toggles between Spanish and English
+- **Compartir diagnóstico / Share diagnostics** - Generates a report and opens the share sheet
+
+### Diagnostics / Bug Reports
+
+When something doesn't work, tap **Compartir diagnóstico**: AmWF gathers passive device and WiFi state (build properties, root/SELinux, chipset, `con_mode` path and value, `iw` info, driver modules, the last 80 wifi-related `dmesg` lines, available tools, the last compatibility result and an in-app log buffer) and lets you share it as a `.txt` file. It does **not** run the capability test, so WiFi is not interrupted.
+
+MAC addresses are redacted by default (only the OUI prefix is kept) and WiFi SSIDs are replaced with `<redacted>`. Attach this file when opening an issue -- it is the fastest way to diagnose problems on hardware the maintainers don't own.
 
 ### First Launch
 
@@ -169,7 +176,12 @@ app/src/main/java/com/hitomatito/amwf/
 ├── MonitorModeManager.kt        # Monitor mode enable/disable logic
 ├── DeviceCompatibilityChecker.kt # Chipset, root, driver detection
 ├── ShellExecutor.kt             # Root shell execution
-└── LocaleHelper.kt              # Language switching
+├── LocaleHelper.kt              # Language switching
+└── diagnostics/
+    ├── AppLogger.kt             # In-memory log ring buffer
+    ├── DiagnosticsCollector.kt  # Passive device/WiFi state gathering
+    ├── DiagnosticsExporter.kt   # Writes and shares the report
+    └── DiagnosticsFormat.kt     # MAC redaction / formatting
 ```
 
 ## Tech Stack
