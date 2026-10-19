@@ -8,17 +8,68 @@ import com.hitomatito.amwf.ShellExecutor.logW
 import java.io.File
 
 /**
+ * Modulos WiFi Qualcomm conocidos que exponen con_mode. El sufijo del driver
+ * out-of-tree ("qca_cld3_") varia, por eso ademas de nombres exactos se aceptan
+ * coincidencias por pista (ver [WIFI_MODULE_HINTS]).
+ */
+private val KNOWN_CON_MODE_MODULES = listOf(
+    "wlan",             // POCO X3, Snapdragon 860 (codename vayu)
+    "hdd",              // Xiaomi 11T Pro, Snapdragon 888 (lahaina)
+    "kiwi_v2",          // Snapdragon 8 Gen 2 (cape)
+    "kiwi",             // Snapdragon 6/7 series
+    "wcn",              // Qualcomm WCN6xxx
+    "qca_cld3_kiwi_v2"  // Galaxy Z Fold7, Snapdragon 8 Elite (sun)
+)
+
+/**
+ * Pistas para reconocer el modulo WiFi cuando el nombre no esta en la lista
+ * exacta. Cubre variantes del driver out-of-tree como "qca_cld3_kiwi_v2".
+ */
+private val WIFI_MODULE_HINTS = listOf("cld", "wlan", "hdd", "kiwi", "wcn", "qca")
+
+/**
+ * Elige la ruta de con_mode mas probable a partir de las rutas candidatas.
+ * Prioriza los nombres de modulo conocidos y, si ninguno coincide, cualquier
+ * modulo que parezca WiFi. Funcion pura para poder unit-testearla.
+ */
+internal fun selectConModePath(candidates: List<String>): String? {
+    for (module in KNOWN_CON_MODE_MODULES) {
+        val path = "/sys/module/$module/parameters/con_mode"
+        if (path in candidates) return path
+    }
+    return candidates.firstOrNull { candidate ->
+        val module = candidate.removePrefix("/sys/module/").substringBefore('/')
+        WIFI_MODULE_HINTS.any { module.contains(it) }
+    }
+}
+
+/**
  * Encuentra la ruta real del archivo con_mode del driver WiFi Qualcomm (QCACLD).
- * El nombre del módulo varia segun el chip/dispositivo: "wlan" (POCO X3, Snapdragon 860),
- * "hdd" (Xiaomi 11T Pro / Snapdragon 888), "kiwi_v2" (Snapdragon 8 Gen 2), etc.
- * Sin esto el metodo con_mode falla en HW mas reciente.
+ * El nombre del modulo varia segun el chip/dispositivo: "wlan" (POCO X3, Snapdragon 860),
+ * "hdd" (Xiaomi 11T Pro / Snapdragon 888), "qca_cld3_kiwi_v2" (Galaxy Z Fold7,
+ * Snapdragon 8 Elite), etc. Sin esto el metodo con_mode falla en HW mas reciente.
+ *
+ * La deteccion se hace con root: en Android moderno SELinux impide al UID de la
+ * app leer /sys/module, por lo que un escaneo directo con File no encuentra la
+ * ruta aunque exista. `su` si puede leer sysfs.
  */
 fun resolveConModePath(): String? {
-    val knownModules = listOf("wlan", "hdd", "kiwi_v2", "kiwi", "wcn")
-    for (module in knownModules) {
+    // 1) Via rapida: modulos conocidos visibles para el UID de la app.
+    for (module in KNOWN_CON_MODE_MODULES) {
         val path = "/sys/module/$module/parameters/con_mode"
         if (File(path).exists()) return path
     }
+
+    // 2) Descubrimiento con root: su puede listar sysfs aunque la app no pueda.
+    val discovered = execRoot("ls -d /sys/module/*/parameters/con_mode 2>/dev/null")
+        .output
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.startsWith("/sys/module/") && it.endsWith("/parameters/con_mode") }
+        .toList()
+    selectConModePath(discovered)?.let { return it }
+
+    // 3) Ultimo recurso: escaneo directo (funciona con SELinux permisivo).
     File("/sys/module").listFiles().orEmpty().forEach { dir ->
         if (dir.isDirectory) {
             val path = File(dir, "parameters/con_mode")

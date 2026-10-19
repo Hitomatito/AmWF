@@ -68,13 +68,14 @@ Other Snapdragon chipsets may work if they expose `con_mode` through the Qualcom
 
 ### WiFi Drivers
 
-The app searches for `con_mode` across multiple Qualcomm driver modules:
+The app searches for `con_mode` across multiple Qualcomm driver modules. The search runs with root (`su`), because modern SELinux policies block the app UID from reading `/sys/module`; `su` runs in the `su` domain and can read sysfs. Out-of-tree driver variants such as `qca_cld3_*` are also matched:
 
 | Module Path | Typical Hardware |
 |-------------|------------------|
-| `/sys/module/wlan/parameters/con_mode` | Older Snapdragon (855, 865, 860) |
+| `/sys/module/wlan/parameters/con_mode` | Many Snapdragon (e.g. 855, 860, 732G) |
 | `/sys/module/hdd/parameters/con_mode` | Snapdragon 888, 8 Gen series |
 | `/sys/module/kiwi_v2/parameters/con_mode` | Snapdragon 8 Gen 2+ |
+| `/sys/module/qca_cld3_kiwi_v2/parameters/con_mode` | Snapdragon 8 Elite (e.g. Galaxy Z Fold7) |
 | `/sys/module/kiwi/parameters/con_mode` | Snapdragon 6/7 series |
 | `/sys/module/wcn/parameters/con_mode` | Qualcomm WCN6xxx |
 
