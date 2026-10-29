@@ -10,7 +10,7 @@ package com.hitomatito.amwf.wifi.pixiedust
 /**
  * Resultado de una auditoría Pixie Dust.
  *
- * Cada auditoría puede terminar en éxito (PIN y/o PSK recuperados) o en error
+ * Cada auditoría termina en éxito (PIN y/o PSK recuperados) o en error
  * (objetivo no vulnerable, timeout, interfaz no disponible, fallo de binarios, etc.).
  */
 sealed interface PixieDustResult {
@@ -27,18 +27,4 @@ sealed interface PixieDustResult {
         val reason: String,
         val rawOutput: String,
     ) : PixieDustResult
-
-    data object InProgress : PixieDustResult
-
-    data object Cancelled : PixieDustResult
-}
-
-/**
- * Estado de la interfaz WiFi durante la auditoría.
- */
-enum class PixieDustInterfaceState {
-    UNKNOWN,
-    AVAILABLE,
-    UNAVAILABLE,
-    IN_USE
 }

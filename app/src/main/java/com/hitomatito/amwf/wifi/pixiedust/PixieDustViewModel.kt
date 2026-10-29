@@ -12,8 +12,6 @@ import android.content.Context
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.util.Log
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import com.hitomatito.amwf.R
+import com.hitomatito.amwf.ShellExecutor
 
 /**
  * Estado de la pantalla de auditoría Pixie Dust.
@@ -86,6 +85,9 @@ sealed class PixieDustEvent {
  * Sigue las pautas de [android-viewmodel]: StateFlow con explicit backing field para el
  * estado persistente, SharedFlow para eventos transitorios, y toda la lógica de E/S se
  * ejecuta en [ioDispatcher] (inyectado) vía [viewModelScope].
+ *
+ * No ejecuta procesos de shell directamente: toda la ejecución root está encapsulada en
+ * [PixieDustRunner] y [ShellExecutor], evitando Feature Envy.
  */
 class PixieDustViewModel(
     application: Application,
@@ -141,8 +143,7 @@ class PixieDustViewModel(
         val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
         val result = mutableListOf<String>()
         for (iface in candidates) {
-            val cmd = "ip link show $iface 2>/dev/null"
-            val res = execSuRaw(cmd)
+            val res = ShellExecutor.execRoot("ip link show $iface 2>/dev/null")
             if (res.exitCode == 0 && res.output.isNotEmpty()) {
                 result.add(iface)
             }
@@ -251,10 +252,6 @@ class PixieDustViewModel(
                         addConsoleLine("[-] Auditoría falló: ${result.reason}")
                         emitEvent(PixieDustEvent.AttackFinished(false, result.reason))
                     }
-                    is PixieDustResult.InProgress -> {}
-                    is PixieDustResult.Cancelled -> {
-                        addConsoleLine("[!] Auditoría cancelada por el usuario")
-                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Attack failed", e)
@@ -269,7 +266,7 @@ class PixieDustViewModel(
     fun stopAttack() {
         attackJob?.cancel()
         scanJob?.cancel()
-        runner?.cancel(_uiState.value.errorMessage != null) { addConsoleLine(it) }
+        runner?.cancel(false) { addConsoleLine(it) }
         _uiState.update { it.copy(isAttacking = false, isScanning = false) }
         addConsoleLine("[!] Detenido por el usuario")
     }
@@ -293,40 +290,6 @@ class PixieDustViewModel(
     // ========================================================================
     // Utilidades privadas
     // ========================================================================
-
-    private suspend fun execSuRaw(command: String): SuResult = withContext(ioDispatcher) {
-        var process: java.lang.Process? = null
-        try {
-            process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val output = StringBuilder()
-            val error = StringBuilder()
-            val outThread = Thread {
-                BufferedReader(InputStreamReader(process!!.inputStream)).forEachLine { output.appendLine(it) }
-            }
-            val errThread = Thread {
-                BufferedReader(InputStreamReader(process!!.errorStream)).forEachLine { error.appendLine(it) }
-            }
-            outThread.isDaemon = true
-            errThread.isDaemon = true
-            outThread.start()
-            errThread.start()
-            val finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
-            outThread.join(1000)
-            errThread.join(1000)
-            if (!finished) process.destroyForcibly()
-            SuResult(if (finished) process.exitValue() else -1, output.toString().trim(), error.toString().trim())
-        } catch (e: Exception) {
-            SuResult(-1, "", e.message ?: "Unknown error")
-        } finally {
-            try { process?.destroyForcibly() } catch (_: Exception) {}
-        }
-    }
-
-    private data class SuResult(
-        val exitCode: Int,
-        val output: String,
-        val error: String = ""
-    )
 
     /** Emite un evento transitorio desde fuera de un coroutine (p. ej. desde la UI). */
     fun emitEvent(event: PixieDustEvent) = viewModelScope.launch { _uiEvent.emit(event) }

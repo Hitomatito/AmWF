@@ -123,8 +123,6 @@ class PixieDustActivity : AppCompatActivity() {
                             "✔ PIN WPS: $pin\nClave WPA: $psk"
                         }
                         is PixieDustResult.Failure -> "✖ Falló: ${result.reason}"
-                        is PixieDustResult.InProgress -> "⟳ Auditando…"
-                        is PixieDustResult.Cancelled -> "⚠ Cancelado"
                         null -> "—"
                     }
 
