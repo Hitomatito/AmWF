@@ -10,15 +10,16 @@ package com.hitomatito.amwf.wifi.pixiedust
 import android.content.Context
 import android.os.Build
 import java.io.File
-import java.io.InputStream
 
 /**
  * Gestión de los binarios nativos necesarios para Pixie Dust.
  *
- * Los binarios se empaquetan en [assets/wifi/] y se copian a [Context.filesDir]
- * en tiempo de instalación/primera ejecución, con permisos de ejecución (755).
+ * Los binarios se buscan en dos ubicaciones, en orden de preferencia:
+ *   1. [Context.filesDir] — copiados desde [assets/wifi/] por [ensure()]
+ *   2. Rutas del sistema (/system/bin, /vendor/bin, /system/xbin, /odm/bin)
  *
- * Los binarios requeridos (debes compilarlos para Android ARM — ver BINARIES_SETUP.md):
+ * Los binarios requeridos (debes empaquetarlos en assets/wifi/ o tenerlos
+ * instalados en el sistema — ver BINARIES_SETUP.md):
  *   - wpa_supplicant  (arm64-v8a y armeabi-v7a)
  *   - wpa_cli         (arm64-v8a y armeabi-v7a)
  *   - pixiewps        (arm64-v8a y armeabi-v7a)
@@ -48,10 +49,20 @@ object NativeBinaries {
 
     const val WPA_SUPPLICANT_CONF = "wpa_supplicant.conf"
 
-    // Directorio de control de wpa_supplicant. API >= 28 usa /data/vendor/wifi/wpa/,
-    // versiones anteriores /data/misc/wifi/.
-    const val CTRL_DIR_VENDOR = "/data/vendor/wifi/wpa/amwf"
-    const val CTRL_DIR_LEGACY = "/data/misc/wifi/amwf"
+    // Rutas del sistema donde buscar binarios si no están empaquetados en assets.
+    private val SYSTEM_SEARCH_PATHS = listOf(
+        "/system/bin",
+        "/vendor/bin",
+        "/system/xbin",
+        "/odm/bin"
+    )
+
+    // Binarios críticos mínimos para ejecutar Pixie Dust.
+    private val criticalBinaries = listOf(
+        WPA_SUPPLICANT, WPA_SUPPLICANT_32,
+        WPA_CLI, WPA_CLI_32,
+        PIXIEWPS, PIXIEWPS_32
+    )
 
     private val allAssets = listOf(
         WPA_SUPPLICANT, WPA_SUPPLICANT_32,
@@ -81,6 +92,55 @@ object NativeBinaries {
 
     fun ctrlDir(): String =
         if (Build.VERSION.SDK_INT >= 28) CTRL_DIR_VENDOR else CTRL_DIR_LEGACY
+
+    private const val CTRL_DIR_VENDOR = "/data/vendor/wifi/wpa/amwf"
+    private const val CTRL_DIR_LEGACY = "/data/misc/wifi/amwf"
+
+    /**
+     * Resuelve la ruta completa de un binario, buscando primero en [filesDir]
+     * (donde [ensure()] copia los assets) y luego en las rutas del sistema.
+     *
+     * @return la ruta absoluta al binario si se encuentra, o la ruta esperada
+     *         en [filesDir] si no se encuentra (para reportar error claramente).
+     */
+    fun resolveBinaryPath(context: Context, assetName: String): String {
+        // 1) Primero intentar en filesDir (donde se copian los assets).
+        val filesDirFile = File(binaryDir(context), assetName)
+        if (filesDirFile.exists()) {
+            return filesDirFile.absolutePath
+        }
+
+        // 2) Luego buscar en rutas del sistema.
+        for (systemPath in SYSTEM_SEARCH_PATHS) {
+            val systemFile = File("$systemPath/$assetName")
+            if (systemFile.exists()) {
+                return systemFile.absolutePath
+            }
+        }
+
+        // 3) No se encontró: retornar la ruta esperada en filesDir para el mensaje de error.
+        return filesDirFile.absolutePath
+    }
+
+    /**
+     * Verifica que los binarios críticos (wpa_supplicant, wpa_cli, pixiewps)
+     * estén disponibles ya sea en [filesDir] o en rutas del sistema.
+     */
+    fun areCriticalBinariesAvailable(context: Context): Boolean =
+        criticalBinaries.all { assetName ->
+            resolveBinaryPath(context, assetName).let { path ->
+                File(path).exists()
+            }
+        }
+
+    /**
+     * Retorna la lista de binarios críticos que no se encontraron
+     * ni en [filesDir] ni en las rutas del sistema.
+     */
+    fun missingCriticalBinaries(context: Context): List<String> =
+        criticalBinaries.filter { assetName ->
+            !File(resolveBinaryPath(context, assetName)).exists()
+        }
 
     /**
      * Copia todos los binarios de assets a filesDir y les asigna permisos de ejecución.
@@ -114,13 +174,9 @@ object NativeBinaries {
                 val linkFile = File(dir, link)
                 if (!linkFile.exists()) {
                     try {
-                        //noinspection ResultOfReturnValueIgnored
                         linkFile.createNewFile()
                     } catch (_: Exception) {}
                 }
-                // Nota: los symlinks reales requieren root; si no se pueden crear,
-                // los binarios _32 deben estar vinculados estáticamente o las libs
-                // copiadas con ambos nombres.
             }
         }
         return ok

