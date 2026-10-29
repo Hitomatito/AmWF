@@ -24,8 +24,12 @@
     <string name="label_root">Acceso Root</string>
     <string name="label_sysfs">Archivo con_mode</string>
     <string name="label_capabilities">Capacidades</string>
+    <string name="label_pixie_dust_binaries">Binarios Pixie Dust</string>
     
     <string name="capability_not_verified">Captura no verificada</string>
+    <string name="pixie_binaries_available">Binarios disponibles</string>
+    <string name="pixie_binaries_missing">Faltan binarios</string>
+    <string name="pixie_binaries_partial">Parciales</string>
     <string name="capability_full">Monitor completo</string>
     <string name="capability_injection">Inyeccion de paquetes</string>
     <string name="capability_capture">Captura completa</string>
@@ -78,7 +82,6 @@
     <string name="pixie_timeout">Tiempo de espera agotado</string>
     <string name="pixie_console">Consola</string>
     <string name="pixie_root_required">Se requiere acceso root</string>
-    <string name="pixie_binaries_missing">Faltan binarios nativos. Consulta BINARIES_SETUP.md</string>
     <string name="pixie_interface">Interfaz</string>
     <string name="pixie_bssid">BSSID</string>
     <string name="pixie_ssid">SSID</string>

@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowRoot: View
     private lateinit var rowSysfs: View
     private lateinit var rowCapabilities: View
+    private lateinit var rowPixieDustBinaries: View
 
     private val monitorManager by lazy { MonitorModeManager() }
     private val compatibilityChecker by lazy { DeviceCompatibilityChecker() }
@@ -123,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         rowRoot = findViewById(R.id.rowRoot)
         rowSysfs = findViewById(R.id.rowSysfs)
         rowCapabilities = findViewById(R.id.rowCapabilities)
+        rowPixieDustBinaries = findViewById(R.id.rowPixieDustBinaries)
     }
 
     private fun setupWindowInsets() {
@@ -310,6 +312,33 @@ class MainActivity : AppCompatActivity() {
         }
         val capPassed = capInfo.canInject == true && capInfo.canCapture == true
         updateInfoRow(rowCapabilities, getString(R.string.label_capabilities), capText, capPassed)
+
+        // Mostrar estado de los binarios Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
+        val pdb = result.deviceInfo.pixieDustBinaries
+        val pdbText = when {
+            pdb.allAvailable -> getString(R.string.pixie_binaries_available)
+            pdb.wpaSupplicantAvailable || pdb.wpaCliAvailable || pdb.pixiewpsAvailable -> getString(R.string.pixie_binaries_partial)
+            else -> getString(R.string.pixie_binaries_missing)
+        }
+        val pdbPassed = pdb.allAvailable
+        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdbPassed)
+
+        // Habilitar/deshabilitar el botón Pixie Dust según disponibilidad de binarios
+        btnPixieDust.isEnabled = pdb.allAvailable
+        btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
+        if (!pdb.allAvailable) {
+            btnPixieDust.setOnClickListener {
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.pixie_binaries_missing),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        } else {
+            btnPixieDust.setOnClickListener {
+                startActivity(Intent(this, PixieDustActivity::class.java))
+            }
+        }
     }
 
     private fun updateInfoRow(row: View, label: String, value: String, passed: Boolean) {

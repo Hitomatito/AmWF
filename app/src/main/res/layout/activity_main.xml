@@ -129,6 +129,7 @@
                     <include layout="@layout/item_row_root" android:id="@+id/rowRoot"/>
                     <include layout="@layout/item_row_sysfs" android:id="@+id/rowSysfs"/>
                     <include layout="@layout/item_row_capabilities" android:id="@+id/rowCapabilities"/>
+                    <include layout="@layout/item_row_pixie_dust_binaries" android:id="@+id/rowPixieDustBinaries"/>
 
                 </LinearLayout>
 
