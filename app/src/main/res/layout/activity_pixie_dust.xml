@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <!-- Encabezado -->
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_dust"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textStyle="bold"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <TextView
+            android:id="@+id/tvSubtitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_dust_subtitle"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:alpha="0.7"
+            app:layout_constraintTop_toBottomOf="@id/tvTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <View
+            android:id="@+id/divider1"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:background="@color/card_stroke"
+            app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Interfaz -->
+        <TextView
+            android:id="@+id/tvInterfaces"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_interface"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            app:layout_constraintTop_toBottomOf="@id/divider1"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <Spinner
+            android:id="@+id/spInterface"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/tvInterfaces"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <Button
+            android:id="@+id/btnScan"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_scan_interfaces"
+            app:layout_constraintTop_toBottomOf="@id/spInterface"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Redes detectadas -->
+        <TextView
+            android:id="@+id/tvNetworksLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_select_network"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            app:layout_constraintTop_toBottomOf="@id/btnScan"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="24dp" />
+
+        <TextView
+            android:id="@+id/tvNetworks"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@color/card_background"
+            android:padding="8dp"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:fontFamily="monospace"
+            app:layout_constraintTop_toBottomOf="@id/tvNetworksLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Datos del objetivo -->
+        <EditText
+            android:id="@+id/edBssid"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/pixie_bssid"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            app:layout_constraintTop_toBottomOf="@id/tvNetworks"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp" />
+
+        <EditText
+            android:id="@+id/edSsid"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/pixie_ssid"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            app:layout_constraintTop_toBottomOf="@id/edBssid"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <CheckBox
+            android:id="@+id/cbDisableWifi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Desactivar WiFi del sistema antes de atacar"
+            android:checked="true"
+            app:layout_constraintTop_toBottomOf="@id/edSsid"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <Button
+            android:id="@+id/btnAttack"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_start_attack"
+            app:layout_constraintTop_toBottomOf="@id/cbDisableWifi"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_stop_attack"
+            android:enabled="false"
+            app:layout_constraintTop_toBottomOf="@id/btnAttack"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <ProgressBar
+            android:id="@+id/pbAttack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/btnStop"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Resultado -->
+        <TextView
+            android:id="@+id/tvSelectedNetwork"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textStyle="bold"
+            app:layout_constraintTop_toBottomOf="@id/pbAttack"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="16dp" />
+
+        <TextView
+            android:id="@+id/tvResult"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@color/card_background"
+            android:padding="8dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:fontFamily="monospace"
+            app:layout_constraintTop_toBottomOf="@id/tvSelectedNetwork"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <Button
+            android:id="@+id/btnCopyResult"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Copiar resultado"
+            app:layout_constraintTop_toBottomOf="@id/tvResult"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <TextView
+            android:id="@+id/tvError"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/colorError"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/btnCopyResult"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Consola -->
+        <TextView
+            android:id="@+id/tvConsoleLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/pixie_console"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            app:layout_constraintTop_toBottomOf="@id/tvError"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginTop="24dp" />
+
+        <TextView
+            android:id="@+id/tvConsole"
+            android:layout_width="0dp"
+            android:layout_height="200dp"
+            android:background="@color/card_background"
+            android:padding="8dp"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:fontFamily="monospace"
+            app:layout_constraintTop_toBottomOf="@id/tvConsoleLabel"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

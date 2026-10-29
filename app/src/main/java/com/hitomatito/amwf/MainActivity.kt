@@ -8,6 +8,7 @@
 package com.hitomatito.amwf
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -22,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
 import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggle: MaterialButton
     private lateinit var btnLanguage: MaterialButton
     private lateinit var btnExportDiagnostics: MaterialButton
+    private lateinit var btnPixieDust: MaterialButton
     private lateinit var statusIndicator: View
     private lateinit var ivCompatIcon: ImageView
     private lateinit var layoutDeviceInfo: LinearLayout
@@ -110,6 +113,7 @@ class MainActivity : AppCompatActivity() {
         btnToggle = findViewById(R.id.btnToggle)
         btnLanguage = findViewById(R.id.btnLanguage)
         btnExportDiagnostics = findViewById(R.id.btnExportDiagnostics)
+        btnPixieDust = findViewById(R.id.btnPixieDust)
         statusIndicator = findViewById(R.id.statusIndicator)
         ivCompatIcon = findViewById(R.id.ivCompatIcon)
         layoutDeviceInfo = findViewById(R.id.layoutDeviceInfo)
@@ -151,6 +155,10 @@ class MainActivity : AppCompatActivity() {
                 MonitorMode.UNKNOWN -> checkCurrentMode()
                 else -> {}
             }
+        }
+
+        btnPixieDust.setOnClickListener {
+            startActivity(Intent(this, PixieDustActivity::class.java))
         }
     }
 

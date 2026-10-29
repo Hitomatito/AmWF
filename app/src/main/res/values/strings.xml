@@ -60,6 +60,31 @@
     <string name="error_internal_disable">Error interno al desactivar el modo monitor</string>
     <string name="error_internal_status">Error interno al consultar el estado</string>
     <string name="share_diagnostics">Compartir diagnóstico</string>
+
+    <!-- Pixie Dust -->
+    <string name="pixie_dust">Auditoría WPS Pixie Dust</string>
+    <string name="pixie_dust_subtitle">Audita la resistencia WPS de tus propios routers</string>
+    <string name="pixie_scan_interfaces">Buscando interfaces WiFi…</string>
+    <string name="pixie_no_interfaces">No se encontró interfaz WiFi disponible</string>
+    <string name="pixie_select_network">Selecciona una red con WPS activado</string>
+    <string name="pixie_wps_required">Esta red no tiene WPS activado o no es auditable</string>
+    <string name="pixie_start_attack">INICIAR AUDITORÍA PIXIE DUST</string>
+    <string name="pixie_stop_attack">DETENER</string>
+    <string name="pixie_running">Auditando…</string>
+    <string name="pixie_pin_found">PIN WPS encontrado</string>
+    <string name="pixie_psk_found">Contraseña WPA obtenida</string>
+    <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust</string>
+    <string name="pixie_error">Error durante la auditoría</string>
+    <string name="pixie_timeout">Tiempo de espera agotado</string>
+    <string name="pixie_console">Consola</string>
+    <string name="pixie_root_required">Se requiere acceso root</string>
+    <string name="pixie_binaries_missing">Faltan binarios nativos. Consulta BINARIES_SETUP.md</string>
+    <string name="pixie_interface">Interfaz</string>
+    <string name="pixie_bssid">BSSID</string>
+    <string name="pixie_ssid">SSID</string>
+    <string name="pixie_pin">PIN WPS</string>
+    <string name="pixie_key">Clave WPA</string>
+    <string name="pixie_launch">Abrir Auditoría Pixie Dust</string>
     <string name="diagnostics_subject">Diagnóstico de AmWF</string>
     <string name="diagnostics_exporting">Generando diagnóstico…</string>
     <string name="diagnostics_error">No se pudo generar el diagnóstico</string>

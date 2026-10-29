@@ -27,6 +27,13 @@ android {
         versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // Pixie Dust necesita binarios nativos ARM (wpa_supplicant, wpa_cli, pixiewps).
+            // Soportamos arm64-v8a (dispositivos modernos) y armeabi-v7a (dispositivos antiguos).
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+        }
+
     }
 
     signingConfigs {
@@ -56,7 +63,7 @@ android {
     buildFeatures {
         viewBinding = true
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -69,6 +76,11 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.cardview:cardview:1.0.0")
+    // Kotlin coroutines (structured concurrency para red de procesos root y streaming de salida)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    // ViewModel + Lifecycle (UI state, ciclo de vida, repeatOnLifecycle)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
