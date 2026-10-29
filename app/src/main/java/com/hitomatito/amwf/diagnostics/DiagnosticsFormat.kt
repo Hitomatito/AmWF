@@ -1,3 +1,10 @@
+/*
+ * AmWF - Android WiFi Monitor Mode Controller
+ * Copyright (C) 2026 Hitomatito
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 package com.hitomatito.amwf.diagnostics
 
 /**

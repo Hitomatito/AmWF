@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android" alt="Platform">
   <img src="https://img.shields.io/badge/Language-Kotlin-purple?style=flat-square&logo=kotlin" alt="Language">
   <img src="https://img.shields.io/badge/UI-Material%20Design%203-red?style=flat-square&logo=materialdesign" alt="UI">
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue?style=flat-square" alt="License">
 </div>
 
 > Control the WiFi monitor mode on rooted Android devices with Qualcomm Snapdragon chipsets.
@@ -203,7 +203,11 @@ app/src/main/java/com/hitomatito/amwf/
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
+AmWF is licensed under the **GNU General Public License v3.0 (or later)**.
+See [LICENSE](LICENSE) for the full text.
+
+Third-party components bundled or planned for the app are governed by their own
+licenses -- see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Contributing
 
@@ -221,5 +225,5 @@ MIT License. See [LICENSE](LICENSE).
 ---
 
 <div align="center">
-  <p>AmWF &copy; 2026</p>
+  <p>AmWF &copy; 2026 Hitomatito &mdash; released under the <a href="LICENSE">GPL-3.0</a> license</p>
 </div>
