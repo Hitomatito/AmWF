@@ -32,13 +32,12 @@ class PixieSessionRenderer(
     private val binding: ActivityPixieDustBinding
 ) {
 
-    /** Estado final de la sesión, derivado una sola vez del [PixieDustUiState]. */
-    private sealed interface SessionOutcome {
-        data object Running : SessionOutcome
-        data object Success : SessionOutcome
-        data object Cancelled : SessionOutcome
-        data object Failure : SessionOutcome
-    }
+    /**
+     * Estado final de la sesión, derivado una sola vez del [PixieDustUiState].
+     * Un enum basta: no lleva datos y así cada `when` es exhaustivo sin ramas
+     * muertas.
+     */
+    private enum class SessionOutcome { RUNNING, SUCCESS, CANCELLED, FAILURE }
 
     /** Visibilidad del registro; la controla el botón de plegar/desplegar. */
     var consoleExpanded = true
@@ -57,7 +56,7 @@ class PixieSessionRenderer(
      * progreso continuo.
      */
     fun update(state: PixieDustUiState) {
-        val startedAt = state.attackStartedAt
+        val startedAt = state.session.startedAt
         if (startedAt == null) {
             binding.cardSession.visibility = View.GONE
             stopChronometer()
@@ -66,10 +65,10 @@ class PixieSessionRenderer(
         binding.cardSession.visibility = View.VISIBLE
 
         val outcome = when {
-            state.isAttacking -> SessionOutcome.Running
-            state.attackCancelled -> SessionOutcome.Cancelled
-            state.result is PixieDustResult.Success -> SessionOutcome.Success
-            else -> SessionOutcome.Failure
+            state.session.isAttacking -> SessionOutcome.RUNNING
+            state.session.cancelled -> SessionOutcome.CANCELLED
+            state.session.result is PixieDustResult.Success -> SessionOutcome.SUCCESS
+            else -> SessionOutcome.FAILURE
         }
 
         bindTarget(state)
@@ -77,8 +76,8 @@ class PixieSessionRenderer(
         bindProgress(state, outcome)
         bindChronometer(
             startedAt,
-            state.attackFinishedAt,
-            outcome == SessionOutcome.Running
+            state.session.finishedAt,
+            outcome == SessionOutcome.RUNNING
         )
         bindPhases(state, outcome)
         bindResult(state, outcome)
@@ -86,7 +85,7 @@ class PixieSessionRenderer(
     }
 
     private fun bindTarget(state: PixieDustUiState) {
-        val target = state.selectedNetwork
+        val target = state.scan.selectedNetwork
         binding.tvSessionTarget.text = target?.displayName
             ?: context.getString(R.string.pixie_target_none_title)
         binding.tvSessionBssid.text = if (target != null) {
@@ -105,22 +104,22 @@ class PixieSessionRenderer(
         val backgroundRes: Int
         val foregroundRes: Int
         when (outcome) {
-            SessionOutcome.Running -> {
+            SessionOutcome.RUNNING -> {
                 labelRes = R.string.pixie_session_status_running
                 backgroundRes = R.color.md_theme_primaryContainer
                 foregroundRes = R.color.md_theme_onPrimaryContainer
             }
-            SessionOutcome.Success -> {
+            SessionOutcome.SUCCESS -> {
                 labelRes = R.string.pixie_session_status_success
                 backgroundRes = R.color.monitor_active
                 foregroundRes = R.color.md_theme_onPrimary
             }
-            SessionOutcome.Cancelled -> {
+            SessionOutcome.CANCELLED -> {
                 labelRes = R.string.pixie_session_status_cancelled
                 backgroundRes = R.color.md_theme_surfaceVariant
                 foregroundRes = R.color.md_theme_onSurfaceVariant
             }
-            SessionOutcome.Failure -> {
+            SessionOutcome.FAILURE -> {
                 labelRes = R.string.pixie_session_status_failure
                 backgroundRes = R.color.error_container
                 foregroundRes = R.color.on_error_container
@@ -133,42 +132,66 @@ class PixieSessionRenderer(
         binding.tvSessionStatus.setTextColor(ContextCompat.getColor(context, foregroundRes))
     }
 
-    private fun bindProgress(state: PixieDustUiState, outcome: SessionOutcome) {
-        val stage = state.attackStage
-        val progress = when (outcome) {
-            SessionOutcome.Success, SessionOutcome.Failure -> 100
-            SessionOutcome.Cancelled -> stage?.progress ?: 0
-            SessionOutcome.Running -> stage?.progress ?: PixieDustStage.PREPARING.progress
-        }
-        binding.progressSession.setProgressCompat(progress, true)
-        binding.progressSession.setIndicatorColor(
-            ContextCompat.getColor(
-                context,
-                when (outcome) {
-                    SessionOutcome.Success -> R.color.monitor_active
-                    SessionOutcome.Failure -> R.color.managed
-                    SessionOutcome.Cancelled -> R.color.warning
-                    SessionOutcome.Running -> R.color.md_theme_primary
-                }
-            )
-        )
-        binding.tvSessionPercent.text = context.getString(R.string.pixie_percent, progress)
+    /** Progreso, color y textos del indicador para un resultado. */
+    private data class ProgressVisual(
+        val progress: Int,
+        val colorRes: Int,
+        val titleRes: Int,
+        val detailRes: Int
+    )
 
-        val (titleRes, detailRes) = when (outcome) {
-            SessionOutcome.Success ->
-                R.string.pixie_stage_complete to R.string.pixie_stage_complete_detail
-            SessionOutcome.Cancelled ->
-                R.string.pixie_stage_cancelled to R.string.pixie_stage_cancelled_detail
-            SessionOutcome.Failure ->
-                R.string.pixie_stage_failed to R.string.pixie_stage_failed_detail
-            SessionOutcome.Running -> stageResources(stage)
+    /**
+     * Un único `when` por resultado. Antes había tres switches con la misma
+     * estructura (progreso, color y par título/detalle), fáciles de
+     * desincronizar al añadir un estado.
+     */
+    private fun progressVisual(
+        state: PixieDustUiState,
+        outcome: SessionOutcome
+    ): ProgressVisual = when (outcome) {
+        SessionOutcome.SUCCESS -> ProgressVisual(
+            progress = 100,
+            colorRes = R.color.monitor_active,
+            titleRes = R.string.pixie_stage_complete,
+            detailRes = R.string.pixie_stage_complete_detail
+        )
+        SessionOutcome.FAILURE -> ProgressVisual(
+            progress = 100,
+            colorRes = R.color.managed,
+            titleRes = R.string.pixie_stage_failed,
+            detailRes = R.string.pixie_stage_failed_detail
+        )
+        SessionOutcome.CANCELLED -> ProgressVisual(
+            progress = state.session.stage?.progress ?: 0,
+            colorRes = R.color.warning,
+            titleRes = R.string.pixie_stage_cancelled,
+            detailRes = R.string.pixie_stage_cancelled_detail
+        )
+        SessionOutcome.RUNNING -> {
+            val stage = state.session.stage
+            val (titleRes, detailRes) = stageResources(stage)
+            ProgressVisual(
+                progress = stage?.progress ?: PixieDustStage.PREPARING.progress,
+                colorRes = R.color.md_theme_primary,
+                titleRes = titleRes,
+                detailRes = detailRes
+            )
         }
-        binding.tvSessionStage.setText(titleRes)
-        binding.tvSessionStageDetail.setText(detailRes)
+    }
+
+    private fun bindProgress(state: PixieDustUiState, outcome: SessionOutcome) {
+        val visual = progressVisual(state, outcome)
+        binding.progressSession.setProgressCompat(visual.progress, true)
+        binding.progressSession.setIndicatorColor(
+            ContextCompat.getColor(context, visual.colorRes)
+        )
+        binding.tvSessionPercent.text = context.getString(R.string.pixie_percent, visual.progress)
+        binding.tvSessionStage.setText(visual.titleRes)
+        binding.tvSessionStageDetail.setText(visual.detailRes)
         binding.progressSession.contentDescription = context.getString(
             R.string.pixie_session_progress_description,
-            progress,
-            context.getString(titleRes)
+            visual.progress,
+            context.getString(visual.titleRes)
         )
     }
 
@@ -221,10 +244,10 @@ class PixieSessionRenderer(
     }
 
     private fun bindPhases(state: PixieDustUiState, outcome: SessionOutcome) {
-        val current = if (outcome == SessionOutcome.Success) {
+        val current = if (outcome == SessionOutcome.SUCCESS) {
             PixieDustPhase.CREDENTIALS
         } else {
-            state.attackStage?.phase ?: PixieDustPhase.PREPARE
+            state.session.stage?.phase ?: PixieDustPhase.PREPARE
         }
         val bars = listOf(
             binding.phase1Bar,
@@ -246,20 +269,21 @@ class PixieSessionRenderer(
         val stoppedColor = ContextCompat.getColor(context, R.color.warning)
         val pendingColor = ContextCompat.getColor(context, R.color.md_theme_outlineVariant)
         val reached = current.ordinal
+        val currentColor = when (outcome) {
+            SessionOutcome.RUNNING -> activeColor
+            SessionOutcome.SUCCESS -> doneColor
+            SessionOutcome.CANCELLED -> stoppedColor
+            SessionOutcome.FAILURE -> failedColor
+        }
 
         bars.forEachIndexed { index, bar ->
-            when {
-                index < reached -> bar.setBackgroundColor(doneColor)
-                index == reached && outcome == SessionOutcome.Failure ->
-                    bar.setBackgroundColor(failedColor)
-                index == reached && outcome == SessionOutcome.Cancelled ->
-                    bar.setBackgroundColor(stoppedColor)
-                index == reached && outcome == SessionOutcome.Running ->
-                    bar.setBackgroundColor(activeColor)
-                index == reached && outcome == SessionOutcome.Success ->
-                    bar.setBackgroundColor(doneColor)
-                else -> bar.setBackgroundColor(pendingColor)
-            }
+            bar.setBackgroundColor(
+                when {
+                    index < reached -> doneColor
+                    index == reached -> currentColor
+                    else -> pendingColor
+                }
+            )
         }
         labels.forEachIndexed { index, label ->
             label.setTextColor(
@@ -272,57 +296,58 @@ class PixieSessionRenderer(
         }
     }
 
+    /** Colores e icono del banner de resultado. */
+    private data class ResultVisual(
+        val bannerTint: Int,
+        val bannerText: Int,
+        val subtitleText: Int,
+        val iconRes: Int,
+        val iconTint: Int
+    )
+
+    private fun resultVisual(outcome: SessionOutcome): ResultVisual = when (outcome) {
+        SessionOutcome.SUCCESS -> ResultVisual(
+            bannerTint = R.color.md_theme_primaryContainer,
+            bannerText = R.color.md_theme_onPrimaryContainer,
+            subtitleText = R.color.md_theme_onPrimaryContainer,
+            iconRes = R.drawable.ic_check_circle,
+            iconTint = R.color.monitor_active
+        )
+        SessionOutcome.CANCELLED -> ResultVisual(
+            bannerTint = R.color.md_theme_surfaceVariant,
+            bannerText = R.color.md_theme_onSurface,
+            subtitleText = R.color.md_theme_onSurface,
+            iconRes = R.drawable.ic_close_circle,
+            iconTint = R.color.warning
+        )
+        SessionOutcome.RUNNING, SessionOutcome.FAILURE -> ResultVisual(
+            bannerTint = R.color.error_container,
+            bannerText = R.color.on_error_container,
+            subtitleText = R.color.on_error_container,
+            iconRes = R.drawable.ic_warning,
+            iconTint = R.color.managed
+        )
+    }
+
     private fun bindResult(state: PixieDustUiState, outcome: SessionOutcome) {
-        val result = state.result
-        val show = outcome != SessionOutcome.Running
+        val result = state.session.result
+        val show = outcome != SessionOutcome.RUNNING
         binding.layoutSessionResult.visibility = if (show) View.VISIBLE else View.GONE
         if (!show) return
 
-        val bannerTint: Int
-        val bannerText: Int
-        val iconRes: Int
-        val iconTint: Int
-        when (outcome) {
-            SessionOutcome.Success -> {
-                bannerTint = R.color.md_theme_primaryContainer
-                bannerText = R.color.md_theme_onPrimaryContainer
-                iconRes = R.drawable.ic_check_circle
-                iconTint = R.color.monitor_active
-            }
-            SessionOutcome.Cancelled -> {
-                bannerTint = R.color.md_theme_surfaceVariant
-                bannerText = R.color.md_theme_onSurface
-                iconRes = R.drawable.ic_close_circle
-                iconTint = R.color.warning
-            }
-            SessionOutcome.Running, SessionOutcome.Failure -> {
-                bannerTint = R.color.error_container
-                bannerText = R.color.on_error_container
-                iconRes = R.drawable.ic_warning
-                iconTint = R.color.managed
-            }
-        }
+        val visual = resultVisual(outcome)
         binding.layoutResultBanner.backgroundTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(context, bannerTint)
+            ContextCompat.getColor(context, visual.bannerTint)
         )
-        binding.ivResultIcon.setImageResource(iconRes)
-        binding.ivResultIcon.setColorFilter(ContextCompat.getColor(context, iconTint))
-        binding.tvResultStatus.setTextColor(ContextCompat.getColor(context, bannerText))
-        binding.tvResultSubtitle.setTextColor(
-            ContextCompat.getColor(
-                context,
-                if (outcome == SessionOutcome.Success) {
-                    R.color.md_theme_onPrimaryContainer
-                } else {
-                    bannerText
-                }
-            )
-        )
+        binding.ivResultIcon.setImageResource(visual.iconRes)
+        binding.ivResultIcon.setColorFilter(ContextCompat.getColor(context, visual.iconTint))
+        binding.tvResultStatus.setTextColor(ContextCompat.getColor(context, visual.bannerText))
+        binding.tvResultSubtitle.setTextColor(ContextCompat.getColor(context, visual.subtitleText))
 
         when (outcome) {
-            SessionOutcome.Success -> bindSuccessResult(result as PixieDustResult.Success)
-            SessionOutcome.Cancelled -> bindStoppedResult()
-            SessionOutcome.Running, SessionOutcome.Failure ->
+            SessionOutcome.SUCCESS -> bindSuccessResult(result as PixieDustResult.Success)
+            SessionOutcome.CANCELLED -> bindStoppedResult()
+            SessionOutcome.RUNNING, SessionOutcome.FAILURE ->
                 bindFailureResult(result as? PixieDustResult.Failure)
         }
     }

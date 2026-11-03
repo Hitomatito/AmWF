@@ -38,3 +38,32 @@ enum class PixieDustStage(val progress: Int, val phase: PixieDustPhase) {
     RESTORING(96, PixieDustPhase.CREDENTIALS),
     COMPLETED(100, PixieDustPhase.CREDENTIALS)
 }
+
+/**
+ * Decide si una etapa recibida del runner debe reflejarse en la UI.
+ *
+ * `cleanup()` emite [PixieDustStage.RESTORING] también al cancelar. Durante una
+ * cancelación no debe pisar la fase real que se estaba ejecutando cuando el
+ * usuario pulsó «Detener», o el tracker marcaría CREDENTIALS aunque
+ * estuviéramos capturando el M3.
+ */
+fun shouldApplyStageUpdate(
+    isAttacking: Boolean,
+    cleanupInProgress: Boolean,
+    newStage: PixieDustStage
+): Boolean = isAttacking &&
+    !(cleanupInProgress && newStage == PixieDustStage.RESTORING)
+
+/**
+ * Etapa que debe quedar en la tarjeta al detener la auditoría.
+ *
+ * [stageBeforeStop] es la fase real capturada antes de que `cleanup()` emitiera
+ * RESTORING; se prefiere para que el tracker no marque CREDENTIALS cuando la
+ * cancelación llegó durante CAPTURE o ANALYZE. Si la sesión ya estaba en
+ * RESTORING (el ataque había terminado y solo faltaba limpiar), se mantiene esa
+ * etapa; sin ninguna referencia se cae a RESTORING.
+ */
+fun stageForCancelledSession(
+    stageBeforeStop: PixieDustStage?,
+    currentStage: PixieDustStage?
+): PixieDustStage = stageBeforeStop ?: currentStage ?: PixieDustStage.RESTORING

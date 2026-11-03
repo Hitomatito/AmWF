@@ -14,7 +14,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -31,30 +30,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import com.hitomatito.amwf.R
+import com.hitomatito.amwf.ShellExecutor
 import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 /**
  * Estado de la pantalla de auditoría Pixie Dust.
+ *
+ * Se agrupa por área (escaneo y sesión) para que cada actualización copie solo
+ * el bloque que cambia, en lugar de un `copy` con diez campos sueltos.
  */
 data class PixieDustUiState(
-    val isScanning: Boolean = false,
-    val isAttacking: Boolean = false,
-    val networks: List<PixieDustNetwork> = emptyList(),
-    val selectedNetwork: PixieDustNetwork? = null,
-    val searchQuery: String = "",
-    val hasScanned: Boolean = false,
-    val result: PixieDustResult? = null,
+    val scan: ScanState = ScanState(),
+    val session: SessionState = SessionState(),
     val consoleLines: List<String> = emptyList(),
     val errorMessage: String? = null,
     // Aviso persistente de binarios nativos. Se mantiene aunque un escaneo o
     // una selección sobrescriban el error transitorio de errorMessage.
     val nativeError: String? = null,
-    val attackStage: PixieDustStage? = null,
-    val attackStartedAt: Long? = null,
-    val attackFinishedAt: Long? = null,
-    val attackCancelled: Boolean = false,
     val selectedInterface: String = "wlan0",
     val interfacesAvailable: Boolean = false
 ) {
@@ -67,6 +61,25 @@ data class PixieDustUiState(
     }
 }
 
+/** Resultados del escaneo y selección de red de la hoja inferior. */
+data class ScanState(
+    val isScanning: Boolean = false,
+    val networks: List<PixieDustNetwork> = emptyList(),
+    val selectedNetwork: PixieDustNetwork? = null,
+    val searchQuery: String = "",
+    val hasScanned: Boolean = false
+)
+
+/** Sesión de auditoría en curso o la última ejecutada. */
+data class SessionState(
+    val isAttacking: Boolean = false,
+    val stage: PixieDustStage? = null,
+    val startedAt: Long? = null,
+    val finishedAt: Long? = null,
+    val cancelled: Boolean = false,
+    val result: PixieDustResult? = null
+)
+
 /**
  * Red detectada con información WPS para auditoría.
  */
@@ -77,10 +90,13 @@ data class PixieDustNetwork(
     val level: Int,
     val wpsCapable: Boolean,
     val wpsLocked: Boolean,
-    val capabilities: String
+    val capabilities: String,
+    // Etiqueta localizada para SSID vacío. Se inyecta desde el ViewModel para
+    // que este modelo siga siendo independiente de Android/recursos.
+    val hiddenSsidLabel: String = ""
 ) {
     val displayName: String
-        get() = if (ssid.isNotEmpty()) ssid else "<hidden>"
+        get() = ssid.ifEmpty { hiddenSsidLabel }
 
     fun isAuditable(): Boolean = wpsCapable && !wpsLocked
 }
@@ -89,7 +105,6 @@ data class PixieDustNetwork(
  * Eventos de una sola vez (navegación, diálogos, toasts).
  */
 sealed class PixieDustEvent {
-    data class ShowMessage(val message: String) : PixieDustEvent()
     data class CopyToClipboard(val text: String) : PixieDustEvent()
 }
 
@@ -138,7 +153,11 @@ class PixieDustViewModel @JvmOverloads constructor(
      * true mientras se están matando procesos/restaurando el WiFi tras un
      * ataque detenido. Bloquea nuevos ataques hasta que la limpieza termine:
      * dos runners concurrentes se matarían los procesos entre sí.
+     *
+     * Se escribe desde el hilo principal y se lee en `onStage`, que llega desde
+     * el dispatcher de E/S del runner: necesita visibilidad entre hilos.
      */
+    @Volatile
     private var cleanupInProgress = false
 
     // ========================================================================
@@ -158,7 +177,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 )
                 addConsoleLine("Interfaces disponibles: ${ifaces.joinToString(", ")}")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load interfaces", e)
+                ShellExecutor.logE(TAG, "Failed to load interfaces", e)
                 _uiState.update { it.copy(errorMessage = e.message) }
             }
         }
@@ -221,24 +240,21 @@ class PixieDustViewModel @JvmOverloads constructor(
     // ========================================================================
 
     fun scanNetworks() {
-        if (_uiState.value.isScanning || _uiState.value.isAttacking || cleanupInProgress) return
+        if (_uiState.value.scan.isScanning ||
+            _uiState.value.session.isAttacking ||
+            cleanupInProgress
+        ) {
+            return
+        }
 
         // Se marca el estado antes de lanzar la corrutina para que un doble
         // toque no arranque dos escaneos simultáneos.
         _uiState.update {
             it.copy(
-                isScanning = true,
-                networks = emptyList(),
-                selectedNetwork = null,
-                searchQuery = "",
-                hasScanned = false,
-                result = null,
+                scan = ScanState(isScanning = true),
+                session = SessionState(),
                 errorMessage = null,
-                consoleLines = emptyList(),
-                attackStage = null,
-                attackStartedAt = null,
-                attackFinishedAt = null,
-                attackCancelled = false
+                consoleLines = emptyList()
             )
         }
         scanJob = viewModelScope.launch {
@@ -254,17 +270,22 @@ class PixieDustViewModel @JvmOverloads constructor(
                         .thenByDescending { it.level }
                 )
                 _uiState.update {
-                    it.copy(isScanning = false, networks = sorted, hasScanned = true)
+                    it.copy(
+                        scan = it.scan.copy(
+                            isScanning = false,
+                            networks = sorted,
+                            hasScanned = true
+                        )
+                    )
                 }
                 addConsoleLine("Escaneo completado: ${sorted.size} red(es) encontrada(s).")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Scan failed", e)
+                ShellExecutor.logE(TAG, "Scan failed", e)
                 _uiState.update {
                     it.copy(
-                        isScanning = false,
-                        hasScanned = true,
+                        scan = it.scan.copy(isScanning = false, hasScanned = true),
                         errorMessage = appContext.getString(
                             R.string.pixie_scan_failed_detail,
                             e.message ?: appContext.getString(R.string.pixie_scan_failed)
@@ -277,8 +298,8 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     /** Actualiza el filtro de búsqueda de la lista de redes. */
     fun setSearchQuery(query: String) {
-        if (_uiState.value.searchQuery == query) return
-        _uiState.update { it.copy(searchQuery = query) }
+        if (_uiState.value.scan.searchQuery == query) return
+        _uiState.update { it.copy(scan = it.scan.copy(searchQuery = query)) }
     }
 
     // WifiScanPermissions valida ubicación precisa en todas las versiones y
@@ -332,27 +353,30 @@ class PixieDustViewModel @JvmOverloads constructor(
             level = level,
             wpsCapable = wpsCapable,
             wpsLocked = wpsLocked,
-            capabilities = caps
+            capabilities = caps,
+            hiddenSsidLabel = appContext.getString(R.string.pixie_hidden_network)
         )
     }
 
     fun selectNetwork(network: PixieDustNetwork) {
         _uiState.update {
             it.copy(
-                selectedNetwork = network,
+                scan = it.scan.copy(selectedNetwork = network),
                 errorMessage = null,
-                result = null,
-                attackStage = null,
-                attackStartedAt = null,
-                attackFinishedAt = null,
-                attackCancelled = false
+                session = it.session.copy(
+                    stage = null,
+                    startedAt = null,
+                    finishedAt = null,
+                    cancelled = false,
+                    result = null
+                )
             )
         }
         addConsoleLine("Red seleccionada: ${network.displayName} (${network.bssid})")
     }
 
     fun startAttack(disableWifi: Boolean) {
-        val network = _uiState.value.selectedNetwork
+        val network = _uiState.value.scan.selectedNetwork
         if (network == null) {
             _uiState.update { it.copy(errorMessage = appContext.getString(R.string.pixie_select_network)) }
             return
@@ -361,7 +385,12 @@ class PixieDustViewModel @JvmOverloads constructor(
             _uiState.update { it.copy(errorMessage = appContext.getString(R.string.pixie_wps_required)) }
             return
         }
-        if (_uiState.value.isAttacking || _uiState.value.isScanning || cleanupInProgress) return
+        if (_uiState.value.session.isAttacking ||
+            _uiState.value.scan.isScanning ||
+            cleanupInProgress
+        ) {
+            return
+        }
 
         // La consola muestra los hitos del ataque; las líneas crudas del
         // supplicant se filtran para no inundar la UI (siguen en logcat).
@@ -376,8 +405,20 @@ class PixieDustViewModel @JvmOverloads constructor(
             },
             onStage = { newStage ->
                 if (newStage != PixieDustStage.RESTORING) lastActiveStage = newStage
-                // La etapa también puede llegar desde cleanup() al cancelar.
-                _uiState.update { if (it.isAttacking) it.copy(attackStage = newStage) else it }
+                // cleanup() emite RESTORING también al cancelar: no debe pisar
+                // la fase real que se estaba ejecutando (ver el helper).
+                _uiState.update {
+                    if (shouldApplyStageUpdate(
+                            it.session.isAttacking,
+                            cleanupInProgress,
+                            newStage
+                        )
+                    ) {
+                        it.copy(session = it.session.copy(stage = newStage))
+                    } else {
+                        it
+                    }
+                }
             }
         )
         runner = activeRunner
@@ -386,14 +427,16 @@ class PixieDustViewModel @JvmOverloads constructor(
         // debe crear dos runners que se maten los procesos entre sí.
         _uiState.update {
             it.copy(
-                isAttacking = true,
-                result = null,
+                session = it.session.copy(
+                    isAttacking = true,
+                    stage = PixieDustStage.PREPARING,
+                    startedAt = System.currentTimeMillis(),
+                    finishedAt = null,
+                    cancelled = false,
+                    result = null
+                ),
                 errorMessage = null,
-                consoleLines = emptyList(),
-                attackStage = PixieDustStage.PREPARING,
-                attackStartedAt = System.currentTimeMillis(),
-                attackFinishedAt = null,
-                attackCancelled = false
+                consoleLines = emptyList()
             )
         }
 
@@ -412,18 +455,21 @@ class PixieDustViewModel @JvmOverloads constructor(
 
                 val finishedAt = System.currentTimeMillis()
                 _uiState.update {
+                    // Solo un éxito completa todas las fases. En un fallo se
+                    // conserva la etapa real para que el tracker no pinte la
+                    // fase de credenciales como la que falló.
+                    val stage = if (result is PixieDustResult.Success) {
+                        PixieDustStage.COMPLETED
+                    } else {
+                        lastActiveStage
+                    }
                     it.copy(
-                        isAttacking = false,
-                        result = result,
-                        // Solo un éxito completa todas las fases. En un fallo se
-                        // conserva la etapa real para que el tracker no pinte la
-                        // fase de credenciales como la que falló.
-                        attackStage = if (result is PixieDustResult.Success) {
-                            PixieDustStage.COMPLETED
-                        } else {
-                            lastActiveStage
-                        },
-                        attackFinishedAt = finishedAt
+                        session = it.session.copy(
+                            isAttacking = false,
+                            stage = stage,
+                            finishedAt = finishedAt,
+                            result = result
+                        )
                     )
                 }
                 when (result) {
@@ -438,21 +484,23 @@ class PixieDustViewModel @JvmOverloads constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Attack failed", e)
+                ShellExecutor.logE(TAG, "Attack failed", e)
                 addConsoleLine("[-] Error: ${e.message}")
                 _uiState.update {
                     it.copy(
-                        isAttacking = false,
-                        result = PixieDustResult.Failure(
-                            bssid = network.bssid,
-                            reason = appContext.getString(
-                                R.string.pixie_error_detail,
-                                e.message ?: ""
-                            ),
-                            rawOutput = ""
-                        ),
-                        attackStage = lastActiveStage,
-                        attackFinishedAt = System.currentTimeMillis()
+                        session = it.session.copy(
+                            isAttacking = false,
+                            stage = lastActiveStage,
+                            finishedAt = System.currentTimeMillis(),
+                            result = PixieDustResult.Failure(
+                                bssid = network.bssid,
+                                reason = appContext.getString(
+                                    R.string.pixie_error_detail,
+                                    e.message ?: ""
+                                ),
+                                rawOutput = ""
+                            )
+                        )
                     )
                 }
             } finally {
@@ -463,8 +511,8 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     fun stopAttack() {
         if (cleanupInProgress) return
-        val wasAttacking = _uiState.value.isAttacking
-        val wasScanning = _uiState.value.isScanning
+        val wasAttacking = _uiState.value.session.isAttacking
+        val wasScanning = _uiState.value.scan.isScanning
         val jobToCancel = attackJob
         val runnerToCancel = runner
         attackJob = null
@@ -477,6 +525,9 @@ class PixieDustViewModel @JvmOverloads constructor(
             // lanzar otro ataque mientras el anterior aún mata procesos.
             // `runner` se conserva hasta el final para que onCleared() también
             // pueda cancelarlo si la pantalla se cierra durante la limpieza.
+            // Guardamos la fase real antes de que cleanup() emita RESTORING.
+            val stageBeforeStop = _uiState.value.session.stage
+                ?.takeIf { it != PixieDustStage.RESTORING }
             cleanupInProgress = true
             addConsoleLine("[!] Deteniendo auditoría y limpiando procesos...")
             jobToCancel.cancel()
@@ -490,14 +541,25 @@ class PixieDustViewModel @JvmOverloads constructor(
                     _uiState.update {
                         if (wasAttacking) {
                             it.copy(
-                                isAttacking = false,
-                                isScanning = false,
-                                attackStage = it.attackStage ?: PixieDustStage.RESTORING,
-                                attackFinishedAt = System.currentTimeMillis(),
-                                attackCancelled = true
+                                scan = it.scan.copy(isScanning = false),
+                                session = it.session.copy(
+                                    isAttacking = false,
+                                    // Conservar CAPTURE/ANALYZE/... si el
+                                    // usuario detuvo ahí (ver
+                                    // stageForCancelledSession).
+                                    stage = stageForCancelledSession(
+                                        stageBeforeStop,
+                                        it.session.stage
+                                    ),
+                                    finishedAt = System.currentTimeMillis(),
+                                    cancelled = true
+                                )
                             )
                         } else {
-                            it.copy(isAttacking = false, isScanning = false)
+                            it.copy(
+                                session = it.session.copy(isAttacking = false),
+                                scan = it.scan.copy(isScanning = false)
+                            )
                         }
                     }
                 }
@@ -505,7 +567,12 @@ class PixieDustViewModel @JvmOverloads constructor(
             }
         } else {
             runner = null
-            _uiState.update { it.copy(isAttacking = false, isScanning = false) }
+            _uiState.update {
+                it.copy(
+                    session = it.session.copy(isAttacking = false),
+                    scan = it.scan.copy(isScanning = false)
+                )
+            }
             if (wasScanning) addConsoleLine("[!] Detenido por el usuario")
         }
     }
@@ -549,12 +616,14 @@ class PixieDustViewModel @JvmOverloads constructor(
     fun clearResult() {
         _uiState.update {
             it.copy(
-                result = null,
-                errorMessage = null,
-                attackStage = null,
-                attackStartedAt = null,
-                attackFinishedAt = null,
-                attackCancelled = false
+                session = it.session.copy(
+                    stage = null,
+                    startedAt = null,
+                    finishedAt = null,
+                    cancelled = false,
+                    result = null
+                ),
+                errorMessage = null
             )
         }
     }

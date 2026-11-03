@@ -39,9 +39,11 @@ import kotlinx.coroutines.launch
 /**
  * Pantalla de auditoría WPS Pixie Dust.
  *
- * Flujo en tres pasos visibles: escanear redes, buscar/elegir una red con WPS y
- * ejecutar la auditoría. La acción principal solo se habilita cuando hay un
- * objetivo auditable seleccionado.
+ * Flujo: escanear redes, elegir una red con WPS en el selector y ejecutar la
+ * auditoría en el mismo toque. No hay un botón «ejecutar» aparte: tocar una red
+ * auditable la marca como objetivo y arranca el ataque con las opciones
+ * visibles en ese momento. La barra inferior solo aparece mientras hay una
+ * auditoría o un escaneo en curso, para poder detenerlo.
  *
  * Requiere acceso root, permiso de escaneo WiFi (ACCESS_FINE_LOCATION en todas
  * las versiones y NEARBY_WIFI_DEVICES desde Android 13) y los binarios nativos
@@ -160,7 +162,10 @@ class PixieDustActivity : AppCompatActivity() {
             if (network.isAuditable()) {
                 viewModel.selectNetwork(network)
                 closeNetworkPicker()
-                // Elegir la red es la acción: no hace falta un botón extra.
+                // Tocar la red es la acción completa: la selecciona y arranca
+                // la auditoría con la configuración actual (incluido el switch
+                // de WiFi). No hay botón «ejecutar» aparte; el ataque root y el
+                // posible corte de WiFi son intencionales al elegir la red.
                 sessionRenderer.consoleExpanded = true
                 viewModel.startAttack(binding.swDisableWifi.isChecked)
             } else {
@@ -197,7 +202,7 @@ class PixieDustActivity : AppCompatActivity() {
         sheet.chipGroupFilters.check(activeFilter.chipId)
 
         sheet.chipGroupFilters.setOnCheckedStateChangeListener { _, checkedIds ->
-            val newFilter = NetworkFilter.fromChipId(checkedIds.firstOrNull())
+            val newFilter = networkFilterForChip(checkedIds.firstOrNull())
             if (newFilter != activeFilter) {
                 activeFilter = newFilter
                 render(viewModel.uiState.value)
@@ -249,9 +254,6 @@ class PixieDustActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiEvent.collect { event ->
                     when (event) {
-                        is PixieDustEvent.ShowMessage -> Toast.makeText(
-                            this@PixieDustActivity, event.message, Toast.LENGTH_LONG
-                        ).show()
                         is PixieDustEvent.CopyToClipboard -> {
                             val clipboard =
                                 getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -279,7 +281,7 @@ class PixieDustActivity : AppCompatActivity() {
             // Si ya hay resultados, el botón solo abre el selector; volver a
             // escanear queda como acción explícita dentro de la hoja.
             val current = viewModel.uiState.value
-            if (current.hasScanned && !current.isScanning) {
+            if (current.scan.hasScanned && !current.scan.isScanning) {
                 openNetworkPicker()
             } else {
                 ensureScanPermissions()
@@ -323,21 +325,21 @@ class PixieDustActivity : AppCompatActivity() {
         }
 
         binding.btnCopyPin.setOnClickListener {
-            val pin = (viewModel.uiState.value.result as? PixieDustResult.Success)?.wpsPin
+            val pin = (viewModel.uiState.value.session.result as? PixieDustResult.Success)?.wpsPin
             if (!pin.isNullOrBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(pin))
             }
         }
 
         binding.btnCopyPsk.setOnClickListener {
-            val psk = (viewModel.uiState.value.result as? PixieDustResult.Success)?.wpaPsk
+            val psk = (viewModel.uiState.value.session.result as? PixieDustResult.Success)?.wpaPsk
             if (!psk.isNullOrBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(psk))
             }
         }
 
         binding.btnCopyResult.setOnClickListener {
-            val result = viewModel.uiState.value.result
+            val result = viewModel.uiState.value.session.result
             val text = resultText(result)
             if (text.isNotBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(text))
@@ -345,7 +347,7 @@ class PixieDustActivity : AppCompatActivity() {
         }
 
         binding.btnChangeNetworkResult.setOnClickListener {
-            if (viewModel.uiState.value.networks.isEmpty()) {
+            if (viewModel.uiState.value.scan.networks.isEmpty()) {
                 ensureScanPermissions()
             } else {
                 openNetworkPicker()
@@ -450,11 +452,11 @@ class PixieDustActivity : AppCompatActivity() {
     }
 
     private fun render(state: PixieDustUiState) {
-        binding.btnScan.isEnabled = !state.isScanning && !state.isAttacking
+        binding.btnScan.isEnabled = !state.scan.isScanning && !state.session.isAttacking
         binding.btnScan.text = when {
-            state.isScanning -> getString(R.string.pixie_scanning)
-            state.selectedNetwork != null -> getString(R.string.pixie_change_network_button)
-            state.hasScanned -> getString(R.string.pixie_choose_network_button)
+            state.scan.isScanning -> getString(R.string.pixie_scanning)
+            state.scan.selectedNetwork != null -> getString(R.string.pixie_change_network_button)
+            state.scan.hasScanned -> getString(R.string.pixie_choose_network_button)
             else -> getString(R.string.pixie_scan_networks)
         }
 
@@ -464,40 +466,38 @@ class PixieDustActivity : AppCompatActivity() {
             getString(R.string.pixie_no_interfaces)
         }
 
-        val auditableCount = state.networks.count { it.isAuditable() }
-        val bandsBySsid = state.networks
-            .groupBy { it.displayName }
-            .mapValues { (_, networks) -> networks.map { it.band() }.toSet() }
-        val dualBandCount = bandsBySsid.count { it.value.size > 1 }
-        if (state.isScanning && activeFilter != NetworkFilter.ALL) {
+        val auditableCount = state.scan.networks.count { it.isAuditable() }
+        val bands = bandsBySsid(state.scan.networks)
+        val dualBandCount = countDualBandNetworks(bands)
+        if (state.scan.isScanning && activeFilter != NetworkFilter.ALL) {
             activeFilter = NetworkFilter.ALL
             sheetBinding?.chipGroupFilters?.check(R.id.chipAll)
         }
         binding.tvScanStatus.text = when {
-            state.isScanning -> getString(R.string.pixie_scan_status_scanning)
-            state.hasScanned -> getString(
+            state.scan.isScanning -> getString(R.string.pixie_scan_status_scanning)
+            state.scan.hasScanned -> getString(
                 R.string.pixie_scan_status_done,
-                state.networks.size,
+                state.scan.networks.size,
                 auditableCount
             )
             else -> getString(R.string.pixie_scan_status_idle)
         }
 
-        updateNetworkPicker(state, bandsBySsid, dualBandCount)
+        updateNetworkPicker(state, bands, dualBandCount)
 
         // Durante la auditoría la pantalla se centra en la sesión: se ocultan
         // las tarjetas de escaneo/opciones para que el registro no compita ni
         // desplace la vista.
-        val running = state.isAttacking
+        val running = state.session.isAttacking
         binding.cardScan.visibility = if (running) View.GONE else View.VISIBLE
         binding.cardOptions.visibility = if (running) View.GONE else View.VISIBLE
         binding.tvLegalFooter.visibility = if (running) View.GONE else View.VISIBLE
 
-        val busy = state.isAttacking || state.isScanning
+        val busy = state.session.isAttacking || state.scan.isScanning
         // La barra solo existe para poder detener lo que está en marcha.
         binding.bottomBar.visibility = if (busy) View.VISIBLE else View.GONE
         binding.btnStop.isEnabled = busy
-        binding.btnStop.text = if (state.isScanning && !state.isAttacking) {
+        binding.btnStop.text = if (state.scan.isScanning && !state.session.isAttacking) {
             getString(R.string.pixie_stop_scan)
         } else {
             getString(R.string.pixie_stop_attack)
@@ -517,12 +517,12 @@ class PixieDustActivity : AppCompatActivity() {
         // Un único salto deliberado al empezar: la sesión queda arriba. Durante
         // la auditoría no se vuelve a mover la página. Al cerrar la sesión
         // (elegir otra red) se vuelve al inicio para mostrar "Redes cercanas".
-        val sessionEnded = state.attackStartedAt == null && hadSession
-        hadSession = state.attackStartedAt != null
-        if ((state.isAttacking && !wasAttacking) || sessionEnded) {
+        val sessionEnded = state.session.startedAt == null && hadSession
+        hadSession = state.session.startedAt != null
+        if ((state.session.isAttacking && !wasAttacking) || sessionEnded) {
             binding.scrollContent.post { binding.scrollContent.scrollTo(0, 0) }
         }
-        wasAttacking = state.isAttacking
+        wasAttacking = state.session.isAttacking
     }
 
     /**
@@ -531,23 +531,23 @@ class PixieDustActivity : AppCompatActivity() {
      */
     private fun updateNetworkPicker(
         state: PixieDustUiState,
-        bandsBySsid: Map<String, Set<WifiBand>>,
+        bands: Map<String, Set<WifiBand>>,
         dualBandCount: Int
     ) {
         val sheet = sheetBinding ?: return
 
         // Mantener el campo sincronizado cuando el ViewModel limpia la búsqueda.
-        val query = state.searchQuery
+        val query = state.scan.searchQuery
         if (sheet.etSearch.text?.toString() != query) {
             sheet.etSearch.setText(query)
             sheet.etSearch.setSelection(query.length)
         }
 
-        val filtered = filterNetworks(state.networks, query, bandsBySsid)
-        val searchVisible = state.networks.isNotEmpty() && !state.isScanning
-        sheet.btnRescanSheet.isEnabled = !state.isScanning && !state.isAttacking
+        val filtered = filterNetworks(state.scan.networks, activeFilter, query, bands)
+        val searchVisible = state.scan.networks.isNotEmpty() && !state.scan.isScanning
+        sheet.btnRescanSheet.isEnabled = !state.scan.isScanning && !state.session.isAttacking
         sheet.btnRescanSheet.setText(
-            if (state.isScanning) R.string.pixie_scanning else R.string.pixie_sheet_rescan_short
+            if (state.scan.isScanning) R.string.pixie_scanning else R.string.pixie_sheet_rescan_short
         )
         sheet.tilSearch.visibility = if (searchVisible) View.VISIBLE else View.GONE
         sheet.filterScroll.visibility = if (searchVisible) View.VISIBLE else View.GONE
@@ -557,23 +557,23 @@ class PixieDustActivity : AppCompatActivity() {
                 activeFilter != NetworkFilter.ALL -> getString(
                     R.string.pixie_networks_filtered,
                     filtered.size,
-                    state.networks.size
+                    state.scan.networks.size
                 )
                 dualBandCount > 0 -> getString(
                     R.string.pixie_networks_summary,
-                    state.networks.size,
+                    state.scan.networks.size,
                     dualBandCount
                 )
-                else -> getString(R.string.pixie_networks_count, state.networks.size)
+                else -> getString(R.string.pixie_networks_count, state.scan.networks.size)
             }
         }
 
         networkAdapter.submitList(
             filtered.map {
-                val allBands = bandsBySsid[it.displayName].orEmpty()
+                val allBands = bands[it.displayName].orEmpty()
                 PixieNetworkAdapter.Item(
                     network = it,
-                    selected = it.bssid == state.selectedNetwork?.bssid,
+                    selected = it.bssid == state.scan.selectedNetwork?.bssid,
                     otherBands = allBands - it.band()
                 )
             }
@@ -590,26 +590,26 @@ class PixieDustActivity : AppCompatActivity() {
         val isEmpty = filtered.isEmpty()
         sheet.layoutNetworksEmpty.visibility = if (isEmpty) View.VISIBLE else View.GONE
         sheet.rvNetworks.visibility = if (isEmpty) View.GONE else View.VISIBLE
-        sheet.pbScanEmpty.visibility = if (state.isScanning) View.VISIBLE else View.GONE
-        sheet.ivEmptyIcon.visibility = if (state.isScanning) View.GONE else View.VISIBLE
+        sheet.pbScanEmpty.visibility = if (state.scan.isScanning) View.VISIBLE else View.GONE
+        sheet.ivEmptyIcon.visibility = if (state.scan.isScanning) View.GONE else View.VISIBLE
 
         // El botón solo tiene sentido cuando de verdad no hay redes: si el
         // vacío viene de un filtro o una búsqueda, repetir el escaneo no ayuda.
         sheet.btnScanEmpty.visibility =
-            if (!state.isScanning && state.networks.isEmpty()) View.VISIBLE else View.GONE
+            if (!state.scan.isScanning && state.scan.networks.isEmpty()) View.VISIBLE else View.GONE
 
         val titleRes: Int
         val messageRes: Int
         when {
-            state.isScanning -> {
+            state.scan.isScanning -> {
                 titleRes = R.string.pixie_empty_scanning_title
                 messageRes = R.string.pixie_empty_scanning_message
             }
-            state.networks.isEmpty() && !state.hasScanned -> {
+            state.scan.networks.isEmpty() && !state.scan.hasScanned -> {
                 titleRes = R.string.pixie_empty_idle_title
                 messageRes = R.string.pixie_empty_idle_message
             }
-            state.networks.isEmpty() -> {
+            state.scan.networks.isEmpty() -> {
                 titleRes = R.string.pixie_empty_none_title
                 messageRes = R.string.pixie_empty_none_message
             }
@@ -636,34 +636,6 @@ class PixieDustActivity : AppCompatActivity() {
         sheet.rvNetworks.post { sheet.rvNetworks.scrollToPosition(0) }
     }
 
-    private fun filterNetworks(
-        networks: List<PixieDustNetwork>,
-        query: String,
-        bandsBySsid: Map<String, Set<WifiBand>>
-    ): List<PixieDustNetwork> {
-        val byFilter = when (activeFilter) {
-            NetworkFilter.ALL -> networks
-            NetworkFilter.AUDITABLE -> networks.filter { it.isAuditable() }
-            NetworkFilter.BAND_24 -> networks.filter { it.band() == WifiBand.BAND_24_GHZ }
-            NetworkFilter.BAND_5 -> networks.filter { it.band() == WifiBand.BAND_5_GHZ }
-            NetworkFilter.DUAL_BAND -> networks.filter {
-                (bandsBySsid[it.displayName]?.size ?: 0) > 1
-            }
-        }
-
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) return byFilter
-
-        val lower = trimmed.lowercase()
-        val compactBssid = lower.replace(":", "").replace(" ", "")
-        return byFilter.filter { network ->
-            network.displayName.lowercase().contains(lower) ||
-                network.bssid.lowercase().contains(lower) ||
-                (compactBssid.length >= 3 &&
-                    network.bssid.replace(":", "").lowercase().contains(compactBssid))
-        }
-    }
-
     private fun resultText(result: PixieDustResult?): String = when (result) {
         is PixieDustResult.Success -> getString(
             R.string.pixie_result_success,
@@ -675,17 +647,23 @@ class PixieDustActivity : AppCompatActivity() {
         null -> ""
     }
 
-    private enum class NetworkFilter(val chipId: Int) {
-        ALL(R.id.chipAll),
-        AUDITABLE(R.id.chipAuditable),
-        BAND_24(R.id.chipBand24),
-        BAND_5(R.id.chipBand5),
-        DUAL_BAND(R.id.chipDualBand);
-
-        companion object {
-            fun fromChipId(chipId: Int?): NetworkFilter =
-                values().firstOrNull { it.chipId == chipId } ?: ALL
+    /** Chip de la hoja que corresponde a cada filtro. */
+    private val NetworkFilter.chipId: Int
+        get() = when (this) {
+            NetworkFilter.ALL -> R.id.chipAll
+            NetworkFilter.AUDITABLE -> R.id.chipAuditable
+            NetworkFilter.BAND_24 -> R.id.chipBand24
+            NetworkFilter.BAND_5 -> R.id.chipBand5
+            NetworkFilter.DUAL_BAND -> R.id.chipDualBand
         }
+
+    /** Traduce el chip marcado (o ninguno) al filtro que aplica la lista. */
+    private fun networkFilterForChip(chipId: Int?): NetworkFilter = when (chipId) {
+        R.id.chipAuditable -> NetworkFilter.AUDITABLE
+        R.id.chipBand24 -> NetworkFilter.BAND_24
+        R.id.chipBand5 -> NetworkFilter.BAND_5
+        R.id.chipDualBand -> NetworkFilter.DUAL_BAND
+        else -> NetworkFilter.ALL
     }
 
     private companion object {
