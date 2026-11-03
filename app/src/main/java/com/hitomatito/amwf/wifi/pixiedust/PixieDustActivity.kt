@@ -11,19 +11,13 @@ import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.res.ColorStateList
 import android.os.Bundle
-import android.os.SystemClock
-import android.text.Spannable
-import android.text.SpannableStringBuilder
-import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -58,6 +52,7 @@ class PixieDustActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPixieDustBinding
     private lateinit var viewModel: PixieDustViewModel
     private lateinit var networkAdapter: PixieNetworkAdapter
+    private lateinit var sessionRenderer: PixieSessionRenderer
 
     // Hoja inferior que contiene la búsqueda, los filtros y la lista de redes.
     private var sheetBinding: SheetPixieNetworkPickerBinding? = null
@@ -67,25 +62,10 @@ class PixieDustActivity : AppCompatActivity() {
     private var wasAttacking = false
     private var hadSession = false
     private var lastListSignature = ""
-    private var consoleExpanded = true
-    private var consoleAtBottom = true
-    private var lastConsoleSignature = 0
-    private var chronometerRunning = false
     private var activeFilter = NetworkFilter.ALL
 
     // Permite retomar el escaneo al volver de Ajustes (permisos o ubicación).
     private var awaitingSettingsResult = false
-
-    /**
-     * Estado final de la sesión, derivado una sola vez del [PixieDustUiState].
-     * Evita arrastrar cuatro booleanos por cada función de pintado.
-     */
-    private sealed interface SessionOutcome {
-        data object Running : SessionOutcome
-        data object Success : SessionOutcome
-        data object Cancelled : SessionOutcome
-        data object Failure : SessionOutcome
-    }
 
     private val permissionLauncher = registerForActivityResult(
         RequestMultiplePermissions()
@@ -109,6 +89,7 @@ class PixieDustActivity : AppCompatActivity() {
 
         binding = ActivityPixieDustBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        sessionRenderer = PixieSessionRenderer(this, binding)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.rootLayout) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -162,7 +143,7 @@ class PixieDustActivity : AppCompatActivity() {
                 viewModel.selectNetwork(network)
                 closeNetworkPicker()
                 // Elegir la red es la acción: no hace falta un botón extra.
-                consoleExpanded = true
+                sessionRenderer.consoleExpanded = true
                 viewModel.startAttack(binding.swDisableWifi.isChecked)
             } else {
                 Toast.makeText(
@@ -311,21 +292,21 @@ class PixieDustActivity : AppCompatActivity() {
         binding.svConsole.setOnScrollChangeListener { view, _, _, _, _ ->
             val scroll = view as NestedScrollView
             val content = scroll.getChildAt(0)
-            consoleAtBottom = content == null ||
+            sessionRenderer.consoleAtBottom = content == null ||
                 scroll.scrollY + scroll.height >= content.height - 24
         }
 
         binding.btnToggleConsole.setOnClickListener {
-            consoleExpanded = !consoleExpanded
-            if (consoleExpanded) consoleAtBottom = true
-            updateSession(viewModel.uiState.value)
+            sessionRenderer.consoleExpanded = !sessionRenderer.consoleExpanded
+            if (sessionRenderer.consoleExpanded) sessionRenderer.consoleAtBottom = true
+            sessionRenderer.update(viewModel.uiState.value)
         }
 
         binding.btnClearConsole.setOnClickListener {
-            consoleExpanded = true
-            consoleAtBottom = true
+            sessionRenderer.consoleExpanded = true
+            sessionRenderer.consoleAtBottom = true
             viewModel.clearConsole()
-            updateSession(viewModel.uiState.value)
+            sessionRenderer.update(viewModel.uiState.value)
         }
 
         binding.btnCopyLog.setOnClickListener {
@@ -512,7 +493,7 @@ class PixieDustActivity : AppCompatActivity() {
         binding.tvError.visibility =
             if (state.errorMessage.isNullOrBlank()) View.GONE else View.VISIBLE
 
-        updateSession(state)
+        sessionRenderer.update(state)
 
         // Un único salto deliberado al empezar: la sesión queda arriba. Durante
         // la auditoría no se vuelve a mover la página. Al cerrar la sesión
@@ -634,408 +615,6 @@ class PixieDustActivity : AppCompatActivity() {
         if (signature == lastListSignature) return
         lastListSignature = signature
         sheet.rvNetworks.post { sheet.rvNetworks.scrollToPosition(0) }
-    }
-
-    /**
-     * Pinta la tarjeta de sesión: estado global, porcentaje por etapas, tiempo,
-     * fases macro, resultado final y registro en vivo.
-     *
-     * El porcentaje es una estimación por hitos ([PixieDustStage.progress]) y se
-     * acompaña siempre de la etapa actual para que el valor no se lea como un
-     * progreso continuo.
-     */
-    private fun updateSession(state: PixieDustUiState) {
-        val startedAt = state.attackStartedAt
-        if (startedAt == null) {
-            binding.cardSession.visibility = View.GONE
-            stopChronometer()
-            return
-        }
-        binding.cardSession.visibility = View.VISIBLE
-
-        val outcome = when {
-            state.isAttacking -> SessionOutcome.Running
-            state.attackCancelled -> SessionOutcome.Cancelled
-            state.result is PixieDustResult.Success -> SessionOutcome.Success
-            else -> SessionOutcome.Failure
-        }
-
-        bindSessionTarget(state)
-        bindSessionStatus(outcome)
-        bindSessionProgress(state, outcome)
-        bindSessionChronometer(
-            startedAt,
-            state.attackFinishedAt,
-            outcome == SessionOutcome.Running
-        )
-        bindSessionPhases(state, outcome)
-        bindSessionResult(state, outcome)
-        bindConsole(state)
-    }
-
-    private fun bindSessionTarget(state: PixieDustUiState) {
-        val target = state.selectedNetwork
-        binding.tvSessionTarget.text = target?.displayName
-            ?: getString(R.string.pixie_target_none_title)
-        binding.tvSessionBssid.text = if (target != null) {
-            getString(
-                R.string.pixie_session_target_meta,
-                target.bssid,
-                target.band().label(this)
-            )
-        } else {
-            getString(R.string.pixie_target_none_message)
-        }
-    }
-
-    private fun bindSessionStatus(outcome: SessionOutcome) {
-        val labelRes: Int
-        val backgroundRes: Int
-        val foregroundRes: Int
-        when (outcome) {
-            SessionOutcome.Running -> {
-                labelRes = R.string.pixie_session_status_running
-                backgroundRes = R.color.md_theme_primaryContainer
-                foregroundRes = R.color.md_theme_onPrimaryContainer
-            }
-            SessionOutcome.Success -> {
-                labelRes = R.string.pixie_session_status_success
-                backgroundRes = R.color.monitor_active
-                foregroundRes = R.color.md_theme_onPrimary
-            }
-            SessionOutcome.Cancelled -> {
-                labelRes = R.string.pixie_session_status_cancelled
-                backgroundRes = R.color.md_theme_surfaceVariant
-                foregroundRes = R.color.md_theme_onSurfaceVariant
-            }
-            SessionOutcome.Failure -> {
-                labelRes = R.string.pixie_session_status_failure
-                backgroundRes = R.color.error_container
-                foregroundRes = R.color.on_error_container
-            }
-        }
-        binding.tvSessionStatus.setText(labelRes)
-        binding.tvSessionStatus.backgroundTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(this, backgroundRes)
-        )
-        binding.tvSessionStatus.setTextColor(ContextCompat.getColor(this, foregroundRes))
-    }
-
-    private fun bindSessionProgress(state: PixieDustUiState, outcome: SessionOutcome) {
-        val stage = state.attackStage
-        val progress = when (outcome) {
-            SessionOutcome.Success, SessionOutcome.Failure -> 100
-            SessionOutcome.Cancelled -> stage?.progress ?: 0
-            SessionOutcome.Running -> stage?.progress ?: PixieDustStage.PREPARING.progress
-        }
-        binding.progressSession.setProgressCompat(progress, true)
-        binding.progressSession.setIndicatorColor(
-            ContextCompat.getColor(
-                this,
-                when (outcome) {
-                    SessionOutcome.Success -> R.color.monitor_active
-                    SessionOutcome.Failure -> R.color.managed
-                    SessionOutcome.Cancelled -> R.color.warning
-                    SessionOutcome.Running -> R.color.md_theme_primary
-                }
-            )
-        )
-        binding.tvSessionPercent.text = getString(R.string.pixie_percent, progress)
-
-        val (titleRes, detailRes) = when (outcome) {
-            SessionOutcome.Success ->
-                R.string.pixie_stage_complete to R.string.pixie_stage_complete_detail
-            SessionOutcome.Cancelled ->
-                R.string.pixie_stage_cancelled to R.string.pixie_stage_cancelled_detail
-            SessionOutcome.Failure ->
-                R.string.pixie_stage_failed to R.string.pixie_stage_failed_detail
-            SessionOutcome.Running -> stageResources(stage)
-        }
-        binding.tvSessionStage.setText(titleRes)
-        binding.tvSessionStageDetail.setText(detailRes)
-        binding.progressSession.contentDescription = getString(
-            R.string.pixie_session_progress_description,
-            progress,
-            getString(titleRes)
-        )
-    }
-
-    /** Par título/detalle de cada hito, en un único `when` sobre la etapa. */
-    private fun stageResources(stage: PixieDustStage?): Pair<Int, Int> = when (stage) {
-        PixieDustStage.DISABLING_WIFI ->
-            R.string.pixie_stage_interface to R.string.pixie_stage_interface_detail
-        PixieDustStage.STARTING_SUPPLICANT ->
-            R.string.pixie_stage_supplicant to R.string.pixie_stage_supplicant_detail
-        PixieDustStage.REGISTERING_WPS ->
-            R.string.pixie_stage_registering to R.string.pixie_stage_registering_detail
-        PixieDustStage.CAPTURING_M3 ->
-            R.string.pixie_stage_capturing to R.string.pixie_stage_capturing_detail
-        PixieDustStage.ANALYZING ->
-            R.string.pixie_stage_analyzing to R.string.pixie_stage_analyzing_detail
-        PixieDustStage.EXTRACTING_PSK ->
-            R.string.pixie_stage_psk to R.string.pixie_stage_psk_detail
-        PixieDustStage.RESTORING ->
-            R.string.pixie_stage_restoring to R.string.pixie_stage_restoring_detail
-        PixieDustStage.COMPLETED ->
-            R.string.pixie_stage_complete to R.string.pixie_stage_complete_detail
-        PixieDustStage.PREPARING, null ->
-            R.string.pixie_stage_preparing to R.string.pixie_stage_preparing_detail
-    }
-
-    private fun bindSessionChronometer(startedAt: Long, finishedAt: Long?, running: Boolean) {
-        if (running) {
-            if (!chronometerRunning) {
-                // Chronometer usa la base de elapsedRealtime, no la hora de
-                // pared: convertimos el inicio guardado (wall clock) a esa base.
-                val sinceStart = System.currentTimeMillis() - startedAt
-                binding.chronSession.base = SystemClock.elapsedRealtime() - sinceStart
-                binding.chronSession.start()
-                chronometerRunning = true
-            }
-        } else {
-            stopChronometer()
-            // Con la sesión terminada el cronómetro debe mostrar el total, no
-            // reiniciarse a 00:00 al volver a pintar o recrear la pantalla.
-            val elapsed = (finishedAt ?: System.currentTimeMillis()) - startedAt
-            binding.chronSession.base =
-                SystemClock.elapsedRealtime() - elapsed.coerceAtLeast(0L)
-        }
-    }
-
-    private fun stopChronometer() {
-        if (!chronometerRunning) return
-        binding.chronSession.stop()
-        chronometerRunning = false
-    }
-
-    private fun bindSessionPhases(state: PixieDustUiState, outcome: SessionOutcome) {
-        val current = if (outcome == SessionOutcome.Success) {
-            PixieDustPhase.CREDENTIALS
-        } else {
-            state.attackStage?.phase ?: PixieDustPhase.PREPARE
-        }
-        val bars = listOf(
-            binding.phase1Bar,
-            binding.phase2Bar,
-            binding.phase3Bar,
-            binding.phase4Bar,
-            binding.phase5Bar
-        )
-        val labels = listOf(
-            binding.phase1Label,
-            binding.phase2Label,
-            binding.phase3Label,
-            binding.phase4Label,
-            binding.phase5Label
-        )
-        val doneColor = ContextCompat.getColor(this, R.color.md_theme_primaryContainer)
-        val activeColor = ContextCompat.getColor(this, R.color.md_theme_primary)
-        val failedColor = ContextCompat.getColor(this, R.color.managed)
-        val stoppedColor = ContextCompat.getColor(this, R.color.warning)
-        val pendingColor = ContextCompat.getColor(this, R.color.md_theme_outlineVariant)
-        val reached = current.ordinal
-
-        bars.forEachIndexed { index, bar ->
-            when {
-                index < reached -> bar.setBackgroundColor(doneColor)
-                index == reached && outcome == SessionOutcome.Failure ->
-                    bar.setBackgroundColor(failedColor)
-                index == reached && outcome == SessionOutcome.Cancelled ->
-                    bar.setBackgroundColor(stoppedColor)
-                index == reached && outcome == SessionOutcome.Running ->
-                    bar.setBackgroundColor(activeColor)
-                index == reached && outcome == SessionOutcome.Success ->
-                    bar.setBackgroundColor(doneColor)
-                else -> bar.setBackgroundColor(pendingColor)
-            }
-        }
-        labels.forEachIndexed { index, label ->
-            label.setTextColor(
-                ContextCompat.getColor(
-                    this,
-                    if (index <= reached) R.color.md_theme_onSurface
-                    else R.color.md_theme_onSurfaceVariant
-                )
-            )
-        }
-    }
-
-    private fun bindSessionResult(state: PixieDustUiState, outcome: SessionOutcome) {
-        val result = state.result
-        val show = outcome != SessionOutcome.Running
-        binding.layoutSessionResult.visibility = if (show) View.VISIBLE else View.GONE
-        if (!show) return
-
-        val bannerTint: Int
-        val bannerText: Int
-        val iconRes: Int
-        val iconTint: Int
-        when (outcome) {
-            SessionOutcome.Success -> {
-                bannerTint = R.color.md_theme_primaryContainer
-                bannerText = R.color.md_theme_onPrimaryContainer
-                iconRes = R.drawable.ic_check_circle
-                iconTint = R.color.monitor_active
-            }
-            SessionOutcome.Cancelled -> {
-                bannerTint = R.color.md_theme_surfaceVariant
-                bannerText = R.color.md_theme_onSurface
-                iconRes = R.drawable.ic_close_circle
-                iconTint = R.color.warning
-            }
-            SessionOutcome.Running, SessionOutcome.Failure -> {
-                bannerTint = R.color.error_container
-                bannerText = R.color.on_error_container
-                iconRes = R.drawable.ic_warning
-                iconTint = R.color.managed
-            }
-        }
-        binding.layoutResultBanner.backgroundTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(this, bannerTint)
-        )
-        binding.ivResultIcon.setImageResource(iconRes)
-        binding.ivResultIcon.setColorFilter(ContextCompat.getColor(this, iconTint))
-        binding.tvResultStatus.setTextColor(ContextCompat.getColor(this, bannerText))
-        binding.tvResultSubtitle.setTextColor(
-            ContextCompat.getColor(
-                this,
-                if (outcome == SessionOutcome.Success) {
-                    R.color.md_theme_onPrimaryContainer
-                } else {
-                    bannerText
-                }
-            )
-        )
-
-        when (outcome) {
-            SessionOutcome.Success -> bindSuccessResult(result as PixieDustResult.Success)
-            SessionOutcome.Cancelled -> bindStoppedResult()
-            SessionOutcome.Running, SessionOutcome.Failure ->
-                bindFailureResult(result as? PixieDustResult.Failure)
-        }
-    }
-
-    private fun bindSuccessResult(result: PixieDustResult.Success) {
-        binding.tvResultStatus.setText(R.string.pixie_success_title)
-        binding.tvResultSubtitle.setText(
-            if (result.wpaPsk.isNullOrBlank()) R.string.pixie_success_subtitle_pin_only
-            else R.string.pixie_success_subtitle
-        )
-        binding.layoutResultCredentials.visibility = View.VISIBLE
-        binding.tvResultReason.visibility = View.GONE
-
-        binding.tvResultPin.text = result.wpsPin ?: getString(R.string.pixie_not_available)
-        binding.btnCopyPin.isEnabled = !result.wpsPin.isNullOrBlank()
-        binding.btnCopyPin.alpha = if (binding.btnCopyPin.isEnabled) 1f else 0.4f
-
-        val hasPsk = !result.wpaPsk.isNullOrBlank()
-        binding.rowResultPsk.visibility = if (hasPsk) View.VISIBLE else View.GONE
-        binding.tvResultPsk.text = result.wpaPsk ?: getString(R.string.pixie_not_available)
-
-        binding.btnCopyResult.visibility = View.VISIBLE
-        binding.btnCopyResult.isEnabled = true
-    }
-
-    private fun bindFailureResult(result: PixieDustResult.Failure?) {
-        binding.tvResultStatus.setText(R.string.pixie_failure_title)
-        binding.tvResultSubtitle.setText(R.string.pixie_failure_subtitle)
-        binding.layoutResultCredentials.visibility = View.GONE
-        binding.tvResultReason.text = result?.reason.orEmpty()
-        binding.tvResultReason.visibility = if (result == null) View.GONE else View.VISIBLE
-        binding.btnCopyResult.visibility = View.GONE
-    }
-
-    private fun bindStoppedResult() {
-        binding.tvResultStatus.setText(R.string.pixie_result_stopped_title)
-        binding.tvResultSubtitle.setText(R.string.pixie_result_stopped_subtitle)
-        binding.layoutResultCredentials.visibility = View.GONE
-        binding.tvResultReason.visibility = View.GONE
-        binding.btnCopyResult.visibility = View.GONE
-    }
-
-    /**
-     * El registro es el protagonista de la sesión: se pinta siempre, con
-     * timestamps tenues y el prefijo de nivel coloreado para que se pueda
-     * seguir de un vistazo.
-     */
-    private fun bindConsole(state: PixieDustUiState) {
-        val lines = state.consoleLines
-        val signature = lines.hashCode()
-        binding.tvConsoleCount.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
-        binding.btnCopyLog.isEnabled = lines.isNotEmpty()
-        binding.btnCopyLog.alpha = if (lines.isNotEmpty()) 1f else 0.4f
-
-        if (signature != lastConsoleSignature) {
-            binding.tvConsoleCount.text = getString(R.string.pixie_console_lines, lines.size)
-            binding.tvConsole.setTextColor(
-                ContextCompat.getColor(this, R.color.md_theme_onSurface)
-            )
-            binding.tvConsole.text = if (lines.isEmpty()) {
-                getString(R.string.pixie_console_empty)
-            } else {
-                formatLog(lines)
-            }
-            lastConsoleSignature = signature
-
-            // Solo seguimos el final si el usuario no está leyendo más arriba.
-            // Se usa scrollTo (no fullScroll) para que el gesto no arrastre
-            // también la página exterior.
-            if (lines.isNotEmpty() && consoleExpanded && consoleAtBottom) {
-                binding.svConsole.post {
-                    val content = binding.svConsole.getChildAt(0) ?: return@post
-                    binding.svConsole.scrollTo(
-                        0,
-                        (content.height - binding.svConsole.height).coerceAtLeast(0)
-                    )
-                }
-            }
-        }
-
-        binding.svConsole.visibility = if (consoleExpanded) View.VISIBLE else View.GONE
-        binding.btnToggleConsole.contentDescription = getString(
-            if (consoleExpanded) R.string.pixie_console_hide
-            else R.string.pixie_console_show
-        )
-        binding.btnToggleConsole.rotation = if (consoleExpanded) 180f else 0f
-    }
-
-    /** Colorea timestamp y prefijo sin tocar el texto seleccionable. */
-    private fun formatLog(lines: List<String>): Spannable {
-        val builder = SpannableStringBuilder()
-        val timestampColor = ContextCompat.getColor(this, R.color.md_theme_outline)
-        lines.forEachIndexed { index, line ->
-            if (index > 0) builder.append('\n')
-            val lineStart = builder.length
-            builder.append(line)
-
-            if (line.length >= 8 && line[2] == ':' && line[5] == ':') {
-                builder.setSpan(
-                    ForegroundColorSpan(timestampColor),
-                    lineStart,
-                    lineStart + 8,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
-            val prefixStart = line.indexOf('[')
-            if (prefixStart >= 0 && prefixStart + 2 < line.length) {
-                val colorRes = when (line.substring(prefixStart, prefixStart + 3)) {
-                    "[+]" -> R.color.monitor_active
-                    "[-]" -> R.color.managed
-                    "[!]" -> R.color.warning
-                    "[*]" -> R.color.md_theme_primary
-                    else -> null
-                }
-                if (colorRes != null) {
-                    builder.setSpan(
-                        ForegroundColorSpan(ContextCompat.getColor(this, colorRes)),
-                        lineStart + prefixStart,
-                        lineStart + prefixStart + 3,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
-            }
-        }
-        return builder
     }
 
     private fun filterNetworks(
