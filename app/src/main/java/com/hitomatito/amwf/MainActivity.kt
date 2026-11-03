@@ -342,8 +342,10 @@ class MainActivity : AppCompatActivity() {
         }
         updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
 
-        // El botón permanece siempre clicable: el listener único muestra el
-        // detalle de los binarios que faltan en lugar de fallar en silencio.
+        // El botón permanece siempre habilitado y con un solo listener: si la
+        // comprobación ya confirmó que faltan binarios, el toque explica cuáles
+        // en vez de fallar en silencio o abrir una pantalla inutilizable.
+        // El alpha reducido solo comunica «aún no listo»; no deshabilita nada.
         btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
     }
 
