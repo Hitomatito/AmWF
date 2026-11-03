@@ -7,13 +7,11 @@
 
 package com.hitomatito.amwf
 
-import android.os.Build
 import android.util.Log
 import com.hitomatito.amwf.diagnostics.AppLogger
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 
 /**
  * Shared utility for executing shell commands via su or sh.
@@ -22,7 +20,6 @@ import java.util.concurrent.TimeUnit
 object ShellExecutor {
 
     private const val DEFAULT_TIMEOUT = 10000L
-    private const val POLL_INTERVAL = 50L
 
     data class Result(val exitCode: Int, val output: String, val error: String)
 
@@ -100,23 +97,8 @@ object ShellExecutor {
         }
 
         val timedOut = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                !process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            } else {
-                // API 24/25 no expone waitFor(timeout): se sondea exitValue con timeout propio.
-                val startTime = System.currentTimeMillis()
-                var finished = false
-                while (System.currentTimeMillis() - startTime < timeoutMs) {
-                    try {
-                        process.exitValue()
-                        finished = true
-                        break
-                    } catch (_: IllegalThreadStateException) {
-                        Thread.sleep(POLL_INTERVAL)
-                    }
-                }
-                !finished
-            }
+            // waitFor(timeout) es API 26; en API 24-25 se sondea exitValue.
+            !process.waitForCompat(timeoutMs)
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             process.destroyForciblyCompat()
