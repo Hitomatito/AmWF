@@ -103,8 +103,11 @@ class PixieNetworkFilterTest {
 
     @Test
     fun `las consultas compactas de menos de tres caracteres no buscan en el BSSID`() {
-        // "ab" solo aparece en el BSSID si se quitan los dos puntos de "aa:bb".
+        // "ab" solo aparece si se quitan los separadores; "aa" y "bb" ya
+        // aparecen en el BSSID con separadores y cubren la comparación directa.
         assertTrue(filterNetworks(networks, NetworkFilter.ALL, "ab", bands).isEmpty())
+        assertTrue(filterNetworks(networks, NetworkFilter.ALL, "aa", bands).isEmpty())
+        assertTrue(filterNetworks(networks, NetworkFilter.ALL, "bb", bands).isEmpty())
         assertEquals(5, filterNetworks(networks, NetworkFilter.ALL, "abb", bands).size)
     }
 

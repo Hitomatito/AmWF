@@ -69,8 +69,10 @@ fun filterNetworks(
 /** [query] ya viene en minúsculas y sin espacios en los extremos. */
 private fun PixieDustNetwork.matchesQuery(query: String): Boolean {
     if (displayName.lowercase().contains(query)) return true
-    if (bssid.lowercase().contains(query)) return true
     val compactBssid = query.replace(":", "").replace(" ", "")
-    return compactBssid.length >= 3 &&
+    // El límite se aplica antes de cualquier comparación con el BSSID, tanto
+    // con separadores como sin ellos; si no, "aa" seguía coincidiendo aquí.
+    if (compactBssid.length < 3) return false
+    return bssid.lowercase().contains(query) ||
         bssid.replace(":", "").lowercase().contains(compactBssid)
 }

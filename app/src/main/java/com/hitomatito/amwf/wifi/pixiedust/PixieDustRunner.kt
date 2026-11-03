@@ -331,10 +331,14 @@ class PixieDustRunner(
                 // control y mate los procesos.
                 supplicant.stopAndFlush(currentSupplicant, rawOutput, ::log)
             } finally {
-                cleanup()
-                // Guardar log de auditoría para análisis offline. Se ejecuta
-                // después de cleanup() para incluir también sus mensajes.
-                persistAuditLog(auditResult, target, rawOutput)
+                try {
+                    cleanup()
+                } finally {
+                    // Incluso si la restauración falla, ningún camino debe
+                    // perder el registro. Se ejecuta tras cleanup() para
+                    // incluir también sus mensajes cuando sea posible.
+                    persistAuditLog(auditResult, target, rawOutput)
+                }
             }
         }
     }
@@ -479,6 +483,8 @@ class PixieDustRunner(
     }
 
     private fun log(message: String) {
+        // No usar ShellExecutor.logD aquí: este log incluye claves M3, PIN/PSK
+        // y salida cruda del supplicant, y AppLogger se exporta en diagnósticos.
         Log.d(TAG, message)
         auditEvents.add(message)
         onLog(message)

@@ -291,10 +291,7 @@ internal class SupplicantProcesses(private val context: Context) {
             NativeBinaries.wpaSupplicantAssetName()
         )
         try {
-            PixieProcessSupport.execSu(
-                "pkill -9 -f '^${supplicantPath}( |$)' 2>/dev/null",
-                timeoutSeconds = 3
-            )
+            PixieProcessSupport.killNativeProcess(supplicantPath)
         } catch (_: Exception) {
             // Best effort.
         }

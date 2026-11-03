@@ -72,6 +72,27 @@ internal object PixieProcessSupport {
         "'" + value.replace("'", "'\\''") + "'"
 
     /**
+     * Mata únicamente procesos cuyo cmdline empiece por [binaryPath]. La ruta
+     * se escapa como ERE y el patrón completo se cita para el shell: una ruta
+     * con puntos no debe convertirse en una expresión más amplia ni en código.
+     */
+    fun killNativeProcess(binaryPath: String) {
+        val pattern = "^${posixRegexEscape(binaryPath)}( |$)"
+        execSu("pkill -9 -f ${shellQuote(pattern)} 2>/dev/null", timeoutSeconds = 3)
+    }
+
+    /** Escapa los metacaracteres de una expresión regular POSIX extendida. */
+    internal fun posixRegexEscape(value: String): String = buildString(value.length) {
+        value.forEach { char ->
+            when (char) {
+                '\\', '.', '^', '$', '|', '(', ')', '{', '}', '*', '+', '?', '[', ']' ->
+                    append('\\')
+            }
+            append(char)
+        }
+    }
+
+    /**
      * Lee un stream línea a línea en un hilo daemon. [onEnd] se ejecuta al
      * llegar a EOF o si el pipe se cierra, para encolar el centinela adecuado.
      */

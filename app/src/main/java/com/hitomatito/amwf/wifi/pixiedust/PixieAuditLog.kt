@@ -14,6 +14,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Persistencia del log de auditoría de Pixie Dust.
@@ -60,11 +61,11 @@ internal object PixieAuditLog {
         rawLines: List<String>,
         log: (String) -> Unit
     ) {
-        // Milisegundos para que dos ataques que terminen en el mismo segundo
-        // no se sobrescriban (el requisito es conservar todos los logs).
+        // UUID además de milisegundos: dos ataques no deben sobrescribirse
+        // aunque terminen en la misma fracción de segundo.
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-        val safeBssid = target.bssid.replace(":", "")
-        val fileName = "pixie_${timestamp}_$safeBssid.log"
+        val fileName =
+            "pixie_${timestamp}_${auditBssidForFileName(target.bssid)}_${UUID.randomUUID()}.log"
 
         val content = buildString {
             appendLine("=== AmWF Pixie Dust Audit Log ===")
@@ -100,15 +101,24 @@ internal object PixieAuditLog {
         // 1) Ruta principal: /sdcard/AmWF/pixie-logs/ mediante root.
         val sdcardDir = "/sdcard/AmWF/pixie-logs"
         val sdcardPath = "$sdcardDir/$fileName"
+        val tempPath = "$sdcardPath.tmp"
         val staged = File(context.cacheDir, fileName)
+        var writtenToSdcard = false
         try {
             staged.writeText(content)
+            // El nombre ya es seguro, pero las rutas también se citan como
+            // defensa en profundidad. mv deja el log completo de forma atómica.
+            val dirArg = PixieProcessSupport.shellQuote(sdcardDir)
+            val tempArg = PixieProcessSupport.shellQuote(tempPath)
+            val pathArg = PixieProcessSupport.shellQuote(sdcardPath)
             val written = ShellExecutor.execRootWithInput(
-                command = "mkdir -p $sdcardDir && cat > $sdcardPath && chmod 644 $sdcardPath",
+                command = "mkdir -p $dirArg && cat > $tempArg && " +
+                    "chmod 644 $tempArg && mv -f $tempArg $pathArg",
                 input = staged,
                 timeoutMs = 10_000
             )
             if (written.exitCode == 0) {
+                writtenToSdcard = true
                 log("[+] Log de auditoría guardado en: $sdcardPath")
                 return
             }
@@ -119,6 +129,14 @@ internal object PixieAuditLog {
             ShellExecutor.logE(TAG, "Error escribiendo el log en $sdcardPath", e)
         } finally {
             staged.delete()
+            if (!writtenToSdcard) {
+                // Si el shell falla o expira antes del mv, el temporal puede
+                // quedar con credenciales en /sdcard; se elimina best-effort.
+                ShellExecutor.execRoot(
+                    "rm -f ${PixieProcessSupport.shellQuote(tempPath)}",
+                    timeoutMs = 3_000
+                )
+            }
         }
 
         // 2) Fallback: almacenamiento privado de la app. filesDir no se
@@ -137,3 +155,16 @@ internal object PixieAuditLog {
         }
     }
 }
+
+private val AUDIT_BSSID_REGEX = Regex("^[0-9A-Fa-f]{12}$")
+
+/**
+ * Componente de nombre de fichero derivado del BSSID.
+ *
+ * La validación del ataque informa del error pero conserva el valor original
+ * en el log. Por eso la persistencia no puede confiar en que el BSSID ya sea
+ * válido: solo un MAC exacto pasa al nombre; cualquier otra entrada usa un
+ * marcador constante y nunca llega a un comando shell.
+ */
+internal fun auditBssidForFileName(bssid: String): String =
+    bssid.replace(":", "").takeIf { AUDIT_BSSID_REGEX.matches(it) } ?: "invalid"

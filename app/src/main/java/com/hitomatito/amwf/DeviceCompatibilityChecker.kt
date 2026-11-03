@@ -377,15 +377,14 @@ class DeviceCompatibilityChecker(private val context: Context) {
             issues.add(CompatibilityIssue(
                 type = IssueType.PIXIE_DUST,
                 severity = Severity.WARNING,
-                message = "Binarios de Pixie Dust faltantes: ${NativeBinaries.displayNames(missingPixieBinaries)}",
-                suggestion = if (NativeBinaries.is32BitUnsupported()) {
-                    "Pixie Dust requiere un dispositivo arm64-v8a: el supplicant de " +
-                        "32 bits no está soportado y no se puede empaquetar."
-                } else {
-                    "Empaqueta los binarios en assets/wifi/. El wpa_supplicant del " +
-                        "sistema no sirve para Pixie Dust porque trunca los hexdump WPS. " +
-                        "Consulta BINARIES_SETUP.md para instrucciones de compilación."
-                }
+                message = NativeBinaries.missingBinariesSummary(
+                    context,
+                    missingPixieBinaries
+                ).orEmpty(),
+                suggestion = NativeBinaries.missingBinariesMessage(
+                    context,
+                    missingPixieBinaries
+                ).orEmpty()
             ))
         }
 
