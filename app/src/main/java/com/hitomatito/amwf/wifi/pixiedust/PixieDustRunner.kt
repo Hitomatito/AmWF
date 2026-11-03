@@ -518,10 +518,7 @@ class PixieDustRunner(
                 lines = supplicant.lines,
                 timeoutMs = M3_CAPTURE_TIMEOUT_MS,
                 cancelRequested = { !isActive },
-                onLine = { line ->
-                    log("[supplicant] $line")
-                    rawOutput.append(line).append('\n')
-                },
+                onLine = { line -> recordSupplicantLine(line, rawOutput, log) },
                 onM5M7 = { d ->
                     log("[*] WPS-M5/M7 captured: M5=${d.m5Enc?.length ?: 0} hex, M7=${d.m7Enc?.length ?: 0} hex")
                 }
@@ -667,7 +664,7 @@ class PixieDustRunner(
         input: InputStream,
         onLine: (String) -> Unit,
         onEnd: () -> Unit = {}
-    ) {
+    ): Thread =
         Thread {
             try {
                 BufferedReader(InputStreamReader(input)).use { reader ->
@@ -685,6 +682,32 @@ class PixieDustRunner(
             isDaemon = true
             start()
         }
+
+    /**
+     * Registra una línea cruda del supplicant en la consola y en el volcado
+     * que acaba en el log de auditoría. Solo se llama desde la corrutina del
+     * ataque: el hilo lector se limita a encolar líneas.
+     */
+    private fun recordSupplicantLine(
+        line: String,
+        rawOutput: StringBuilder,
+        log: (String) -> Unit
+    ) {
+        log("[supplicant] $line")
+        rawOutput.append(line).append('\n')
+    }
+
+    /** Vuelca en la corrutina las líneas ya recibidas del supplicant. */
+    private fun flushSupplicantLines(
+        queue: BlockingQueue<String>,
+        rawOutput: StringBuilder,
+        log: (String) -> Unit
+    ) {
+        while (true) {
+            val line = queue.poll() ?: return
+            if (line == PROCESS_EOF) continue
+            recordSupplicantLine(line, rawOutput, log)
+        }
     }
 
     /** Drena un stream en un hilo daemon y encola [eofMarker] al terminar. */
@@ -692,9 +715,7 @@ class PixieDustRunner(
         input: InputStream,
         queue: BlockingQueue<String>,
         eofMarker: String = PROCESS_EOF
-    ) {
-        drainLines(input, { queue.offer(it) }, { queue.offer(eofMarker) })
-    }
+    ): Thread = drainLines(input, { queue.offer(it) }, { queue.offer(eofMarker) })
 
     /**
      * Descarta las líneas que quedaron sin consumir de una ronda anterior.
@@ -750,6 +771,10 @@ class PixieDustRunner(
         log: (String) -> Unit
     ): String? = withTimeoutOrNull(PSK_EXTRACT_TIMEOUT_MS) {
         var process: Process? = null
+        // El hilo lector solo encola: la corrutina es la única que escribe en
+        // el StringBuilder crudo y en la consola.
+        val supplicantLines = LinkedBlockingQueue<String>()
+        var reader: Thread? = null
         try {
             log("[*] ===== WPA PSK EXTRACTION (WPS with PIN $pin) =====")
             val ctrlDir = NativeBinaries.ctrlDir()
@@ -767,15 +792,7 @@ class PixieDustRunner(
             val suppCmd = buildSupplicantCommand(iface, ctrlDir)
             val running = Runtime.getRuntime().exec(arrayOf("su", "-c", suppCmd))
             process = running
-            drainLines(
-                running.inputStream,
-                onLine = { supLine ->
-                    log("[supplicant] $supLine")
-                    // Igual que en la captura M3: el volcado crudo también va
-                    // al log de auditoría, no solo a la consola.
-                    rawOutput.append(supLine).append('\n')
-                }
-            )
+            reader = drainStream(running.inputStream, supplicantLines)
 
             val socketPath = "$ctrlDir/$iface"
             if (!waitForSocket(socketPath, SOCKET_WAIT_MS, log)) {
@@ -843,6 +860,7 @@ class PixieDustRunner(
             val deadline = System.currentTimeMillis() + PSK_WAIT_MS
             var psk: String? = null
             while (System.currentTimeMillis() < deadline) {
+                flushSupplicantLines(supplicantLines, rawOutput, log)
                 // wps_reg crea su propia red WPS con un id nuevo; no se puede
                 // asumir que sea el de add_network. Se consultan todas las
                 // redes conocidas y también el id devuelto por add_network.
@@ -873,6 +891,10 @@ class PixieDustRunner(
             return@withTimeoutOrNull null
         } finally {
             stopSupplicant(process)
+            // El proceso ya murió: el lector recibe EOF y termina. Unirse a él
+            // antes de volcar evita perder las últimas líneas del log.
+            reader?.let { joinReader(it) }
+            flushSupplicantLines(supplicantLines, rawOutput, log)
         }
     }
 
@@ -1041,6 +1063,15 @@ class PixieDustRunner(
      * en ejecución hasta que expira su `sleep 110`, lo que dejaría dos
      * supplicants compitiendo por la misma interfaz en la ronda siguiente.
      */
+    /** Espera al hilo lector tras cerrar el proceso, sin propagar la interrupción. */
+    private fun joinReader(reader: Thread) {
+        try {
+            reader.join(1_000L)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
     private fun stopSupplicant(process: Process?) {
         process?.let {
             it.destroy()
