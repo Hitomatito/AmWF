@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import com.hitomatito.amwf.diagnostics.AppLogger
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
@@ -34,13 +35,26 @@ object ShellExecutor {
     }
 
     /**
+     * Executes a command with root privileges via su, feeding [input] to its
+     * stdin. Útil para copiar ficheros desde el almacenamiento privado de la
+     * app a rutas que el dominio SELinux de `su` sí puede escribir.
+     */
+    fun execRootWithInput(
+        command: String,
+        input: File,
+        timeoutMs: Long = DEFAULT_TIMEOUT
+    ): Result {
+        return exec(arrayOf("su", "-c", command), timeoutMs, input)
+    }
+
+    /**
      * Executes a command without root privileges via sh.
      */
     fun execNoRoot(command: String, timeoutMs: Long = DEFAULT_TIMEOUT): Result {
         return exec(arrayOf("sh", "-c", command), timeoutMs)
     }
 
-    private fun exec(cmdArray: Array<String>, timeoutMs: Long): Result {
+    private fun exec(cmdArray: Array<String>, timeoutMs: Long, input: File? = null): Result {
         val process = try {
             Runtime.getRuntime().exec(cmdArray)
         } catch (e: Exception) {
@@ -68,6 +82,23 @@ object ShellExecutor {
         outputThread.start()
         errorThread.start()
 
+        // Si hay entrada, se escribe en un hilo para no bloquear mientras el
+        // proceso produce salida. El cierre de stdin es lo que marca el EOF.
+        val inputThread = input?.let { source ->
+            Thread {
+                try {
+                    process.outputStream.use { output ->
+                        source.inputStream().use { it.copyTo(output) }
+                    }
+                } catch (_: Exception) {
+                    // El proceso pudo terminar antes de leer toda la entrada.
+                }
+            }.apply {
+                isDaemon = true
+                start()
+            }
+        }
+
         val timedOut = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 !process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
@@ -88,22 +119,32 @@ object ShellExecutor {
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            process.destroyForcibly()
+            process.destroyForciblyCompat()
             return Result(-1, output.toString().trim(), "Interrupted")
         }
 
         if (timedOut) {
-            process.destroyForcibly()
+            process.destroyForciblyCompat()
         }
 
         // Deja que los lectores lleguen a EOF (acotado; son daemon threads).
         outputThread.join(1000)
         errorThread.join(1000)
+        inputThread?.join(1000)
 
         return if (timedOut) {
             Result(-1, output.toString().trim(), "Command timeout")
         } else {
             Result(process.exitValue(), output.toString().trim(), error.toString().trim())
+        }
+    }
+
+    /** destroyForcibly() es API 26; en API 24-25 se usa destroy(). */
+    private fun Process.destroyForciblyCompat() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            destroyForcibly()
+        } else {
+            destroy()
         }
     }
 

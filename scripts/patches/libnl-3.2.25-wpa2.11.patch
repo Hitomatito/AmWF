@@ -1,0 +1,21 @@
+--- a/include/netlink/attr.h
++++ b/include/netlink/attr.h
+@@ -49,6 +49,10 @@
+ 
+ #define NLA_TYPE_MAX (__NLA_TYPE_MAX - 1)
+ 
++/* wpa_supplicant 2.11 usa NLA_S8; libnl 3.2.25 no lo define. Se aliasa a
++ * NLA_U8 (mismo tamaño) para no alterar los valores del enum ni el validador. */
++#define NLA_S8 NLA_U8
++
+ /** @} */
+ 
+ /**
+@@ -99,6 +103,7 @@
+ 
+ /* Integer attribute */
+ extern uint8_t		nla_get_u8(struct nlattr *);
++static inline int8_t	nla_get_s8(struct nlattr *nla) { return (int8_t) nla_get_u8(nla); }
+ extern int		nla_put_u8(struct nl_msg *, int, uint8_t);
+ extern uint16_t		nla_get_u16(struct nlattr *);
+ extern int		nla_put_u16(struct nl_msg *, int, uint16_t);

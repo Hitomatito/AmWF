@@ -13,3 +13,6 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+
+# Volcados de logcat locales (pueden contener datos del dispositivo)
+*.logcat

@@ -8,6 +8,8 @@
 package com.hitomatito.amwf.wifi.pixiedust
 
 import java.io.BufferedReader
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**
  * Parser de los campos del mensaje WPS M3 extraídos del debug de wpa_supplicant.
@@ -29,8 +31,6 @@ import java.io.BufferedReader
  */
 object M3Parser {
 
-    private const val TAG = "M3Parser"
-
     /** Los seis campos del M3, en orden de aparición esperado. */
     private enum class M3Field(val label: String) {
         ENROLLEE_NONCE("Enrollee Nonce"),
@@ -43,12 +43,31 @@ object M3Parser {
         override fun toString(): String = label
     }
 
-    /** Longitud mínima esperada de un valor hexadecimal válido. */
-    private const val MIN_HEX_LENGTH = 32
+    /**
+     * Longitud hexadecimal exacta esperada por campo (en caracteres).
+     *
+     * Validar la longitud evita aceptar volcados truncados del supplicant de
+     * Android (32 bytes) como si fueran claves DH completas (192 bytes).
+     */
+    private fun expectedHexLength(field: Int): Int = when (field) {
+        M3Field.ENROLLEE_NONCE.ordinal -> 32
+        M3Field.OWN_PUBLIC_KEY.ordinal,
+        M3Field.PEER_PUBLIC_KEY.ordinal -> 384
+        M3Field.AUTH_KEY.ordinal,
+        M3Field.E_HASH_1.ordinal,
+        M3Field.E_HASH_2.ordinal -> 64
+        else -> 0
+    }
 
     /** Tiempo de espera adicional (ms) tras capturar los 6 campos para intentar
      *  capturar también M5/M7 (modo 3, chips RTL819x). */
     private const val M5M7_DWELL_MS = 4_000L
+
+    /**
+     * Centinela que el productor encola al cerrar el stream. Permite
+     * distinguir "no hay línea todavía" (null) de "el proceso terminó".
+     */
+    const val END_OF_STREAM = "\u0000AMWF_EOF"
 
     private val WPS_M3_PREFIX = "WPS-M3: "
     private val M5_PREFIX = "WPS-M5:"
@@ -59,8 +78,21 @@ object M3Parser {
     private val BSSID_VALUE = Regex("""BSSID=([0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5})""")
     private val ENCR_VALUE = Regex("""ENCR=([0-9a-fA-F]+)""")
 
+    // Formato hexdump real de wpa_supplicant 2.11:
+    //   "WPS: Enrollee Nonce - hexdump(len=16): 1a 2b 3c ..."
+    // El volcado completo solo aparece cuando el binario se compila sin
+    // CONFIG_ANDROID_LOG (el de Android trunca a 32 bytes y va a logcat).
+    private val HEXDUMP_LINE = Regex("""WPS:\s*(.+?)\s*-\s*hexdump\(len=\d+\):\s*([0-9a-fA-F ]+)""")
+
     // Formato hexdump: "WPS: Enrollee Nonce: 1a 2b 3c ..."
-    private val FIELD_LINE = Regex("""WPS:\s*([A-Za-z ]+):\s*([0-9a-fA-F :]+)""")
+    private val FIELD_LINE = Regex("""WPS:\s*([A-Za-z0-9][A-Za-z0-9 \-]*):\s*([0-9a-fA-F :]+)""")
+
+    // El supplicant anuncia el fallo con esta línea cuando el AP aborta.
+    // Ej.: "wlan0: WPS-FAIL msg=5 config_error=15"
+    private val WPS_FAIL_LINE = Regex("""WPS-FAIL\s+msg=\d+\s+config_error=(\d+)""")
+    private val NEGOTIATION_ERROR_LINE = Regex(
+        """Enrollee terminated negotiation with Configuration Error (\d+)"""
+    )
 
     /**
      * Resultado del parseo del M3.
@@ -73,6 +105,15 @@ object M3Parser {
         data class Incomplete(
             val capturedCount: Int,
             val missing: List<String>
+        ) : M3Capture()
+        /**
+         * El AP terminó la negociación WPS antes de enviar el M3. El caso más
+         * habitual es `config_error=15` (Setup Locked): el WPS del AP está
+         * bloqueado y no liberará las E-Hash hasta que se desbloquee.
+         */
+        data class Failed(
+            val reason: String,
+            val configError: Int? = null
         ) : M3Capture()
     }
 
@@ -105,6 +146,7 @@ object M3Parser {
 
         fun toPixiewpsMode3Args(m3: M3Data): String =
             "--mode 3 ${m3.toPixiewpsArgs()}" +
+                    (bssid.takeIf { it.isNotBlank() }?.let { " --e-bssid $it" } ?: "") +
                     (m5Enc?.let { " -5 $it" } ?: "") +
                     (m7Enc?.let { " -7 $it" } ?: "")
     }
@@ -124,6 +166,52 @@ object M3Parser {
         cancelRequested: () -> Boolean = { false },
         onLine: ((String) -> Unit)? = null,
         onM5M7: ((M5M7Capture) -> Unit)? = null
+    ): M3Capture = parseSource(
+        source = { timeout -> readLineWithTimeout(reader, timeout) },
+        timeoutMs = timeoutMs,
+        cancelRequested = cancelRequested,
+        onLine = onLine,
+        onM5M7 = onM5M7
+    )
+
+    /**
+     * Variante para un productor que drena el proceso en un hilo aparte.
+     *
+     * El hilo lector encola las líneas en [lines] y encola [END_OF_STREAM] al
+     * terminar. Así el pipe del supplicant nunca se llena mientras la app
+     * espera el socket o ejecuta `wpa_cli ping`.
+     */
+    fun parse(
+        lines: BlockingQueue<String>,
+        timeoutMs: Long = 25_000L,
+        cancelRequested: () -> Boolean = { false },
+        onLine: ((String) -> Unit)? = null,
+        onM5M7: ((M5M7Capture) -> Unit)? = null
+    ): M3Capture = parseSource(
+        source = { timeout -> lines.poll(timeout, TimeUnit.MILLISECONDS) },
+        timeoutMs = timeoutMs,
+        cancelRequested = cancelRequested,
+        onLine = onLine,
+        onM5M7 = onM5M7
+    )
+
+    private fun readLineWithTimeout(reader: BufferedReader, timeoutMs: Long): String? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (reader.ready()) {
+                return reader.readLine() ?: END_OF_STREAM
+            }
+            Thread.sleep(10)
+        }
+        return null
+    }
+
+    private fun parseSource(
+        source: (Long) -> String?,
+        timeoutMs: Long,
+        cancelRequested: () -> Boolean,
+        onLine: ((String) -> Unit)?,
+        onM5M7: ((M5M7Capture) -> Unit)?
     ): M3Capture {
         val fields = arrayOfNulls<String>(6)
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -142,16 +230,32 @@ object M3Parser {
             }
 
             try {
-                if (!reader.ready()) {
-                    Thread.sleep(50)
-                    continue
-                }
-                val line = reader.readLine() ?: break
+                val line = source(50L) ?: continue
+                if (line == END_OF_STREAM) break
                 if (line.isEmpty()) continue
                 onLine?.invoke(line)
 
+                // El AP puede abortar antes de M3 (p. ej. WPS bloqueado).
+                // En ese caso no tiene sentido seguir esperando ni reintentar.
+                val failMatch = WPS_FAIL_LINE.find(line)
+                    ?: NEGOTIATION_ERROR_LINE.find(line)
+                if (failMatch != null) {
+                    val code = failMatch.groupValues[1].toIntOrNull()
+                    // Un NACK con config_error=18 es la respuesta esperada a
+                    // un PIN de sonda incorrecto: el AP ya nos ha entregado el
+                    // M3 completo antes de rechazarlo. Si los seis campos están
+                    // capturados, el M3 es válido y pixiewps debe ejecutarse.
+                    if (counted == 6) break
+                    // Si el NACK llega sin M3, la captura de esta ronda ha
+                    // terminado (el M3 siempre precede al NACK). Se devuelve
+                    // Incomplete para que el runner reintente sin esperar los
+                    // 25 s completos del timeout.
+                    if (code == 18) break
+                    return M3Capture.Failed(configErrorReason(code), code)
+                }
+
                 // Formato 1: línea WPS-M3: con pares clave=valor
-                if (line.startsWith(WPS_M3_PREFIX)) {
+                if (line.contains(WPS_M3_PREFIX)) {
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     parseKeyValueLine(line, fields) { counted++ }
                     if (counted == 6) {
@@ -160,32 +264,54 @@ object M3Parser {
                     continue
                 }
 
-                // Formato 2: líneas hexdump individuales "WPS: <Campo>: <hex>"
+                // Formato 2a: hexdump completo de wpa_supplicant 2.11
+                // "WPS: <Campo> - hexdump(len=N): xx xx ..."
+                val hexdumpMatch = HEXDUMP_LINE.find(line)
+                if (hexdumpMatch != null) {
+                    val fieldLabel = hexdumpMatch.groupValues[1].trim()
+                    val hexValue = hexdumpMatch.groupValues[2]
+                        .replace(" ", "")
+                        .replace(":", "")
+                        .trim()
+                    val field = fieldForLabel(fieldLabel)
+                    if (field != -1 && fields[field] == null &&
+                        hexValue.length == expectedHexLength(field)
+                    ) {
+                        fields[field] = hexValue
+                        counted++
+                        if (counted == 6) {
+                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
+                        }
+                    }
+                    continue
+                }
+
+                // Formato 2b: líneas hexdump individuales "WPS: <Campo>: <hex>"
                 val fieldMatch = FIELD_LINE.find(line)
                 if (fieldMatch != null) {
                     val fieldLabel = fieldMatch.groupValues[1].trim()
                     val hexValue = fieldMatch.groupValues[2].replace(" ", "").replace(":", "")
                     val field = fieldForLabel(fieldLabel)
-                    if (field != -1 && fields[field] == null) {
-                        if (hexValue.length >= MIN_HEX_LENGTH) {
-                            fields[field] = hexValue
-                            counted++
-                            if (counted == 6) {
-                                completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
-                            }
+                    if (field != -1 && fields[field] == null &&
+                        hexValue.length == expectedHexLength(field)
+                    ) {
+                        fields[field] = hexValue
+                        counted++
+                        if (counted == 6) {
+                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
                         }
                     }
                     continue
                 }
 
                 // Captura opcional M5/M7 para modo 3 (RTL819x)
-                if (line.startsWith(M5_PREFIX)) {
+                if (line.contains(M5_PREFIX)) {
                     m5 = ENCR_VALUE.find(line)?.groupValues?.get(1)
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     m5m7Notified = maybeNotifyM5M7(onM5M7, m5m7Notified, bssid, m5, m7)
                     continue
                 }
-                if (line.startsWith(M7_PREFIX)) {
+                if (line.contains(M7_PREFIX)) {
                     m7 = ENCR_VALUE.find(line)?.groupValues?.get(1)
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     m5m7Notified = maybeNotifyM5M7(onM5M7, m5m7Notified, bssid, m5, m7)
@@ -211,6 +337,25 @@ object M3Parser {
         } else {
             M3Capture.Incomplete(counted, missingFields(fields))
         }
+    }
+
+    /**
+     * Traduce los códigos de error de configuración WPS (wps_defs.h) a un
+     * mensaje accionable para la UI.
+     */
+    private fun configErrorReason(code: Int?): String = when (code) {
+        5 -> "Señal WPS demasiado débil. Acerca el teléfono al AP y reintenta."
+        7 -> "El AP rechazó la asociación WPS. Comprueba que el WPS esté activo."
+        8 -> "El AP no obtuvo respuesta DHCP durante la provisión WPS."
+        11 -> "El AP no pudo conectar con el registrador WPS."
+        13 -> "El AP sospecha un intento de ataque (Rogue Suspected) y bloqueó la sesión."
+        14 -> "El AP está ocupado con otra sesión WPS. Espera y reintenta."
+        15 -> "WPS bloqueado en el AP (Setup Locked). " +
+            "Desbloquea el WPS desde el panel del router o reinícialo, y reintenta."
+        16 -> "La sesión WPS agotó el tiempo de espera."
+        17 -> "La sesión de registro WPS expiró. Reintenta."
+        18 -> "El AP rechazó la autenticación del PIN (Device Password Auth Failure)."
+        else -> "El AP terminó la negociación WPS con error de configuración $code."
     }
 
     private fun fieldForLabel(label: String): Int {
@@ -239,7 +384,7 @@ object M3Parser {
                 else -> -1
             }
             if (field == -1 || fields[field] != null) continue
-            if (value.length < MIN_HEX_LENGTH) continue
+            if (value.length != expectedHexLength(field)) continue
             fields[field] = value
             onCaptured()
         }

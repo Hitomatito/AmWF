@@ -7,11 +7,13 @@
 
 package com.hitomatito.amwf
 
+import android.content.Context
 import com.hitomatito.amwf.ShellExecutor.execNoRoot
 import com.hitomatito.amwf.ShellExecutor.execRoot
 import com.hitomatito.amwf.ShellExecutor.logD
 import com.hitomatito.amwf.ShellExecutor.logE
 import com.hitomatito.amwf.ShellExecutor.logW
+import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import java.io.File
 
 /**
@@ -102,7 +104,7 @@ data class DeviceInfo(
     val conModePath: String?,
     val rootInfo: RootInfo,
     val capabilities: CapabilitiesInfo,
-    val pixieDustBinaries: PixieDustBinariesInfo = PixieDustBinariesInfo()
+    val pixieDustBinaries: PixieDustBinariesInfo
 )
 
 data class CapabilitiesInfo(
@@ -113,20 +115,16 @@ data class CapabilitiesInfo(
 )
 
 /**
- * Información sobre los binarios de Pixie Dust disponibles en el dispositivo.
- * Sigue el mismo patrón de detección que usa la app para otras herramientas
- * de compatibilidad (búsqueda en rutas del sistema y verificación de existencia).
+ * Información sobre los binarios de Pixie Dust que faltan en el dispositivo.
+ * La detección la realiza [NativeBinaries] (assets copiados a filesDir y
+ * rutas del sistema), de modo que la vista de compatibilidad y el ataque
+ * real comparten la misma fuente de verdad.
  */
 data class PixieDustBinariesInfo(
-    val wpaSupplicantAvailable: Boolean = false,
-    val wpaSupplicantPath: String? = null,
-    val wpaCliAvailable: Boolean = false,
-    val wpaCliPath: String? = null,
-    val pixiewpsAvailable: Boolean = false,
-    val pixiewpsPath: String? = null
+    val missing: List<String> = emptyList()
 ) {
     val allAvailable: Boolean
-        get() = wpaSupplicantAvailable && wpaCliAvailable && pixiewpsAvailable
+        get() = missing.isEmpty()
 }
 
 data class RootInfo(
@@ -169,7 +167,7 @@ enum class Severity {
     INFO
 }
 
-class DeviceCompatibilityChecker {
+class DeviceCompatibilityChecker(private val context: Context) {
 
     companion object {
         private const val TAG = "CompatChecker"
@@ -235,21 +233,6 @@ class DeviceCompatibilityChecker {
             "msmnile" to "Snapdragon 855/865/870 (CPU Part: 0x072)",
             "cpu7pro" to "Snapdragon 870 (CPU7 Pro)",
             "saipan" to "Snapdragon 7c Gen 2 (Saipan)"
-        )
-
-        // Rutas del sistema donde buscar binarios de Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
-        private val PIXIE_DUST_BINARY_PATHS = listOf(
-            "/system/bin",
-            "/vendor/bin",
-            "/system/xbin",
-            "/odm/bin"
-        )
-
-        // Nombres de binarios de Pixie Dust a buscar en el sistema
-        private val PIXIE_DUST_BINARIES = listOf(
-            "wpa_supplicant",
-            "wpa_cli",
-            "pixiewps"
         )
 
         private val SNAPDRAGON_CPU_PARTS = mapOf(
@@ -389,17 +372,20 @@ class DeviceCompatibilityChecker {
         }
 
         // Verificar binarios de Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
-        if (!deviceInfo.pixieDustBinaries.allAvailable) {
-            val missing = mutableListOf<String>()
-            if (!deviceInfo.pixieDustBinaries.wpaSupplicantAvailable) missing.add("wpa_supplicant")
-            if (!deviceInfo.pixieDustBinaries.wpaCliAvailable) missing.add("wpa_cli")
-            if (!deviceInfo.pixieDustBinaries.pixiewpsAvailable) missing.add("pixiewps")
+        val missingPixieBinaries = deviceInfo.pixieDustBinaries.missing
+        if (missingPixieBinaries.isNotEmpty()) {
             issues.add(CompatibilityIssue(
                 type = IssueType.PIXIE_DUST,
                 severity = Severity.WARNING,
-                message = "Binarios de Pixie Dust faltantes: ${missing.joinToString(", ")}",
-                suggestion = "Empaqueta los binarios en assets/wifi/ o instálalos en el sistema. " +
-                    "Consulta BINARIES_SETUP.md para instrucciones de compilación."
+                message = "Binarios de Pixie Dust faltantes: ${missingPixieBinaries.joinToString(", ")}",
+                suggestion = if (NativeBinaries.archSuffix() == "_32") {
+                    "Pixie Dust requiere un dispositivo arm64-v8a: el supplicant de " +
+                        "32 bits no está soportado y no se puede empaquetar."
+                } else {
+                    "Empaqueta los binarios en assets/wifi/. El wpa_supplicant del " +
+                        "sistema no sirve para Pixie Dust porque trunca los hexdump WPS. " +
+                        "Consulta BINARIES_SETUP.md para instrucciones de compilación."
+                }
             ))
         }
 
@@ -576,47 +562,18 @@ class DeviceCompatibilityChecker {
     }
 
     /**
-     * Detecta los binarios de Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
-     * siguiendo el mismo patrón que usa la app para buscar otras herramientas
-     * de compatibilidad: primero intenta con `command -v` vía shell root, y
-     * como respaldo busca en las rutas típicas de binarios en Android.
+     * Detecta los binarios de Pixie Dust delegando en [NativeBinaries], la
+     * misma fuente de verdad que usa [com.hitomatito.amwf.wifi.pixiedust.PixieDustRunner]
+     * al ejecutar el ataque. Primero copia los assets empaquetados a filesDir
+     * (best effort) y después resuelve cada binario en filesDir o en el sistema.
      */
     private fun detectPixieDustBinaries(): PixieDustBinariesInfo {
-        val wpaSupplicantPath = findBinaryInSystem("wpa_supplicant")
-        val wpaCliPath = findBinaryInSystem("wpa_cli")
-        val pixiewpsPath = findBinaryInSystem("pixiewps")
-
-        return PixieDustBinariesInfo(
-            wpaSupplicantAvailable = wpaSupplicantPath != null,
-            wpaSupplicantPath = wpaSupplicantPath,
-            wpaCliAvailable = wpaCliPath != null,
-            wpaCliPath = wpaCliPath,
-            pixiewpsAvailable = pixiewpsPath != null,
-            pixiewpsPath = pixiewpsPath
-        )
-    }
-
-    /**
-     * Busca un binario en las rutas del sistema, usando primero `command -v`
-     * vía shell root (que respeta el PATH raíz) y como respaldo verificando
-     * directamente en las rutas típicas de Android.
-     */
-    private fun findBinaryInSystem(binaryName: String): String? {
-        // Intento 1: usar command -v vía root (respeta PATH del sistema)
-        val cmdResult = execRoot("command -v $binaryName 2>/dev/null")
-        if (cmdResult.output.isNotBlank()) {
-            return cmdResult.output.trim().takeIf { it.isNotEmpty() }
+        try {
+            NativeBinaries.ensure(context)
+        } catch (e: Exception) {
+            logD(TAG, "ensure() de binarios nativos falló: ${e.message}")
         }
-
-        // Intento 2: buscar directamente en rutas típicas del sistema Android
-        for (path in PIXIE_DUST_BINARY_PATHS) {
-            val file = File("$path/$binaryName")
-            if (file.exists()) {
-                return file.absolutePath
-            }
-        }
-
-        return null
+        return PixieDustBinariesInfo(missing = NativeBinaries.missingCriticalBinaries(context))
     }
 
     /**

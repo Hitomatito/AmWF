@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/sheetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <View
+        android:layout_width="34dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_sheet_handle" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/screen_padding"
+        android:paddingTop="10dp"
+        android:paddingEnd="8dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/pixie_sheet_title"
+                android:textAppearance="@style/TextAppearance.AmWF.ScreenTitle" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/pixie_sheet_subtitle"
+                android:textAppearance="@style/TextAppearance.AmWF.BodySmall" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRescanSheet"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="2dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="14dp"
+            android:text="@string/pixie_sheet_rescan_short"
+            android:textSize="13sp"
+            app:cornerRadius="20dp"
+            app:icon="@drawable/ic_search"
+            app:iconGravity="textStart"
+            app:iconPadding="6dp"
+            app:iconSize="18dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCloseSheet"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:contentDescription="@string/pixie_sheet_close"
+            app:icon="@drawable/ic_close_circle"
+            app:iconGravity="textStart"
+            app:iconSize="22dp"
+            app:iconTint="@color/md_theme_onSurfaceVariant" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/screen_padding"
+        android:paddingTop="12dp"
+        android:paddingEnd="@dimen/screen_padding">
+
+        <TextView
+            android:id="@+id/tvNetworksCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/md_theme_onPrimaryContainer"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="12 redes · 3 auditables"
+            tools:visibility="visible" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilSearch"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="@string/pixie_search_hint"
+            android:visibility="gone"
+            app:boxStrokeColor="@color/md_theme_outline"
+            app:endIconMode="clear_text"
+            app:endIconTint="@color/md_theme_onSurfaceVariant"
+            app:hintTextColor="@color/md_theme_onSurfaceVariant"
+            app:startIconDrawable="@drawable/ic_search"
+            app:startIconTint="@color/md_theme_onSurfaceVariant"
+            tools:visibility="visible">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/md_theme_onSurface"
+                android:textSize="15sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <HorizontalScrollView
+            android:id="@+id/filterScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:clipToPadding="false"
+            android:scrollbars="none"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupFilters"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:chipSpacingHorizontal="8dp"
+                app:selectionRequired="true"
+                app:singleLine="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAll"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:checked="true"
+                    android:text="@string/pixie_filter_all"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAuditable"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_filter_auditable"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBand24"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_band_24ghz"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipBand5"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_band_5ghz"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipDualBand"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_filter_dual"
+                    app:checkedIconVisible="false" />
+            </com.google.android.material.chip.ChipGroup>
+        </HorizontalScrollView>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/listContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:minHeight="220dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvNetworks"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="ifContentScrolls"
+            android:paddingStart="@dimen/screen_padding"
+            android:paddingTop="4dp"
+            android:paddingEnd="@dimen/screen_padding"
+            android:paddingBottom="8dp"
+            android:scrollbars="vertical"
+            android:visibility="gone"
+            tools:listitem="@layout/item_pixie_network"
+            tools:visibility="visible" />
+
+        <LinearLayout
+            android:id="@+id/layoutNetworksEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_step_badge"
+                android:backgroundTint="@color/md_theme_surfaceVariant">
+
+                <ImageView
+                    android:id="@+id/ivEmptyIcon"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_wifi"
+                    app:tint="@color/md_theme_outline" />
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/pbScanEmpty"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_gravity="center"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    app:indicatorColor="@color/md_theme_primary"
+                    app:trackThickness="3dp" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvEmptyTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="@string/pixie_empty_idle_title"
+                android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                android:textColor="@color/md_theme_onSurface" />
+
+            <TextView
+                android:id="@+id/tvEmptyMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:text="@string/pixie_empty_idle_message"
+                android:textAppearance="@style/TextAppearance.AmWF.BodySmall" />
+
+            <!-- Salida clara cuando no hay resultados o tras un fallo. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnScanEmpty"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                android:text="@string/pixie_scan_networks"
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_wifi"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:drawablePadding="8dp"
+        android:paddingStart="@dimen/screen_padding"
+        android:paddingTop="8dp"
+        android:paddingEnd="@dimen/screen_padding"
+        android:paddingBottom="14dp"
+        android:text="@string/pixie_wps_hint"
+        android:textAppearance="@style/TextAppearance.AmWF.BodySmall"
+        app:drawableStartCompat="@drawable/ic_info"
+        app:drawableTint="@color/md_theme_outline" />
+</LinearLayout>

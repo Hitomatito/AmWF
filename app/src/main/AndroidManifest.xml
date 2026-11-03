@@ -5,7 +5,15 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- startScan()/getScanResults() exigen ubicación precisa en todas las
+         versiones, incluido Android 13+ con NEARBY_WIFI_DEVICES concedido. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Android 13+ exige NEARBY_WIFI_DEVICES para las APIs WiFi modernas.
+         neverForLocation: la app no deriva ubicación de los resultados del escaneo. -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
 
     <application
         android:allowBackup="false"

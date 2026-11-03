@@ -7,13 +7,17 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,8 +31,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import com.hitomatito.amwf.R
-import com.hitomatito.amwf.ShellExecutor
-
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 /**
  * Estado de la pantalla de auditoría Pixie Dust.
  */
@@ -37,9 +42,15 @@ data class PixieDustUiState(
     val isAttacking: Boolean = false,
     val networks: List<PixieDustNetwork> = emptyList(),
     val selectedNetwork: PixieDustNetwork? = null,
+    val searchQuery: String = "",
+    val hasScanned: Boolean = false,
     val result: PixieDustResult? = null,
     val consoleLines: List<String> = emptyList(),
     val errorMessage: String? = null,
+    val attackStage: PixieDustStage? = null,
+    val attackStartedAt: Long? = null,
+    val attackFinishedAt: Long? = null,
+    val attackCancelled: Boolean = false,
     val selectedInterface: String = "wlan0",
     val interfacesAvailable: Boolean = false
 ) {
@@ -75,7 +86,6 @@ data class PixieDustNetwork(
  */
 sealed class PixieDustEvent {
     data class ShowMessage(val message: String) : PixieDustEvent()
-    data class AttackFinished(val success: Boolean, val message: String) : PixieDustEvent()
     data class CopyToClipboard(val text: String) : PixieDustEvent()
 }
 
@@ -87,15 +97,20 @@ sealed class PixieDustEvent {
  * ejecuta en [ioDispatcher] (inyectado) vía [viewModelScope].
  *
  * No ejecuta procesos de shell directamente: toda la ejecución root está encapsulada en
- * [PixieDustRunner] y [ShellExecutor], evitando Feature Envy.
+ * [PixieDustRunner] y el ejecutor de shell de la app, evitando Feature Envy.
  */
-class PixieDustViewModel(
+class PixieDustViewModel @JvmOverloads constructor(
     application: Application,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AndroidViewModel(application) {
 
     private val TAG = "PixieDustViewModel"
     private val appContext: Context = application.applicationContext
+
+    // SimpleDateFormat no es thread-safe: el runner registra líneas desde
+    // varios hilos (IO y lector del supplicant).
+    private val consoleTimeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private val consoleTimeLock = Any()
 
     // --- Estado persistente (StateFlow, explicit backing field) ---
     private val _uiState = MutableStateFlow(PixieDustUiState())
@@ -108,13 +123,19 @@ class PixieDustViewModel(
     private val wifiManager: WifiManager =
         appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
+    private val connectivityManager: ConnectivityManager =
+        appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
     private var attackJob: Job? = null
     private var scanJob: Job? = null
     private var runner: PixieDustRunner? = null
 
-    init {
-        loadInterfaces()
-    }
+    /**
+     * true mientras se están matando procesos/restaurando el WiFi tras un
+     * ataque detenido. Bloquea nuevos ataques hasta que la limpieza termine:
+     * dos runners concurrentes se matarían los procesos entre sí.
+     */
+    private var cleanupInProgress = false
 
     // ========================================================================
     // Interfaces
@@ -122,33 +143,46 @@ class PixieDustViewModel(
 
     fun loadInterfaces() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isScanning = true, errorMessage = null) }
             try {
                 val ifaces = availableWifiInterfaces()
                 val state = _uiState.value
                 _uiState.value = state.copy(
-                    isScanning = false,
                     interfacesAvailable = ifaces.isNotEmpty(),
                     selectedInterface = if (ifaces.isNotEmpty()) ifaces.first() else state.selectedInterface
                 )
                 addConsoleLine("Interfaces disponibles: ${ifaces.joinToString(", ")}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load interfaces", e)
-                _uiState.update { it.copy(isScanning = false, errorMessage = e.message) }
+                _uiState.update { it.copy(errorMessage = e.message) }
             }
         }
     }
 
     private suspend fun availableWifiInterfaces(): List<String> = withContext(ioDispatcher) {
-        val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
-        val result = mutableListOf<String>()
-        for (iface in candidates) {
-            val res = ShellExecutor.execRoot("ip link show $iface 2>/dev/null")
-            if (res.exitCode == 0 && res.output.isNotEmpty()) {
-                result.add(iface)
+        // Detección sin root: pedir `su` nada más abrir la pantalla hacía que
+        // el gestor de root apareciera antes de que el usuario hiciera nada.
+        // Si hay una red WiFi activa, LinkProperties expone su interfaz; si no,
+        // usamos el nombre estándar wlan0.
+        val interfaces = mutableListOf<String>()
+        try {
+            val network = connectivityManager.activeNetwork
+            if (network != null) {
+                val capabilities = connectivityManager.getNetworkCapabilities(network)
+                if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
+                    val interfaceName =
+                        connectivityManager.getLinkProperties(network)?.interfaceName
+                    if (!interfaceName.isNullOrBlank()) {
+                        interfaces.add(interfaceName)
+                    }
+                }
             }
+        } catch (_: Exception) {
+            // Sin red WiFi activa: se usa el fallback de abajo.
         }
-        result
+        if (interfaces.isEmpty()) {
+            interfaces.add("wlan0")
+        }
+        interfaces.distinct()
     }
 
     // ========================================================================
@@ -156,59 +190,133 @@ class PixieDustViewModel(
     // ========================================================================
 
     fun scanNetworks() {
-        if (_uiState.value.isScanning || _uiState.value.isAttacking) return
+        if (_uiState.value.isScanning || _uiState.value.isAttacking || cleanupInProgress) return
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isScanning = true, networks = emptyList(), errorMessage = null) }
+        // Se marca el estado antes de lanzar la corrutina para que un doble
+        // toque no arranque dos escaneos simultáneos.
+        _uiState.update {
+            it.copy(
+                isScanning = true,
+                networks = emptyList(),
+                selectedNetwork = null,
+                searchQuery = "",
+                hasScanned = false,
+                result = null,
+                errorMessage = null,
+                consoleLines = emptyList(),
+                attackStage = null,
+                attackStartedAt = null,
+                attackFinishedAt = null,
+                attackCancelled = false
+            )
+        }
+        scanJob = viewModelScope.launch {
             addConsoleLine("Iniciando escaneo de redes WiFi...")
             try {
                 val networks = withContext(ioDispatcher) {
                     scanWifiNetworks()
                 }
-                val state = _uiState.value
-                _uiState.value = state.copy(
-                    isScanning = false,
-                    networks = networks
+                // Las redes auditables primero y, dentro de cada grupo, las de
+                // mayor señal: el usuario ve antes lo que puede seleccionar.
+                val sorted = networks.sortedWith(
+                    compareByDescending<PixieDustNetwork> { it.isAuditable() }
+                        .thenByDescending { it.level }
                 )
-                addConsoleLine("Escaneo completado: ${networks.size} red(es) encontrada(s).")
+                _uiState.update {
+                    it.copy(isScanning = false, networks = sorted, hasScanned = true)
+                }
+                addConsoleLine("Escaneo completado: ${sorted.size} red(es) encontrada(s).")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Scan failed", e)
-                _uiState.update { it.copy(isScanning = false, errorMessage = "Escaneo falló: ${e.message}") }
+                _uiState.update {
+                    it.copy(
+                        isScanning = false,
+                        hasScanned = true,
+                        errorMessage = appContext.getString(
+                            R.string.pixie_scan_failed_detail,
+                            e.message ?: appContext.getString(R.string.pixie_scan_failed)
+                        )
+                    )
+                }
             }
         }
     }
 
+    /** Actualiza el filtro de búsqueda de la lista de redes. */
+    fun setSearchQuery(query: String) {
+        if (_uiState.value.searchQuery == query) return
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    // WifiScanPermissions valida ubicación precisa en todas las versiones y
+    // NEARBY_WIFI_DEVICES en Android 13+. Lint no puede inferirlo del helper.
+    @SuppressLint("MissingPermission")
     private suspend fun scanWifiNetworks(): List<PixieDustNetwork> = withContext(ioDispatcher) {
-        if (!wifiManager.isWifiEnabled) {
-            // Intentar activar WiFi para escanear (requiere CHANGE_WIFI_STATE).
-            wifiManager.setWifiEnabled(true)
-            delay(2000)
+        if (!WifiScanPermissions.hasRuntimePermissions(appContext)) {
+            throw SecurityException(
+                appContext.getString(R.string.pixie_location_permission_required)
+            )
         }
-        val success = wifiManager.startScan()
-        if (!success) {
-            throw IllegalStateException("No se pudo iniciar el escaneo WiFi")
+        if (!WifiScanPermissions.isLocationServicesEnabled(appContext)) {
+            throw IllegalStateException(
+                appContext.getString(R.string.pixie_location_services_required)
+            )
+        }
+        if (!wifiManager.isWifiEnabled) {
+            // En Android 10+ una app normal no puede encender el WiFi
+            // (setWifiEnabled es un no-op). Se pide al usuario que lo active
+            // en lugar de fallar más tarde con un error críptico.
+            throw IllegalStateException(
+                appContext.getString(R.string.pixie_wifi_disabled)
+            )
+        }
+        if (!wifiManager.startScan()) {
+            // startScan() devuelve false si hay un escaneo en curso o si el
+            // sistema lo limita. Si hay resultados cacheados, se usan; si no,
+            // se informa del fallo.
+            val cached = wifiManager.scanResults
+            if (cached.isEmpty()) {
+                throw IllegalStateException(
+                    appContext.getString(R.string.pixie_scan_failed)
+                )
+            }
+            return@withContext cached.map { it.toPixieDustNetwork() }
         }
         delay(3000) // Esperar resultados
         val results = wifiManager.scanResults
-        results.mapNotNull { result ->
-            val caps = result.capabilities
-            val wpsCapable = caps.contains("WPS", ignoreCase = true)
-            val wpsLocked = caps.contains("WPS_LOCKED", ignoreCase = true) ||
-                (caps.contains("[WPS]", ignoreCase = true) && caps.contains("LOCKED", ignoreCase = true))
-            PixieDustNetwork(
-                ssid = result.SSID,
-                bssid = result.BSSID,
-                frequency = result.frequency,
-                level = result.level,
-                wpsCapable = wpsCapable,
-                wpsLocked = wpsLocked,
-                capabilities = caps
-            )
-        }
+        results.map { it.toPixieDustNetwork() }
+    }
+
+    private fun ScanResult.toPixieDustNetwork(): PixieDustNetwork {
+        val caps = capabilities
+        val wpsCapable = caps.contains("WPS", ignoreCase = true)
+        val wpsLocked = caps.contains("WPS_LOCKED", ignoreCase = true) ||
+            (caps.contains("[WPS]", ignoreCase = true) && caps.contains("LOCKED", ignoreCase = true))
+        return PixieDustNetwork(
+            ssid = SSID,
+            bssid = BSSID,
+            frequency = frequency,
+            level = level,
+            wpsCapable = wpsCapable,
+            wpsLocked = wpsLocked,
+            capabilities = caps
+        )
     }
 
     fun selectNetwork(network: PixieDustNetwork) {
-        _uiState.update { it.copy(selectedNetwork = network, errorMessage = null, result = null) }
+        _uiState.update {
+            it.copy(
+                selectedNetwork = network,
+                errorMessage = null,
+                result = null,
+                attackStage = null,
+                attackStartedAt = null,
+                attackFinishedAt = null,
+                attackCancelled = false
+            )
+        }
         addConsoleLine("Red seleccionada: ${network.displayName} (${network.bssid})")
     }
 
@@ -222,53 +330,160 @@ class PixieDustViewModel(
             _uiState.update { it.copy(errorMessage = appContext.getString(R.string.pixie_wps_required)) }
             return
         }
-        if (_uiState.value.isAttacking) return
+        if (_uiState.value.isAttacking || _uiState.value.isScanning || cleanupInProgress) return
 
-        runner = PixieDustRunner(appContext, ioDispatcher)
+        // La consola muestra los hitos del ataque; las líneas crudas del
+        // supplicant se filtran para no inundar la UI (siguen en logcat).
+        val activeRunner = PixieDustRunner(
+            context = appContext,
+            ioDispatcher = ioDispatcher,
+            onLog = { line ->
+                if (!line.startsWith("[supplicant]")) addConsoleLine(line)
+            },
+            onStage = { newStage ->
+                // La etapa también puede llegar desde cleanup() al cancelar.
+                _uiState.update { if (it.isAttacking) it.copy(attackStage = newStage) else it }
+            }
+        )
+        runner = activeRunner
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAttacking = true, result = null, errorMessage = null) }
+        // Marcar el estado antes de lanzar la corrutina: un doble toque no
+        // debe crear dos runners que se maten los procesos entre sí.
+        _uiState.update {
+            it.copy(
+                isAttacking = true,
+                result = null,
+                errorMessage = null,
+                consoleLines = emptyList(),
+                attackStage = PixieDustStage.PREPARING,
+                attackStartedAt = System.currentTimeMillis(),
+                attackFinishedAt = null,
+                attackCancelled = false
+            )
+        }
+
+        attackJob = viewModelScope.launch {
             addConsoleLine("Iniciando auditoría Pixie Dust contra ${network.displayName}...")
             addConsoleLine("BSSID: ${network.bssid} | Interfaz: ${_uiState.value.selectedInterface}")
 
             try {
-                val result = runner!!.runAttack(
+                val result = activeRunner.runAttack(
                     bssid = network.bssid,
                     interfaceName = _uiState.value.selectedInterface,
-                    ssid = network.displayName.takeIf { it != "<hidden>" },
+                    ssid = network.ssid.takeIf { it.isNotBlank() },
                     freqMHz = network.frequency,
                     disableWifiBeforeAttack = disableWifi
                 )
 
-                _uiState.update { it.copy(isAttacking = false, result = result) }
+                val finishedAt = System.currentTimeMillis()
+                _uiState.update {
+                    it.copy(
+                        isAttacking = false,
+                        result = result,
+                        attackStage = PixieDustStage.COMPLETED,
+                        attackFinishedAt = finishedAt
+                    )
+                }
                 when (result) {
                     is PixieDustResult.Success -> {
                         addConsoleLine("[+] Auditoría exitosa — PIN: ${result.wpsPin ?: "N/A"}")
                         result.wpaPsk?.let { addConsoleLine("[+] Clave WPA: $it") }
-                        emitEvent(PixieDustEvent.AttackFinished(true,
-                            "PIN WPS: ${result.wpsPin}\n${result.wpaPsk?.let { "Clave WPA: $it" } ?: ""}"))
                     }
                     is PixieDustResult.Failure -> {
                         addConsoleLine("[-] Auditoría falló: ${result.reason}")
-                        emitEvent(PixieDustEvent.AttackFinished(false, result.reason))
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Attack failed", e)
-                _uiState.update {
-                    it.copy(isAttacking = false, errorMessage = "Error: ${e.message}")
-                }
                 addConsoleLine("[-] Error: ${e.message}")
+                _uiState.update {
+                    it.copy(
+                        isAttacking = false,
+                        result = PixieDustResult.Failure(
+                            bssid = network.bssid,
+                            reason = "Error: ${e.message}",
+                            rawOutput = ""
+                        ),
+                        attackStage = PixieDustStage.COMPLETED,
+                        attackFinishedAt = System.currentTimeMillis()
+                    )
+                }
+            } finally {
+                if (runner === activeRunner) runner = null
             }
         }
     }
 
     fun stopAttack() {
+        if (cleanupInProgress) return
+        val wasAttacking = _uiState.value.isAttacking
+        val wasScanning = _uiState.value.isScanning
+        val jobToCancel = attackJob
+        val runnerToCancel = runner
+        attackJob = null
+        scanJob?.cancel()
+        scanJob = null
+
+        if (wasAttacking && jobToCancel != null) {
+            // La limpieza ejecuta `su` y puede tardar varios segundos. Se
+            // mantiene isAttacking hasta que termine para que no se pueda
+            // lanzar otro ataque mientras el anterior aún mata procesos.
+            // `runner` se conserva hasta el final para que onCleared() también
+            // pueda cancelarlo si la pantalla se cierra durante la limpieza.
+            cleanupInProgress = true
+            addConsoleLine("[!] Deteniendo auditoría y limpiando procesos...")
+            jobToCancel.cancel()
+            viewModelScope.launch {
+                try {
+                    withContext(ioDispatcher) { runnerToCancel?.cancel() }
+                    jobToCancel.join()
+                } finally {
+                    if (runner === runnerToCancel) runner = null
+                    cleanupInProgress = false
+                    _uiState.update {
+                        if (wasAttacking) {
+                            it.copy(
+                                isAttacking = false,
+                                isScanning = false,
+                                attackStage = it.attackStage ?: PixieDustStage.RESTORING,
+                                attackFinishedAt = System.currentTimeMillis(),
+                                attackCancelled = true
+                            )
+                        } else {
+                            it.copy(isAttacking = false, isScanning = false)
+                        }
+                    }
+                }
+                addConsoleLine("[!] Detenido por el usuario")
+            }
+        } else {
+            runner = null
+            _uiState.update { it.copy(isAttacking = false, isScanning = false) }
+            if (wasScanning) addConsoleLine("[!] Detenido por el usuario")
+        }
+    }
+
+    private fun cancelRunnerInBackground(target: PixieDustRunner?) {
+        if (target == null) return
+        Thread { target.cancel() }.apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    override fun onCleared() {
         attackJob?.cancel()
         scanJob?.cancel()
-        runner?.cancel(false) { addConsoleLine(it) }
-        _uiState.update { it.copy(isAttacking = false, isScanning = false) }
-        addConsoleLine("[!] Detenido por el usuario")
+        val runnerToCancel = runner
+        runner = null
+        attackJob = null
+        scanJob = null
+        // El ViewModel desaparece: la limpieza no puede esperar en
+        // viewModelScope (ya cancelado), así que se hace en un hilo aparte.
+        cancelRunnerInBackground(runnerToCancel)
+        super.onCleared()
     }
 
     // ========================================================================
@@ -276,7 +491,10 @@ class PixieDustViewModel(
     // ========================================================================
 
     fun addConsoleLine(line: String) {
-        _uiState.update { it.copyWithConsole(line) }
+        val stamp = synchronized(consoleTimeLock) {
+            consoleTimeFormat.format(Date())
+        }
+        _uiState.update { it.copyWithConsole("$stamp  $line") }
     }
 
     fun clearConsole() {
@@ -284,7 +502,16 @@ class PixieDustViewModel(
     }
 
     fun clearResult() {
-        _uiState.update { it.copy(result = null, errorMessage = null) }
+        _uiState.update {
+            it.copy(
+                result = null,
+                errorMessage = null,
+                attackStage = null,
+                attackStartedAt = null,
+                attackFinishedAt = null,
+                attackCancelled = false
+            )
+        }
     }
 
     // ========================================================================

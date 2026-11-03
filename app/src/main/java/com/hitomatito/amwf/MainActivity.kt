@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowPixieDustBinaries: View
 
     private val monitorManager by lazy { MonitorModeManager() }
-    private val compatibilityChecker by lazy { DeviceCompatibilityChecker() }
+    private val compatibilityChecker by lazy { DeviceCompatibilityChecker(applicationContext) }
     private val diagnosticsCollector by lazy { DiagnosticsCollector() }
     
     private var currentMode = MonitorMode.UNKNOWN
@@ -160,7 +160,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnPixieDust.setOnClickListener {
-            startActivity(Intent(this, PixieDustActivity::class.java))
+            // El botón debe abrir la auditoría con un solo toque. Solo se
+            // bloquea si la comprobación ya confirmó que faltan binarios;
+            // mientras está en curso (o si falló), se abre la pantalla y ella
+            // muestra el error concreto al intentar atacar.
+            val missing = cachedCompatResult?.deviceInfo?.pixieDustBinaries?.missing
+            if (compatCheckInProgress || missing.isNullOrEmpty()) {
+                startActivity(Intent(this, PixieDustActivity::class.java))
+            } else {
+                Toast.makeText(
+                    this,
+                    getString(
+                        R.string.pixie_binaries_missing_detail,
+                        missing.joinToString(", ")
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -315,30 +331,19 @@ class MainActivity : AppCompatActivity() {
 
         // Mostrar estado de los binarios Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
         val pdb = result.deviceInfo.pixieDustBinaries
-        val pdbText = when {
-            pdb.allAvailable -> getString(R.string.pixie_binaries_available)
-            pdb.wpaSupplicantAvailable || pdb.wpaCliAvailable || pdb.pixiewpsAvailable -> getString(R.string.pixie_binaries_partial)
-            else -> getString(R.string.pixie_binaries_missing)
-        }
-        val pdbPassed = pdb.allAvailable
-        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdbPassed)
-
-        // Habilitar/deshabilitar el botón Pixie Dust según disponibilidad de binarios
-        btnPixieDust.isEnabled = pdb.allAvailable
-        btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
-        if (!pdb.allAvailable) {
-            btnPixieDust.setOnClickListener {
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.pixie_binaries_missing),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
+        val pdbText = if (pdb.allAvailable) {
+            getString(R.string.pixie_binaries_available)
         } else {
-            btnPixieDust.setOnClickListener {
-                startActivity(Intent(this, PixieDustActivity::class.java))
-            }
+            getString(
+                R.string.pixie_binaries_missing_names,
+                pdb.missing.joinToString(", ")
+            )
         }
+        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
+
+        // El botón permanece siempre clicable: el listener único muestra el
+        // detalle de los binarios que faltan en lugar de fallar en silencio.
+        btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
     }
 
     private fun updateInfoRow(row: View, label: String, value: String, passed: Boolean) {
