@@ -299,6 +299,7 @@ class PixieDustRunner(
                     iface = interfaceName,
                     ssid = targetSsid,
                     pin = wpsPin,
+                    rawOutput = rawOutput,
                     log = ::log
                 )
                 if (wpaPsk != null) {
@@ -738,6 +739,7 @@ class PixieDustRunner(
         iface: String,
         ssid: String,
         pin: String,
+        rawOutput: StringBuilder,
         log: (String) -> Unit
     ): String? = withTimeoutOrNull(PSK_EXTRACT_TIMEOUT_MS) {
         var process: Process? = null
@@ -758,7 +760,15 @@ class PixieDustRunner(
             val suppCmd = buildSupplicantCommand(iface, ctrlDir)
             val running = Runtime.getRuntime().exec(arrayOf("su", "-c", suppCmd))
             process = running
-            drainLines(running.inputStream, onLine = { supLine -> log("[supplicant] $supLine") })
+            drainLines(
+                running.inputStream,
+                onLine = { supLine ->
+                    log("[supplicant] $supLine")
+                    // Igual que en la captura M3: el volcado crudo también va
+                    // al log de auditoría, no solo a la consola.
+                    rawOutput.append(supLine).append('\n')
+                }
+            )
 
             val socketPath = "$ctrlDir/$iface"
             if (!waitForSocket(socketPath, SOCKET_WAIT_MS, log)) {
