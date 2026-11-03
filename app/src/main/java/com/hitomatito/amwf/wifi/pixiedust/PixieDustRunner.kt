@@ -76,6 +76,7 @@ class PixieDustRunner(
     private val PSK_EXTRACT_TIMEOUT_MS = 45_000L
     private val PSK_WAIT_MS = 25_000L
     private val PIXIEWPS_TIMEOUT_MS = 60_000L
+    private val SUPPLICANT_WATCHDOG_SECONDS = 110
 
     // PIN conocido usado para el registro wps_reg (provoca el intercambio M3).
     private val WPS_REG_PIN_DEFAULT = "12345670"
@@ -416,12 +417,22 @@ class PixieDustRunner(
         // el motivo llega por stderr. Sin esto, el hilo lector solo ve stdout y
         // el arranque fallido queda invisible en la consola de la app.
         return "export LD_LIBRARY_PATH=$dir; $supplicantPath -d -Dnl80211 " +
-                "-i $iface -c$conf -K -O$ctrlDir 2>&1 & pid=\$!; " +
-                "start=\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null); " +
-                "( sleep 110; [ -n \"\$start\" ] && " +
-                "[ \"\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null)\" = \"\$start\" ] && " +
-                "kill \$pid 2>/dev/null ) >/dev/null 2>&1 & wait \$pid"
+                "-i $iface -c$conf -K -O$ctrlDir 2>&1 & " +
+                pidWatchdogTail(SUPPLICANT_WATCHDOG_SECONDS)
     }
+
+    /**
+     * Cola de shell que espera a `$pid` y lo mata tras [timeoutSeconds], pero
+     * solo si su starttime de /proc/<pid>/stat (campo 22) no cambió. Así no
+     * puede terminar un proceso ajeno si el PID se reutiliza durante la espera.
+     * La salida del watchdog va a /dev/null para no mantener abierto el pipe
+     * del proceso vigilado.
+     */
+    private fun pidWatchdogTail(timeoutSeconds: Int): String =
+        "pid=\$!; start=\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null); " +
+            "( sleep $timeoutSeconds; [ -n \"\$start\" ] && " +
+            "[ \"\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null)\" = \"\$start\" ] && " +
+            "kill \$pid 2>/dev/null ) >/dev/null 2>&1 & wait \$pid"
 
     private suspend fun waitForInterfaceReady(
         iface: String,
@@ -987,12 +998,7 @@ class PixieDustRunner(
             // Sin esa comprobación, un PID reutilizado tras terminar el comando
             // podría recibir un kill como root. Su salida va a /dev/null para
             // no mantener abierto el pipe que lee ShellExecutor.
-            val wrapped =
-                "($command & pid=\$!; " +
-                    "start=\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null); " +
-                    "( sleep $timeoutSeconds; [ -n \"\$start\" ] && " +
-                    "[ \"\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null)\" = \"\$start\" ] && " +
-                    "kill \$pid 2>/dev/null ) >/dev/null 2>&1 & wait \$pid)"
+            val wrapped = "($command & ${pidWatchdogTail(timeoutSeconds)})"
             ShellExecutor.execRoot(wrapped, timeoutSeconds * 1000L)
         } catch (e: Exception) {
             Log.w(TAG, "Command failed/timed out: $command", e)
