@@ -11,12 +11,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * Regression tests for [NativeBinaries.systemBinaryName].
+ * Tests de resolución y presentación de binarios.
  *
  * Los assets de 32 bits llevan sufijo `_32` (p. ej. `wpa_cli_32`), pero los
  * binarios instalados en el sistema no. Si la resolución no quitara el sufijo,
  * el fallback a `/system/bin` o `/vendor/bin/hw` nunca encontraría los
- * binarios en dispositivos de 32 bits.
+ * binarios en dispositivos de 32 bits. La UI, además, debe mostrar el
+ * componente que falta sin exponer el nombre exacto del asset.
  */
 class NativeBinariesTest {
 
@@ -40,5 +41,23 @@ class NativeBinariesTest {
         assertEquals("wpa_supplicant", NativeBinaries.systemBinaryName("wpa_supplicant"))
         assertEquals("wpa_cli", NativeBinaries.systemBinaryName("wpa_cli"))
         assertEquals("pixiewps", NativeBinaries.systemBinaryName("pixiewps"))
+    }
+
+    @Test
+    fun `display names hide architecture suffix and library version`() {
+        assertEquals("wpa_supplicant", NativeBinaries.displayName("wpa_supplicant_32"))
+        assertEquals("wpa_cli", NativeBinaries.displayName("wpa_cli_32"))
+        assertEquals("pixiewps", NativeBinaries.displayName("pixiewps_32"))
+        assertEquals("libnl", NativeBinaries.displayName("libnl-3.so.200"))
+    }
+
+    @Test
+    fun `display names deduplicate components`() {
+        assertEquals(
+            "wpa_supplicant, libnl",
+            NativeBinaries.displayNames(
+                listOf("wpa_supplicant", "libnl-3.so.200", "libnl-genl-3.so.200")
+            )
+        )
     }
 }

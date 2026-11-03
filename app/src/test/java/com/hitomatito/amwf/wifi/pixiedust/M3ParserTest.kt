@@ -7,8 +7,7 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
-import java.io.BufferedReader
-import java.io.StringReader
+import java.util.concurrent.LinkedBlockingQueue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -185,11 +184,12 @@ class M3ParserTest {
         assertTrue(capture is M3Parser.M3Capture.Complete)
     }
 
-    private fun parse(text: String): M3Parser.M3Capture =
-        M3Parser.parse(
-            reader = BufferedReader(StringReader(text)),
-            timeoutMs = 2_000L
-        )
+    private fun parse(text: String): M3Parser.M3Capture {
+        val queue = LinkedBlockingQueue<String>()
+        text.lineSequence().forEach { queue.offer(it) }
+        queue.offer(M3Parser.END_OF_STREAM)
+        return M3Parser.parse(lines = queue, timeoutMs = 2_000L)
+    }
 
     private fun hex(bytes: Int, seed: Int): String =
         (0 until bytes).joinToString(" ") { index ->

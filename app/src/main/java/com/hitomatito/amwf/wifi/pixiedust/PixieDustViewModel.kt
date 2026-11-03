@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import com.hitomatito.amwf.R
+import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -145,10 +146,12 @@ class PixieDustViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             try {
                 val ifaces = availableWifiInterfaces()
+                val binariesError = nativeBinariesError()
                 val state = _uiState.value
                 _uiState.value = state.copy(
                     interfacesAvailable = ifaces.isNotEmpty(),
-                    selectedInterface = if (ifaces.isNotEmpty()) ifaces.first() else state.selectedInterface
+                    selectedInterface = if (ifaces.isNotEmpty()) ifaces.first() else state.selectedInterface,
+                    errorMessage = binariesError ?: state.errorMessage
                 )
                 addConsoleLine("Interfaces disponibles: ${ifaces.joinToString(", ")}")
             } catch (e: Exception) {
@@ -158,31 +161,63 @@ class PixieDustViewModel @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Detecta interfaces WiFi sin root. `NetworkInterface` enumera wlan0,
+     * wlan1, p2p0, swlan0… aunque no haya una red activa; si la hay, su
+     * interfaz se coloca primero.
+     */
     private suspend fun availableWifiInterfaces(): List<String> = withContext(ioDispatcher) {
-        // Detección sin root: pedir `su` nada más abrir la pantalla hacía que
-        // el gestor de root apareciera antes de que el usuario hiciera nada.
-        // Si hay una red WiFi activa, LinkProperties expone su interfaz; si no,
-        // usamos el nombre estándar wlan0.
-        val interfaces = mutableListOf<String>()
+        val interfaces = linkedSetOf<String>()
         try {
             val network = connectivityManager.activeNetwork
             if (network != null) {
                 val capabilities = connectivityManager.getNetworkCapabilities(network)
                 if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
-                    val interfaceName =
-                        connectivityManager.getLinkProperties(network)?.interfaceName
-                    if (!interfaceName.isNullOrBlank()) {
-                        interfaces.add(interfaceName)
-                    }
+                    connectivityManager.getLinkProperties(network)?.interfaceName
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(interfaces::add)
                 }
             }
         } catch (_: Exception) {
-            // Sin red WiFi activa: se usa el fallback de abajo.
+            // Sin red WiFi activa: se usan las interfaces del sistema.
         }
-        if (interfaces.isEmpty()) {
-            interfaces.add("wlan0")
+        try {
+            val names = NetworkInterface.getNetworkInterfaces()?.toList()
+                ?.map { it.name }
+                ?.filter { name ->
+                    name.startsWith("wlan") || name == "p2p0" || name.startsWith("swlan")
+                }
+                .orEmpty()
+            // wlan0 primero; después el resto de wlan* y por último las
+            // interfaces auxiliares (p2p0/swlan0), como hacía el sondeo root.
+            names.filter { it == "wlan0" }.forEach(interfaces::add)
+            names.filter { it != "wlan0" && it.startsWith("wlan") }
+                .sorted()
+                .forEach(interfaces::add)
+            names.filter { !it.startsWith("wlan") }
+                .sorted()
+                .forEach(interfaces::add)
+        } catch (_: Exception) {
+            // La enumeración puede fallar en algunos dispositivos; se conserva
+            // lo detectado vía ConnectivityManager.
         }
-        interfaces.distinct()
+        interfaces.toList()
+    }
+
+    /**
+     * Comprueba los binarios al abrir la pantalla para avisar antes de que el
+     * usuario elija una red, en lugar de fallar solo al lanzar el ataque.
+     */
+    private suspend fun nativeBinariesError(): String? = withContext(ioDispatcher) {
+        NativeBinaries.ensure(appContext)
+        val missing = NativeBinaries.missingCriticalBinaries(appContext)
+        if (missing.isEmpty()) return@withContext null
+        val reasonRes = if (NativeBinaries.archSuffix() == "_32") {
+            R.string.pixie_native_missing_32
+        } else {
+            R.string.pixie_native_missing
+        }
+        appContext.getString(reasonRes, NativeBinaries.displayNames(missing))
     }
 
     // ========================================================================

@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
 import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
@@ -163,7 +164,7 @@ class MainActivity : AppCompatActivity() {
             // El botón debe abrir la auditoría con un solo toque. Solo se
             // bloquea si la comprobación ya confirmó que faltan binarios;
             // mientras está en curso (o si falló), se abre la pantalla y ella
-            // muestra el error concreto al intentar atacar.
+            // muestra el error concreto al abrirse.
             val missing = cachedCompatResult?.deviceInfo?.pixieDustBinaries?.missing
             if (compatCheckInProgress || missing.isNullOrEmpty()) {
                 startActivity(Intent(this, PixieDustActivity::class.java))
@@ -172,7 +173,7 @@ class MainActivity : AppCompatActivity() {
                     this,
                     getString(
                         R.string.pixie_binaries_missing_detail,
-                        missing.joinToString(", ")
+                        NativeBinaries.displayNames(missing)
                     ),
                     Toast.LENGTH_LONG
                 ).show()
@@ -336,7 +337,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(
                 R.string.pixie_binaries_missing_names,
-                pdb.missing.joinToString(", ")
+                NativeBinaries.displayNames(pdb.missing)
             )
         }
         updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)

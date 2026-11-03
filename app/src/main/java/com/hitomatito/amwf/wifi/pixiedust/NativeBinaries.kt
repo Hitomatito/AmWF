@@ -104,6 +104,21 @@ object NativeBinaries {
     fun wpaCliAssetName() = if (archSuffix().isEmpty()) WPA_CLI else WPA_CLI_32
     fun pixiewpsAssetName() = if (archSuffix().isEmpty()) PIXIEWPS else PIXIEWPS_32
 
+    /**
+     * Nombre legible para la UI. No expone el sufijo de arquitectura ni el
+     * nombre exacto del asset: al usuario le importa qué componente falta.
+     */
+    fun displayName(assetName: String): String = when {
+        assetName.startsWith(WPA_SUPPLICANT) -> WPA_SUPPLICANT
+        assetName.startsWith(WPA_CLI) -> WPA_CLI
+        assetName.startsWith(PIXIEWPS) -> PIXIEWPS
+        assetName.startsWith("libnl") -> "libnl"
+        else -> assetName
+    }
+
+    fun displayNames(assets: List<String>): String =
+        assets.map(::displayName).distinct().joinToString(", ")
+
     fun ctrlDir(): String =
         if (Build.VERSION.SDK_INT >= 28) CTRL_DIR_VENDOR else CTRL_DIR_LEGACY
 

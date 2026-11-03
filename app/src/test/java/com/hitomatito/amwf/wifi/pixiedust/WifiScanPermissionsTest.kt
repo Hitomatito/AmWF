@@ -33,7 +33,6 @@ class WifiScanPermissionsTest {
             locationPermissions,
             WifiScanPermissions.runtimePermissionsForSdk(23)
         )
-        assertTrue(WifiScanPermissions.requiresLocationServicesForSdk(23))
         assertFalse(WifiScanPermissions.usesNearbyWifiPermissionForSdk(23))
     }
 
@@ -43,7 +42,6 @@ class WifiScanPermissionsTest {
             locationPermissions,
             WifiScanPermissions.runtimePermissionsForSdk(28)
         )
-        assertTrue(WifiScanPermissions.requiresLocationServicesForSdk(28))
         assertFalse(WifiScanPermissions.usesNearbyWifiPermissionForSdk(28))
     }
 
@@ -53,7 +51,6 @@ class WifiScanPermissionsTest {
             locationPermissions,
             WifiScanPermissions.runtimePermissionsForSdk(32)
         )
-        assertTrue(WifiScanPermissions.requiresLocationServicesForSdk(32))
         assertFalse(WifiScanPermissions.usesNearbyWifiPermissionForSdk(32))
     }
 
@@ -74,7 +71,6 @@ class WifiScanPermissionsTest {
             ),
             WifiScanPermissions.requiredPermissionsForSdk(33)
         )
-        assertTrue(WifiScanPermissions.requiresLocationServicesForSdk(33))
         assertTrue(WifiScanPermissions.usesNearbyWifiPermissionForSdk(33))
     }
 
@@ -95,7 +91,6 @@ class WifiScanPermissionsTest {
             ),
             WifiScanPermissions.requiredPermissionsForSdk(36)
         )
-        assertTrue(WifiScanPermissions.requiresLocationServicesForSdk(36))
         assertTrue(WifiScanPermissions.usesNearbyWifiPermissionForSdk(36))
     }
 
@@ -109,5 +104,10 @@ class WifiScanPermissionsTest {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
             WifiScanPermissions.requiredPermissionsForSdk(28)
         )
+    }
+
+    @Test
+    fun `location services are required on every android version`() {
+        assertTrue(WifiScanPermissions.requiresLocationServices())
     }
 }

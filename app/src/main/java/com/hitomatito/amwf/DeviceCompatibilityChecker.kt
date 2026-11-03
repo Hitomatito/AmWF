@@ -377,7 +377,7 @@ class DeviceCompatibilityChecker(private val context: Context) {
             issues.add(CompatibilityIssue(
                 type = IssueType.PIXIE_DUST,
                 severity = Severity.WARNING,
-                message = "Binarios de Pixie Dust faltantes: ${missingPixieBinaries.joinToString(", ")}",
+                message = "Binarios de Pixie Dust faltantes: ${NativeBinaries.displayNames(missingPixieBinaries)}",
                 suggestion = if (NativeBinaries.archSuffix() == "_32") {
                     "Pixie Dust requiere un dispositivo arm64-v8a: el supplicant de " +
                         "32 bits no está soportado y no se puede empaquetar."
@@ -568,11 +568,7 @@ class DeviceCompatibilityChecker(private val context: Context) {
      * (best effort) y después resuelve cada binario en filesDir o en el sistema.
      */
     private fun detectPixieDustBinaries(): PixieDustBinariesInfo {
-        try {
-            NativeBinaries.ensure(context)
-        } catch (e: Exception) {
-            logD(TAG, "ensure() de binarios nativos falló: ${e.message}")
-        }
+        NativeBinaries.ensure(context)
         return PixieDustBinariesInfo(missing = NativeBinaries.missingCriticalBinaries(context))
     }
 

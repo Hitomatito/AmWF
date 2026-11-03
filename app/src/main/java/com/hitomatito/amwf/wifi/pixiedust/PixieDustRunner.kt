@@ -13,6 +13,9 @@ import android.os.Build
 import android.util.Log
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
+import com.hitomatito.amwf.destroyForciblyCompat
+import com.hitomatito.amwf.isAliveCompat
+import com.hitomatito.amwf.waitForCompat
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStream
@@ -148,7 +151,7 @@ class PixieDustRunner(
 
         val missing = NativeBinaries.missingCriticalBinaries(context)
         if (missing.isNotEmpty()) {
-            val missingList = missing.joinToString(", ")
+            log("[-] Missing native assets: ${missing.joinToString(", ")}")
             val reasonRes = if (NativeBinaries.archSuffix() == "_32") {
                 R.string.pixie_native_missing_32
             } else {
@@ -156,7 +159,7 @@ class PixieDustRunner(
             }
             return@withContext PixieDustResult.Failure(
                 bssid = bssid,
-                reason = context.getString(reasonRes, missingList),
+                reason = context.getString(reasonRes, NativeBinaries.displayNames(missing)),
                 rawOutput = ""
             )
         }
@@ -342,10 +345,7 @@ class PixieDustRunner(
                     }
                 saveAuditLog(
                     result = auditResult,
-                    bssid = bssid,
-                    ssid = ssid,
-                    freqMHz = freqMHz,
-                    interfaceName = interfaceName,
+                    target = AuditTarget(bssid, ssid, freqMHz, interfaceName),
                     eventLines = events,
                     rawLines = rawOutput.toString().lines()
                 )
@@ -390,23 +390,7 @@ class PixieDustRunner(
 
         val process = Runtime.getRuntime().exec(arrayOf("su", "-c", suppCmd))
         val lines = LinkedBlockingQueue<String>()
-        Thread {
-            try {
-                BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-                    while (true) {
-                        val line = reader.readLine() ?: break
-                        lines.offer(line)
-                    }
-                }
-            } catch (_: Exception) {
-                // El proceso terminó o se cerró el pipe.
-            } finally {
-                lines.offer(M3Parser.END_OF_STREAM)
-            }
-        }.apply {
-            isDaemon = true
-            start()
-        }
+        drainStream(process.inputStream, lines, M3Parser.END_OF_STREAM)
 
         val socketPath = "$ctrlDir/$iface"
         if (!waitForSocket(socketPath, SOCKET_WAIT_MS, log)) {
@@ -461,7 +445,7 @@ class PixieDustRunner(
             // algunos dispositivos, y el ping falla con ENOENT/EACCES aunque
             // el supplicant esté sano.
             val r = runSuWithTimeout(
-                "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -s$ctrlDir -i $iface ping",
+                wpaCliCommand(dir, ctrlDir, wpaCli, iface, "ping"),
                 timeoutSeconds = 3
             )
             if (r.exitCode == 0 && r.output.lines().any { it.trim() == "PONG" }) {
@@ -559,6 +543,21 @@ class PixieDustRunner(
         return@coroutineScope M3Attempt(null, reason, null)
     }
 
+    /**
+     * Construye una invocación de wpa_cli con el entorno del supplicant
+     * empaquetado: el binario y libnl viven en [dir], y `-p`/`-s` apuntan al
+     * directorio de control para no depender de rutas del sistema.
+     */
+    private fun wpaCliCommand(
+        dir: String,
+        ctrlDir: String,
+        wpaCli: String,
+        iface: String,
+        args: String
+    ): String =
+        "cd $dir && export LD_LIBRARY_PATH=$dir && " +
+            "$wpaCli -p$ctrlDir -s$ctrlDir -i $iface $args"
+
     private fun sendWpsReg(
         bssid: String,
         iface: String,
@@ -570,7 +569,13 @@ class PixieDustRunner(
         // wpa_cli 2.11 solo acepta `wps_reg <BSSID> <PIN>` (o 6 argumentos
         // para reconfigurar el AP). No existe un argumento `freq=`: la
         // frecuencia la deduce wpa_supplicant del BSS escaneado.
-        val cmd = "cd $dir && export LD_LIBRARY_PATH=$dir && $wpaCli -p$ctrlDir -s$ctrlDir -i $iface wps_reg $bssid $WPS_REG_PIN_DEFAULT"
+        val cmd = wpaCliCommand(
+            dir,
+            ctrlDir,
+            wpaCli,
+            iface,
+            "wps_reg $bssid $WPS_REG_PIN_DEFAULT"
+        )
         log("[*] wpa_cli (wps_reg): $cmd")
         return runSuWithTimeout(cmd, timeoutSeconds = 5)
     }
@@ -606,21 +611,21 @@ class PixieDustRunner(
                 rawOutput.append(line).append('\n')
                 log(line)
                 PIN_REGEX.find(line)?.let { wpsPin = it.groupValues[2] }
-                drainStderr(stderr, rawOutput)
+                drainQueue(stderr, rawOutput, "[pixiewps-stderr] ")
             }
 
             if (timedOut) {
                 log("[-] pixiewps timed out after ${PIXIEWPS_TIMEOUT_MS / 1000}s; killing it")
                 running.destroyForciblyCompat()
             }
-            drainStderr(stderr, rawOutput)
+            drainQueue(stderr, rawOutput, "[pixiewps-stderr] ")
             try {
                 running.waitFor()
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
-            drainRemaining(stdout, rawOutput)
-            drainStderr(stderr, rawOutput)
+            drainQueue(stdout, rawOutput)
+            drainQueue(stderr, rawOutput, "[pixiewps-stderr] ")
             val exitCode = runCatching { running.exitValue() }.getOrDefault(-1)
             log("[*] pixiewps exit code: $exitCode")
             wpsPin
@@ -636,25 +641,41 @@ class PixieDustRunner(
         }
     }
 
-    /** Drena un stream en un hilo daemon y encola [PROCESS_EOF] al terminar. */
-    private fun drainStream(input: InputStream, queue: BlockingQueue<String>) {
+    /**
+     * Lee un stream línea a línea en un hilo daemon. [onEnd] se ejecuta al
+     * llegar a EOF o si el pipe se cierra, para encolar el centinela adecuado.
+     */
+    private fun drainLines(
+        input: InputStream,
+        onLine: (String) -> Unit,
+        onEnd: () -> Unit = {}
+    ) {
         Thread {
             try {
                 BufferedReader(InputStreamReader(input)).use { reader ->
                     while (true) {
                         val line = reader.readLine() ?: break
-                        queue.offer(line)
+                        onLine(line)
                     }
                 }
             } catch (_: Exception) {
                 // El proceso terminó o el pipe se cerró.
             } finally {
-                queue.offer(PROCESS_EOF)
+                onEnd()
             }
         }.apply {
             isDaemon = true
             start()
         }
+    }
+
+    /** Drena un stream en un hilo daemon y encola [eofMarker] al terminar. */
+    private fun drainStream(
+        input: InputStream,
+        queue: BlockingQueue<String>,
+        eofMarker: String = PROCESS_EOF
+    ) {
+        drainLines(input, { queue.offer(it) }, { queue.offer(eofMarker) })
     }
 
     /**
@@ -671,23 +692,17 @@ class PixieDustRunner(
         if (sawEof) queue.offer(M3Parser.END_OF_STREAM)
     }
 
-    private fun drainRemaining(queue: BlockingQueue<String>, rawOutput: StringBuilder) {
+    /** Vacía una cola de salida; [prefix] distingue stderr en el registro. */
+    private fun drainQueue(
+        queue: BlockingQueue<String>,
+        rawOutput: StringBuilder,
+        prefix: String = ""
+    ) {
         while (true) {
             val line = queue.poll() ?: return
-            if (line != PROCESS_EOF) {
-                rawOutput.append(line).append('\n')
-                log(line)
-            }
-        }
-    }
-
-    private fun drainStderr(queue: BlockingQueue<String>, rawOutput: StringBuilder) {
-        while (true) {
-            val line = queue.poll() ?: return
-            if (line != PROCESS_EOF) {
-                rawOutput.append(line).append('\n')
-                log("[pixiewps-stderr] $line")
-            }
+            if (line == PROCESS_EOF) continue
+            rawOutput.append(line).append('\n')
+            log(if (prefix.isEmpty()) line else "$prefix$line")
         }
     }
 
@@ -733,20 +748,7 @@ class PixieDustRunner(
             val suppCmd = buildSupplicantCommand(iface, ctrlDir)
             val running = Runtime.getRuntime().exec(arrayOf("su", "-c", suppCmd))
             process = running
-            val drainer = Thread {
-                try {
-                    BufferedReader(InputStreamReader(running.inputStream)).use { supReader ->
-                        while (true) {
-                            val supLine = supReader.readLine() ?: break
-                            log("[supplicant] $supLine")
-                        }
-                    }
-                } catch (_: Exception) {
-                    // El proceso terminó.
-                }
-            }
-            drainer.isDaemon = true
-            drainer.start()
+            drainLines(running.inputStream, onLine = { supLine -> log("[supplicant] $supLine") })
 
             val socketPath = "$ctrlDir/$iface"
             if (!waitForSocket(socketPath, SOCKET_WAIT_MS, log)) {
@@ -762,8 +764,7 @@ class PixieDustRunner(
             val wpaCli = NativeBinaries.resolveBinaryPath(context, NativeBinaries.wpaCliAssetName())
             fun cli(cmd: String): ShellExecutor.Result =
                 runSuWithTimeout(
-                    "cd $dir && export LD_LIBRARY_PATH=$dir && " +
-                        "$wpaCli -p$ctrlDir -s$ctrlDir -i $iface $cmd",
+                    wpaCliCommand(dir, ctrlDir, wpaCli, iface, cmd),
                     timeoutSeconds = 5
                 )
 
@@ -965,45 +966,6 @@ class PixieDustRunner(
     private fun execSu(command: String, timeoutSeconds: Int): ShellExecutor.Result =
         ShellExecutor.execRoot(command, timeoutSeconds * 1000L)
 
-    // Process.destroyForcibly()/isAlive/waitFor(timeout) son API 26; minSdk es
-    // 24. En API 24-25 se degrada a destroy() y sondeo de exitValue().
-
-    private fun Process.isAliveCompat(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            isAlive
-        } else {
-            try {
-                exitValue()
-                false
-            } catch (_: IllegalThreadStateException) {
-                true
-            }
-        }
-
-    private fun Process.destroyForciblyCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            destroyForcibly()
-        } else {
-            destroy()
-        }
-    }
-
-    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-        }
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                exitValue()
-                return true
-            } catch (_: IllegalThreadStateException) {
-                Thread.sleep(50)
-            }
-        }
-        return false
-    }
-
     private fun runSuWithTimeout(command: String, timeoutSeconds: Int): ShellExecutor.Result {
         return try {
             // El watchdog mata el comando si supera el timeout, pero solo si
@@ -1142,10 +1104,7 @@ class PixieDustRunner(
      */
     private fun saveAuditLog(
         result: PixieDustResult?,
-        bssid: String,
-        ssid: String?,
-        freqMHz: Int?,
-        interfaceName: String,
+        target: AuditTarget,
         eventLines: List<String>,
         rawLines: List<String>
     ) {
@@ -1155,17 +1114,17 @@ class PixieDustRunner(
             "yyyyMMdd_HHmmss_SSS",
             java.util.Locale.US
         ).format(java.util.Date())
-        val safeBssid = bssid.replace(":", "")
+        val safeBssid = target.bssid.replace(":", "")
         val fileName = "pixie_${timestamp}_$safeBssid.log"
 
         val content = buildString {
             appendLine("=== AmWF Pixie Dust Audit Log ===")
             appendLine("AVISO: contiene credenciales WPS/WPA en texto claro; protégelo.")
             appendLine("Fecha: ${java.util.Date()}")
-            appendLine("BSSID: $bssid")
-            appendLine("SSID: ${ssid?.takeIf { it.isNotBlank() } ?: "(desconocido)"}")
-            appendLine("Frecuencia: ${freqMHz?.let { "$it MHz" } ?: "(desconocida)"}")
-            appendLine("Interfaz: $interfaceName")
+            appendLine("BSSID: ${target.bssid}")
+            appendLine("SSID: ${target.ssid?.takeIf { it.isNotBlank() } ?: "(desconocido)"}")
+            appendLine("Frecuencia: ${target.freqMHz?.let { "$it MHz" } ?: "(desconocida)"}")
+            appendLine("Interfaz: ${target.interfaceName}")
             appendLine("Arquitectura: ${Build.SUPPORTED_ABIS.firstOrNull() ?: "desconocida"}")
             when (result) {
                 is PixieDustResult.Success -> {
@@ -1236,6 +1195,14 @@ class PixieDustRunner(
     private class SupplicantHandle(
         val process: Process,
         val lines: BlockingQueue<String>
+    )
+
+    /** Datos del objetivo que acompañan a todo log de auditoría. */
+    private data class AuditTarget(
+        val bssid: String,
+        val ssid: String?,
+        val freqMHz: Int?,
+        val interfaceName: String
     )
 
     private data class M3Attempt(

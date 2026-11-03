@@ -139,15 +139,6 @@ object ShellExecutor {
         }
     }
 
-    /** destroyForcibly() es API 26; en API 24-25 se usa destroy(). */
-    private fun Process.destroyForciblyCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            destroyForcibly()
-        } else {
-            destroy()
-        }
-    }
-
     // --- Structured Logging ---
     // Ademas de Logcat, cada linea se guarda en el buffer en memoria de AppLogger
     // para que el informe de diagnostico pueda incluirla aunque logcat no sea accesible.

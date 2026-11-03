@@ -100,11 +100,7 @@ object WifiScanPermissions {
      * de ubicación están desactivados, también en Android 13+ (el framework
      * comprueba `isLocationModeEnabled()` antes de devolver resultados).
      */
-    fun requiresLocationServices(): Boolean =
-        requiresLocationServicesForSdk(Build.VERSION.SDK_INT)
-
-    internal fun requiresLocationServicesForSdk(@Suppress("UNUSED_PARAMETER") sdk: Int): Boolean =
-        true
+    fun requiresLocationServices(): Boolean = true
 
     fun isLocationServicesEnabled(context: Context): Boolean {
         if (!requiresLocationServices()) return true
