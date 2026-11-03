@@ -11,6 +11,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
+import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import com.hitomatito.amwf.destroyForciblyCompat
 import com.hitomatito.amwf.isAliveCompat
@@ -319,7 +320,7 @@ class PixieDustRunner(
             } else {
                 val failure = PixieDustResult.Failure(
                     bssid = bssid,
-                    reason = "Target is not vulnerable to the Pixie Dust attack (WPS pin not found)",
+                    reason = context.getString(R.string.pixie_not_vulnerable),
                     rawOutput = rawOutput.toString()
                 )
                 auditResult = failure
@@ -548,13 +549,14 @@ class PixieDustRunner(
         }
 
         val reason = when {
-            !anyRegAccepted ->
-                "wpa_supplicant did not accept wps_reg. Possible causes: interface not ready, WPS disabled, or WPS locked."
-            lastIncomplete != null ->
-                "WPS data capture incomplete after $maxAttempts attempts " +
-                        "(${lastIncomplete.capturedCount}/6 fields, missing: ${lastIncomplete.missing.joinToString(", ")}). " +
-                        "Possible causes: weak signal, WPS disabled, or WPS locked."
-            else -> "WPS data capture failed"
+            !anyRegAccepted -> context.getString(R.string.pixie_reason_wps_reg_rejected)
+            lastIncomplete != null -> context.getString(
+                R.string.pixie_reason_capture_incomplete,
+                maxAttempts,
+                lastIncomplete.capturedCount,
+                lastIncomplete.missing.joinToString(", ")
+            )
+            else -> context.getString(R.string.pixie_reason_capture_failed)
         }
         return@coroutineScope M3Attempt(null, reason, null)
     }

@@ -232,7 +232,10 @@
     <string name="pixie_running">Auditando…</string>
     <string name="pixie_pin_found">PIN WPS encontrado</string>
     <string name="pixie_psk_found">Contraseña WPA obtenida</string>
-    <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust</string>
+    <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust (no se encontró el PIN WPS)</string>
+    <string name="pixie_reason_wps_reg_rejected">wpa_supplicant no aceptó wps_reg. Posibles causas: interfaz no lista, WPS desactivado o WPS bloqueado.</string>
+    <string name="pixie_reason_capture_incomplete">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). Posibles causas: señal débil, WPS desactivado o WPS bloqueado.</string>
+    <string name="pixie_reason_capture_failed">No se pudo capturar el M3.</string>
     <string name="pixie_error">Error durante la auditoría</string>
     <string name="pixie_timeout">Tiempo de espera agotado</string>
     <string name="pixie_console">Consola</string>

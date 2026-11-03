@@ -354,7 +354,7 @@ class PixieDustViewModel @JvmOverloads constructor(
     fun startAttack(disableWifi: Boolean) {
         val network = _uiState.value.selectedNetwork
         if (network == null) {
-            _uiState.update { it.copy(errorMessage = "Selecciona una red primero") }
+            _uiState.update { it.copy(errorMessage = appContext.getString(R.string.pixie_select_network)) }
             return
         }
         if (!network.isAuditable()) {

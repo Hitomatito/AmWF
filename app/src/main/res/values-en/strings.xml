@@ -202,7 +202,10 @@
     <string name="pixie_running">Auditing…</string>
     <string name="pixie_pin_found">WPS PIN found</string>
     <string name="pixie_psk_found">WPA password obtained</string>
-    <string name="pixie_not_vulnerable">Target is not vulnerable to Pixie Dust</string>
+    <string name="pixie_not_vulnerable">Target is not vulnerable to Pixie Dust (WPS PIN not found)</string>
+    <string name="pixie_reason_wps_reg_rejected">wpa_supplicant did not accept wps_reg. Possible causes: interface not ready, WPS disabled or WPS locked.</string>
+    <string name="pixie_reason_capture_incomplete">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). Possible causes: weak signal, WPS disabled or WPS locked.</string>
+    <string name="pixie_reason_capture_failed">Could not capture M3.</string>
     <string name="pixie_error">Error during the audit</string>
     <string name="pixie_timeout">Timed out</string>
     <string name="pixie_pin">WPS PIN</string>
