@@ -194,22 +194,10 @@ class PixieDustActivity : AppCompatActivity() {
         }
 
         // La hoja se infla de nuevo en cada apertura: refleja el filtro activo.
-        when (activeFilter) {
-            NetworkFilter.ALL -> sheet.chipGroupFilters.check(R.id.chipAll)
-            NetworkFilter.AUDITABLE -> sheet.chipGroupFilters.check(R.id.chipAuditable)
-            NetworkFilter.BAND_24 -> sheet.chipGroupFilters.check(R.id.chipBand24)
-            NetworkFilter.BAND_5 -> sheet.chipGroupFilters.check(R.id.chipBand5)
-            NetworkFilter.DUAL_BAND -> sheet.chipGroupFilters.check(R.id.chipDualBand)
-        }
+        sheet.chipGroupFilters.check(activeFilter.chipId)
 
         sheet.chipGroupFilters.setOnCheckedStateChangeListener { _, checkedIds ->
-            val newFilter = when (checkedIds.firstOrNull()) {
-                R.id.chipAuditable -> NetworkFilter.AUDITABLE
-                R.id.chipBand24 -> NetworkFilter.BAND_24
-                R.id.chipBand5 -> NetworkFilter.BAND_5
-                R.id.chipDualBand -> NetworkFilter.DUAL_BAND
-                else -> NetworkFilter.ALL
-            }
+            val newFilter = NetworkFilter.fromChipId(checkedIds.firstOrNull())
             if (newFilter != activeFilter) {
                 activeFilter = newFilter
                 render(viewModel.uiState.value)
@@ -687,12 +675,17 @@ class PixieDustActivity : AppCompatActivity() {
         null -> ""
     }
 
-    private enum class NetworkFilter {
-        ALL,
-        AUDITABLE,
-        BAND_24,
-        BAND_5,
-        DUAL_BAND
+    private enum class NetworkFilter(val chipId: Int) {
+        ALL(R.id.chipAll),
+        AUDITABLE(R.id.chipAuditable),
+        BAND_24(R.id.chipBand24),
+        BAND_5(R.id.chipBand5),
+        DUAL_BAND(R.id.chipDualBand);
+
+        companion object {
+            fun fromChipId(chipId: Int?): NetworkFilter =
+                values().firstOrNull { it.chipId == chipId } ?: ALL
+        }
     }
 
     private companion object {
