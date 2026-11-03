@@ -240,16 +240,11 @@ object M3Parser {
                 // "WPS: <Campo> - hexdump(len=N): xx xx ..."
                 val hexdumpMatch = HEXDUMP_LINE.find(line)
                 if (hexdumpMatch != null) {
-                    val fieldLabel = hexdumpMatch.groupValues[1].trim()
                     val hexValue = hexdumpMatch.groupValues[2]
                         .replace(" ", "")
                         .replace(":", "")
                         .trim()
-                    val field = fieldForLabel(fieldLabel)
-                    if (field != null && fields[field.ordinal] == null &&
-                        hexValue.length == expectedHexLength(field)
-                    ) {
-                        fields[field.ordinal] = hexValue
+                    if (captureField(hexdumpMatch.groupValues[1].trim(), hexValue, fields)) {
                         counted++
                         if (counted == 6) {
                             completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
@@ -261,13 +256,8 @@ object M3Parser {
                 // Formato 2b: líneas hexdump individuales "WPS: <Campo>: <hex>"
                 val fieldMatch = FIELD_LINE.find(line)
                 if (fieldMatch != null) {
-                    val fieldLabel = fieldMatch.groupValues[1].trim()
                     val hexValue = fieldMatch.groupValues[2].replace(" ", "").replace(":", "")
-                    val field = fieldForLabel(fieldLabel)
-                    if (field != null && fields[field.ordinal] == null &&
-                        hexValue.length == expectedHexLength(field)
-                    ) {
-                        fields[field.ordinal] = hexValue
+                    if (captureField(fieldMatch.groupValues[1].trim(), hexValue, fields)) {
                         counted++
                         if (counted == 6) {
                             completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
@@ -333,6 +323,22 @@ object M3Parser {
         18 -> R.string.pixie_wps_error_pin_auth
         null -> R.string.pixie_wps_error_unknown
         else -> R.string.pixie_wps_error_config_code
+    }
+
+    /**
+     * Guarda [hexValue] en el campo [label] si es conocido, aún no estaba
+     * capturado y tiene la longitud esperada. Devuelve true si capturó algo.
+     */
+    private fun captureField(
+        label: String,
+        hexValue: String,
+        fields: Array<String?>
+    ): Boolean {
+        val field = fieldForLabel(label) ?: return false
+        if (fields[field.ordinal] != null) return false
+        if (hexValue.length != expectedHexLength(field)) return false
+        fields[field.ordinal] = hexValue
+        return true
     }
 
     private fun fieldForLabel(label: String): M3Field? = when (label) {
