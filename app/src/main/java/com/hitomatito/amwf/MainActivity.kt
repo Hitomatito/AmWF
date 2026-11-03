@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
 import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
@@ -54,7 +55,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowPixieDustBinaries: View
 
     private val monitorManager by lazy { MonitorModeManager() }
-    private val compatibilityChecker by lazy { DeviceCompatibilityChecker() }
+    private val compatibilityChecker by lazy { DeviceCompatibilityChecker(applicationContext) }
     private val diagnosticsCollector by lazy { DiagnosticsCollector() }
     
     private var currentMode = MonitorMode.UNKNOWN
@@ -155,12 +156,24 @@ class MainActivity : AppCompatActivity() {
                 MonitorMode.MANAGED -> enableMonitorMode()
                 MonitorMode.MONITOR -> disableMonitorMode()
                 MonitorMode.UNKNOWN -> checkCurrentMode()
-                else -> {}
             }
         }
 
         btnPixieDust.setOnClickListener {
-            startActivity(Intent(this, PixieDustActivity::class.java))
+            // El botón debe abrir la auditoría con un solo toque. Solo se
+            // bloquea si la comprobación ya confirmó que faltan binarios;
+            // mientras está en curso (o si falló), se abre la pantalla y ella
+            // muestra el error concreto al abrirse.
+            val missing = cachedCompatResult?.deviceInfo?.pixieDustBinaries?.missing
+            if (compatCheckInProgress || missing.isNullOrEmpty()) {
+                startActivity(Intent(this, PixieDustActivity::class.java))
+            } else {
+                // El mensaje lo centraliza NativeBinaries para incluir también
+                // la explicación de armeabi-v7a cuando aplica.
+                NativeBinaries.missingBinariesSummary(this, missing)?.let { detail ->
+                    Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -315,30 +328,15 @@ class MainActivity : AppCompatActivity() {
 
         // Mostrar estado de los binarios Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
         val pdb = result.deviceInfo.pixieDustBinaries
-        val pdbText = when {
-            pdb.allAvailable -> getString(R.string.pixie_binaries_available)
-            pdb.wpaSupplicantAvailable || pdb.wpaCliAvailable || pdb.pixiewpsAvailable -> getString(R.string.pixie_binaries_partial)
-            else -> getString(R.string.pixie_binaries_missing)
-        }
-        val pdbPassed = pdb.allAvailable
-        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdbPassed)
+        val pdbText = NativeBinaries.missingBinariesSummary(this, pdb.missing)
+            ?: getString(R.string.pixie_binaries_available)
+        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
 
-        // Habilitar/deshabilitar el botón Pixie Dust según disponibilidad de binarios
-        btnPixieDust.isEnabled = pdb.allAvailable
+        // El botón permanece siempre habilitado y con un solo listener: si la
+        // comprobación ya confirmó que faltan binarios, el toque explica cuáles
+        // en vez de fallar en silencio o abrir una pantalla inutilizable.
+        // El alpha reducido solo comunica «aún no listo»; no deshabilita nada.
         btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
-        if (!pdb.allAvailable) {
-            btnPixieDust.setOnClickListener {
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.pixie_binaries_missing),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        } else {
-            btnPixieDust.setOnClickListener {
-                startActivity(Intent(this, PixieDustActivity::class.java))
-            }
-        }
     }
 
     private fun updateInfoRow(row: View, label: String, value: String, passed: Boolean) {
@@ -467,7 +465,6 @@ class MainActivity : AppCompatActivity() {
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
                 setToggleEnabled(true)
             }
-            else -> {}
         }
     }
 }

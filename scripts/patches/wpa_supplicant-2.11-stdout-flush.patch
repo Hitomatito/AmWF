@@ -1,0 +1,18 @@
+--- a/src/utils/wpa_debug.c
++++ b/src/utils/wpa_debug.c
+@@ -237,6 +237,7 @@
+ 			va_start(ap, fmt);
+ 			vprintf(fmt, ap);
+ 			printf("\n");
++			fflush(stdout);
+ 			va_end(ap);
+ 		}
+ #endif /* CONFIG_ANDROID_LOG */
+@@ -378,6 +379,7 @@
+ 			printf(" [REMOVED]");
+ 		}
+ 		printf("\n");
++		fflush(stdout);
+ 	}
+ #endif /* CONFIG_ANDROID_LOG */
+ }

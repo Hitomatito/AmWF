@@ -7,7 +7,10 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
-import java.io.BufferedReader
+import androidx.annotation.StringRes
+import com.hitomatito.amwf.R
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**
  * Parser de los campos del mensaje WPS M3 extraídos del debug de wpa_supplicant.
@@ -29,8 +32,6 @@ import java.io.BufferedReader
  */
 object M3Parser {
 
-    private const val TAG = "M3Parser"
-
     /** Los seis campos del M3, en orden de aparición esperado. */
     private enum class M3Field(val label: String) {
         ENROLLEE_NONCE("Enrollee Nonce"),
@@ -43,12 +44,30 @@ object M3Parser {
         override fun toString(): String = label
     }
 
-    /** Longitud mínima esperada de un valor hexadecimal válido. */
-    private const val MIN_HEX_LENGTH = 32
+    /**
+     * Longitud hexadecimal exacta esperada por campo (en caracteres).
+     *
+     * Validar la longitud evita aceptar volcados truncados del supplicant de
+     * Android (32 bytes) como si fueran claves DH completas (192 bytes).
+     */
+    private fun expectedHexLength(field: M3Field): Int = when (field) {
+        M3Field.ENROLLEE_NONCE -> 32
+        M3Field.OWN_PUBLIC_KEY,
+        M3Field.PEER_PUBLIC_KEY -> 384
+        M3Field.AUTH_KEY,
+        M3Field.E_HASH_1,
+        M3Field.E_HASH_2 -> 64
+    }
 
     /** Tiempo de espera adicional (ms) tras capturar los 6 campos para intentar
      *  capturar también M5/M7 (modo 3, chips RTL819x). */
     private const val M5M7_DWELL_MS = 4_000L
+
+    /**
+     * Centinela que el productor encola al cerrar el stream. Permite
+     * distinguir "no hay línea todavía" (null) de "el proceso terminó".
+     */
+    const val END_OF_STREAM = "\u0000AMWF_EOF"
 
     private val WPS_M3_PREFIX = "WPS-M3: "
     private val M5_PREFIX = "WPS-M5:"
@@ -59,8 +78,21 @@ object M3Parser {
     private val BSSID_VALUE = Regex("""BSSID=([0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5})""")
     private val ENCR_VALUE = Regex("""ENCR=([0-9a-fA-F]+)""")
 
+    // Formato hexdump real de wpa_supplicant 2.11:
+    //   "WPS: Enrollee Nonce - hexdump(len=16): 1a 2b 3c ..."
+    // El volcado completo solo aparece cuando el binario se compila sin
+    // CONFIG_ANDROID_LOG (el de Android trunca a 32 bytes y va a logcat).
+    private val HEXDUMP_LINE = Regex("""WPS:\s*(.+?)\s*-\s*hexdump\(len=\d+\):\s*([0-9a-fA-F ]+)""")
+
     // Formato hexdump: "WPS: Enrollee Nonce: 1a 2b 3c ..."
-    private val FIELD_LINE = Regex("""WPS:\s*([A-Za-z ]+):\s*([0-9a-fA-F :]+)""")
+    private val FIELD_LINE = Regex("""WPS:\s*([A-Za-z0-9][A-Za-z0-9 \-]*):\s*([0-9a-fA-F :]+)""")
+
+    // El supplicant anuncia el fallo con esta línea cuando el AP aborta.
+    // Ej.: "wlan0: WPS-FAIL msg=5 config_error=15"
+    private val WPS_FAIL_LINE = Regex("""WPS-FAIL\s+msg=\d+\s+config_error=(\d+)""")
+    private val NEGOTIATION_ERROR_LINE = Regex(
+        """Enrollee terminated negotiation with Configuration Error (\d+)"""
+    )
 
     /**
      * Resultado del parseo del M3.
@@ -73,6 +105,14 @@ object M3Parser {
         data class Incomplete(
             val capturedCount: Int,
             val missing: List<String>
+        ) : M3Capture()
+        /**
+         * El AP terminó la negociación WPS antes de enviar el M3. El caso más
+         * habitual es `config_error=15` (Setup Locked): el WPS del AP está
+         * bloqueado y no liberará las E-Hash hasta que se desbloquee.
+         */
+        data class Failed(
+            val configError: Int? = null
         ) : M3Capture()
     }
 
@@ -105,21 +145,27 @@ object M3Parser {
 
         fun toPixiewpsMode3Args(m3: M3Data): String =
             "--mode 3 ${m3.toPixiewpsArgs()}" +
+                    (bssid.takeIf { it.isNotBlank() }?.let { " --e-bssid $it" } ?: "") +
                     (m5Enc?.let { " -5 $it" } ?: "") +
                     (m7Enc?.let { " -7 $it" } ?: "")
     }
 
     /**
-     * Lee el stream de debug de wpa_supplicant y extrae los campos M3 (y opcionalmente M5/M7).
+     * Lee las líneas que un productor encola en [lines] y extrae los campos M3
+     * (y opcionalmente M5/M7).
      *
-     * @param reader Lectura de la salida de wpa_supplicant.
+     * El hilo lector encola las líneas y [END_OF_STREAM] al terminar. Así el
+     * pipe del supplicant nunca se llena mientras la app espera el socket o
+     * ejecuta `wpa_cli ping`.
+     *
+     * @param lines Cola con la salida de wpa_supplicant.
      * @param timeoutMs Tiempo máximo de espera en ms.
      * @param cancelRequested Función que retorna true si se debe cancelar.
      * @param onLine Callback opcional con cada línea leída (para logging).
      * @param onM5M7 Callback opcional cuando se capturan M5 y M7.
      */
     fun parse(
-        reader: BufferedReader,
+        lines: BlockingQueue<String>,
         timeoutMs: Long = 25_000L,
         cancelRequested: () -> Boolean = { false },
         onLine: ((String) -> Unit)? = null,
@@ -142,16 +188,32 @@ object M3Parser {
             }
 
             try {
-                if (!reader.ready()) {
-                    Thread.sleep(50)
-                    continue
-                }
-                val line = reader.readLine() ?: break
+                val line = lines.poll(50L, TimeUnit.MILLISECONDS) ?: continue
+                if (line == END_OF_STREAM) break
                 if (line.isEmpty()) continue
                 onLine?.invoke(line)
 
+                // El AP puede abortar antes de M3 (p. ej. WPS bloqueado).
+                // En ese caso no tiene sentido seguir esperando ni reintentar.
+                val failMatch = WPS_FAIL_LINE.find(line)
+                    ?: NEGOTIATION_ERROR_LINE.find(line)
+                if (failMatch != null) {
+                    val code = failMatch.groupValues[1].toIntOrNull()
+                    // Un NACK con config_error=18 es la respuesta esperada a
+                    // un PIN de sonda incorrecto: el AP ya nos ha entregado el
+                    // M3 completo antes de rechazarlo. Si los seis campos están
+                    // capturados, el M3 es válido y pixiewps debe ejecutarse.
+                    if (counted == 6) break
+                    // Si el NACK llega sin M3, la captura de esta ronda ha
+                    // terminado (el M3 siempre precede al NACK). Se devuelve
+                    // Incomplete para que el runner reintente sin esperar los
+                    // 25 s completos del timeout.
+                    if (code == 18) break
+                    return M3Capture.Failed(code)
+                }
+
                 // Formato 1: línea WPS-M3: con pares clave=valor
-                if (line.startsWith(WPS_M3_PREFIX)) {
+                if (line.contains(WPS_M3_PREFIX)) {
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     parseKeyValueLine(line, fields) { counted++ }
                     if (counted == 6) {
@@ -160,32 +222,44 @@ object M3Parser {
                     continue
                 }
 
-                // Formato 2: líneas hexdump individuales "WPS: <Campo>: <hex>"
+                // Formato 2a: hexdump completo de wpa_supplicant 2.11
+                // "WPS: <Campo> - hexdump(len=N): xx xx ..."
+                val hexdumpMatch = HEXDUMP_LINE.find(line)
+                if (hexdumpMatch != null) {
+                    val hexValue = hexdumpMatch.groupValues[2]
+                        .replace(" ", "")
+                        .replace(":", "")
+                        .trim()
+                    if (captureField(hexdumpMatch.groupValues[1].trim(), hexValue, fields)) {
+                        counted++
+                        if (counted == 6) {
+                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
+                        }
+                    }
+                    continue
+                }
+
+                // Formato 2b: líneas hexdump individuales "WPS: <Campo>: <hex>"
                 val fieldMatch = FIELD_LINE.find(line)
                 if (fieldMatch != null) {
-                    val fieldLabel = fieldMatch.groupValues[1].trim()
                     val hexValue = fieldMatch.groupValues[2].replace(" ", "").replace(":", "")
-                    val field = fieldForLabel(fieldLabel)
-                    if (field != -1 && fields[field] == null) {
-                        if (hexValue.length >= MIN_HEX_LENGTH) {
-                            fields[field] = hexValue
-                            counted++
-                            if (counted == 6) {
-                                completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
-                            }
+                    if (captureField(fieldMatch.groupValues[1].trim(), hexValue, fields)) {
+                        counted++
+                        if (counted == 6) {
+                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
                         }
                     }
                     continue
                 }
 
                 // Captura opcional M5/M7 para modo 3 (RTL819x)
-                if (line.startsWith(M5_PREFIX)) {
+                if (line.contains(M5_PREFIX)) {
                     m5 = ENCR_VALUE.find(line)?.groupValues?.get(1)
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     m5m7Notified = maybeNotifyM5M7(onM5M7, m5m7Notified, bssid, m5, m7)
                     continue
                 }
-                if (line.startsWith(M7_PREFIX)) {
+                if (line.contains(M7_PREFIX)) {
                     m7 = ENCR_VALUE.find(line)?.groupValues?.get(1)
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     m5m7Notified = maybeNotifyM5M7(onM5M7, m5m7Notified, bssid, m5, m7)
@@ -213,51 +287,79 @@ object M3Parser {
         }
     }
 
-    private fun fieldForLabel(label: String): Int {
-        return when (label) {
-            "Enrollee Nonce" -> M3Field.ENROLLEE_NONCE.ordinal
-            "DH own Public Key" -> M3Field.OWN_PUBLIC_KEY.ordinal
-            "DH peer Public Key" -> M3Field.PEER_PUBLIC_KEY.ordinal
-            "AuthKey" -> M3Field.AUTH_KEY.ordinal
-            "E-Hash1" -> M3Field.E_HASH_1.ordinal
-            "E-Hash2" -> M3Field.E_HASH_2.ordinal
-            else -> -1
-        }
+    /**
+     * Traduce los códigos de error de configuración WPS (wps_defs.h) al
+     * recurso de texto accionable que debe mostrar la UI.
+     *
+     * El parser es puro y no conoce el contexto: quien consume el resultado
+     * resuelve el recurso con [android.content.Context.getString]. Los códigos
+     * con argumento esperan el código como `%1$d`.
+     */
+    @StringRes
+    fun configErrorReasonRes(code: Int?): Int = when (code) {
+        5 -> R.string.pixie_wps_error_weak_signal
+        7 -> R.string.pixie_wps_error_assoc_rejected
+        8 -> R.string.pixie_wps_error_dhcp
+        11 -> R.string.pixie_wps_error_registrar
+        13 -> R.string.pixie_wps_error_rogue_suspected
+        14 -> R.string.pixie_wps_error_busy
+        15 -> R.string.pixie_wps_error_setup_locked
+        16 -> R.string.pixie_wps_error_timeout
+        17 -> R.string.pixie_wps_error_registration_expired
+        18 -> R.string.pixie_wps_error_pin_auth
+        null -> R.string.pixie_wps_error_unknown
+        else -> R.string.pixie_wps_error_config_code
     }
+
+    /**
+     * Guarda [hexValue] en el campo [label] si es conocido, aún no estaba
+     * capturado y tiene la longitud esperada. Devuelve true si capturó algo.
+     */
+    private fun captureField(
+        label: String,
+        hexValue: String,
+        fields: Array<String?>
+    ): Boolean {
+        val field = fieldForLabel(label) ?: return false
+        if (fields[field.ordinal] != null) return false
+        if (hexValue.length != expectedHexLength(field)) return false
+        fields[field.ordinal] = hexValue
+        return true
+    }
+
+    /**
+     * Resuelve el campo a partir de la etiqueta que imprime wpa_supplicant.
+     *
+     * Se deriva del propio enum: si se añade un campo nuevo, su etiqueta no
+     * puede quedar desincronizada de este mapeo.
+     */
+    private fun fieldForLabel(label: String): M3Field? =
+        M3Field.entries.firstOrNull { it.label == label }
 
     private fun parseKeyValueLine(line: String, fields: Array<String?>, onCaptured: () -> Unit) {
         for (match in KEY_VALUE.findAll(line)) {
             val key = match.groupValues[1]
             val value = match.groupValues[2]
             val field = when (key) {
-                "ENONCE" -> M3Field.ENROLLEE_NONCE.ordinal
-                "PKE" -> M3Field.PEER_PUBLIC_KEY.ordinal
-                "PKR" -> M3Field.OWN_PUBLIC_KEY.ordinal
-                "AUTHKEY" -> M3Field.AUTH_KEY.ordinal
-                "EHASH1" -> M3Field.E_HASH_1.ordinal
-                "EHASH2" -> M3Field.E_HASH_2.ordinal
-                else -> -1
-            }
-            if (field == -1 || fields[field] != null) continue
-            if (value.length < MIN_HEX_LENGTH) continue
-            fields[field] = value
+                "ENONCE" -> M3Field.ENROLLEE_NONCE
+                "PKE" -> M3Field.PEER_PUBLIC_KEY
+                "PKR" -> M3Field.OWN_PUBLIC_KEY
+                "AUTHKEY" -> M3Field.AUTH_KEY
+                "EHASH1" -> M3Field.E_HASH_1
+                "EHASH2" -> M3Field.E_HASH_2
+                else -> null
+            } ?: continue
+            if (fields[field.ordinal] != null) continue
+            if (value.length != expectedHexLength(field)) continue
+            fields[field.ordinal] = value
             onCaptured()
         }
     }
 
-    private fun missingFields(fields: Array<String?>): List<String> {
-        val names = listOf(
-            M3Field.ENROLLEE_NONCE.name,
-            M3Field.OWN_PUBLIC_KEY.name,
-            M3Field.PEER_PUBLIC_KEY.name,
-            M3Field.AUTH_KEY.name,
-            M3Field.E_HASH_1.name,
-            M3Field.E_HASH_2.name
-        )
-        return fields.mapIndexed { index, value ->
-            if (value == null) names[index] else null
-        }.filterNotNull()
-    }
+    private fun missingFields(fields: Array<String?>): List<String> =
+        M3Field.values().mapNotNull { field ->
+            if (fields[field.ordinal] == null) field.name else null
+        }
 
     private fun maybeNotifyM5M7(
         callback: ((M5M7Capture) -> Unit)?,

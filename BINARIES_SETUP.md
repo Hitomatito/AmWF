@@ -1,108 +1,155 @@
 # BINARIES_SETUP — Binarios nativos para el módulo Pixie Dust
 
-El módulo Pixie Dust de AmWF requiere varios binarios compilados para Android ARM.
-**Pixiewps y wpa_supplicant.conf ya están incluidos**; los demás binarios pueden
-compilarse con el script de este repositorio o obtenerse por separado.
+El módulo Pixie Dust de AmWF requiere varios binarios compilados para Android
+ARM. Para arm64-v8a (la arquitectura del Redmi Note 10 Pro / `sweet`) están
+incluidos: `pixiewps`, `wpa_supplicant`, `wpa_cli` y las dos librerías de
+libnl que necesita el supplicant.
 
-## Estructura esperada en assets
+## Estructura actual en assets
 
 ```
 app/src/main/assets/wifi/
-├── pixiewps                # arm64-v8a   ✅ INCLUIDO (compilado con NDK r27)
-├── pixiewps_32             # armeabi-v7a ✅ INCLUIDO (compilado con NDK r27)
-├── wpa_supplicant.conf     # ✅ INCLUIDO
-├── wpa_supplicant          # arm64-v8a   ❌ (falta — ver abajo)
-├── wpa_supplicant_32       # armeabi-v7a ❌ (falta — ver abajo)
-├── wpa_cli                 # arm64-v8a   ❌ (falta — ver abajo)
-├── wpa_cli_32              # armeabi-v7a ❌ (falta — ver abajo)
-└── libnl-*                 # ⚠️  Opcional: solo si usas driver nl80211
+├── pixiewps                # arm64-v8a   ✅ compilado con NDK r27
+├── pixiewps_32             # armeabi-v7a ✅ compilado con NDK r27
+├── wpa_supplicant          # arm64-v8a   ✅ wpa_supplicant 2.11 propio
+├── wpa_supplicant_32       # armeabi-v7a ❌ no incluido (32-bit no soportado)
+├── wpa_cli                 # arm64-v8a   ✅ compilado desde wpa_supplicant 2.11
+├── wpa_cli_32              # armeabi-v7a ♻️ asset precompilado conservado (el script no lo regenera)
+├── wpa_supplicant.conf     # configuración base del supplicant
+├── libnl-3.so.200          # arm64-v8a   ✅ libnl 3.2.25
+└── libnl-genl-3.so.200     # arm64-v8a   ✅ libnl 3.2.25 (genl)
 ```
 
-## 1. Compilar todos los binarios (recomendado)
+Cuando `NativeBinaries.archSuffix()` resuelve `"_32"` (dispositivos de 32-bit),
+`missingCriticalBinaries()` reportará que falta `wpa_supplicant_32` y la
+auditoría se detendrá con un mensaje claro. El supplicant empaquetado solo se
+compila para arm64-v8a.
 
-El script `scripts/build-wifi-binaries.sh` compila **pixiewps, wpa_supplicant y
-wpa_cli** para una arquitectura dada, eliminando la necesidad de repetir los
-bloques de `export`/`make`/`cp` por cada arquitectura.
+## 1. Por qué un wpa_supplicant propio
+
+El `wpa_supplicant` de Android está compilado con `CONFIG_ANDROID_LOG`. En esa
+variante, `_wpa_hexdump()` recorta los volcados a **32 bytes** y los envía a
+logcat. Pixie Dust necesita los seis campos completos del M3, incluida la clave
+pública DH de **192 bytes** (384 caracteres hex), así que el volcado truncado
+no sirve.
+
+El binario de AmWF se compila **sin** `CONFIG_ANDROID_LOG` y **con**
+`CONFIG_DEBUG_FILE=y`. Sin `-f`, el debug (incluidos los hexdump completos)
+sale por **stdout**, que es exactamente lo que lee `M3Parser`. Por eso
+`NativeBinaries.missingCriticalBinaries()` **no acepta** el
+`wpa_supplicant` del sistema como sustituto: aunque exista, no puede entregar
+las claves DH completas. El formato es:
+
+```
+WPS: Enrollee Nonce - hexdump(len=16): 01 02 ...
+WPS: DH own Public Key - hexdump(len=192): ...
+WPS: DH peer Public Key - hexdump(len=192): ...
+WPS: AuthKey - hexdump(len=32): ...
+WPS: E-Hash1 - hexdump(len=32): ...
+WPS: E-Hash2 - hexdump(len=32): ...
+```
+
+`-K` es imprescindible para que `wpa_hexdump_key()` imprima `AuthKey` en lugar
+de `[REMOVED]`.
+
+## 2. Compilación reproducible
+
+El script `scripts/build-wifi-binaries.sh` compila los binarios de **arm64-v8a**
+(pixiewps, wpa_supplicant, wpa_cli y libnl). Para **armeabi-v7a** solo compila
+`pixiewps_32`: el supplicant de 32 bits no está soportado y `wpa_cli_32` se
+conserva como asset precompilado, sin regenerarse por el script. Requiere las
+fuentes:
+
+```
+../pixiewps-master/
+../wpa_supplicant-2.11/
+../libnl-3.2.25/
+```
+
+y el NDK r27 (o posterior):
 
 ```bash
-# arm64-v8a (dispositivos modernos)
+export ANDROID_NDK=/opt/android-sdk/ndk/27.0.12077973
 ./scripts/build-wifi-binaries.sh arm64-v8a
-
-# armeabi-v7a (dispositivos antiguos)
-./scripts/build-wifi-binaries.sh armeabi-v7a
 ```
 
-Los binarios se escriben directamente en `app/src/main/assets/wifi/`.
+Pasos que realiza para el supplicant:
 
-Requisitos:
-- `ANDROID_NDK` (o `ANDROID_NDK_HOME`) apuntando a tu NDK de Android.
-- Fuentes de `wpa_supplicant-2.6/` y `pixiewps-master/` en el directorio padre
-  (o define `WPA_DIR` y `PIXIEWPS_DIR` antes de ejecutar).
+1. Compila **libnl 3.2.25** para Android con `--disable-static --enable-shared`.
+   Aplica `scripts/patches/libnl-3.2.25-wpa2.11.patch`, que añade `NLA_S8` y
+   `nla_get_s8()` (wpa_supplicant 2.11 los usa y libnl 3.2.25 aún no los tenía).
+   Los linker scripts `libpthread.so`/`librt.so` apuntan a `libc`, porque bionic
+   integra pthread/rt y el sysroot del NDK no trae esas `-l`.
+2. Copia `defconfig` a `.config` y desactiva DBus, syslog, AP, P2P, DPP, SAE,
+   EAP-PWD, drivers wired/macsec/wext y otras características que no necesita
+   una estación WPS. Activa TLS interno, libtommath, `CONFIG_NO_RANDOM_POOL`,
+   `CONFIG_DEBUG_FILE`, WPS, nl80211 y libnl32.
+3. Añade un directorio de includes filtrado (`build-include/netlink`) para que
+   la copia antigua de `<linux/if.h>` que trae libnl no tape la de bionic. Sin
+   esto, el compilador ve `struct ifreq` incompleto.
+4. Crea `private/android_filesystem_config.h` con los AID que usan
+   `wpa_ctrl.c` y `os_unix.c`.
+5. Compila `wpa_supplicant` y `wpa_cli` con API 24, los strip-ea y los copia a
+   `assets/wifi/`.
 
-> Nota: En Android, `pthread` está integrado en `libc`; no existe
-> `libpthread` separada. El script ya usa `LIBS=""` para evitar errores
-> de enlazador.
+## 3. Runtime: librerías y LD_LIBRARY_PATH
 
-## 2. wpa_supplicant y wpa_cli (obtener por separado)
+El `PixieDustRunner` exporta `LD_LIBRARY_PATH=<filesDir>` antes de ejecutar
+`wpa_supplicant`, de modo que el dynamic linker encuentra
+`libnl-3.so.200` y `libnl-genl-3.so.200` en el mismo directorio. `libc.so`,
+`liblog.so`, `libm.so`, `libdl.so` y el resto de bionic provienen del sistema
+del dispositivo y no se empaquetan.
 
-Si no puedes compilar con el script, consigue los binarios por:
+`wpa_cli` solo enlaza con bionic; no necesita libnl.
 
-- **Opción A (precompilados):** Busca en GitHub "wpa_supplicant android binary"
-  o dentro de aplicaciones de diagnóstico WiFi.
-- **Opción B (dispositivo rooteado):** Extrae de un Android rooteado:
-  ```bash
-  adb shell su -c "which wpa_supplicant wpa_cli"
-  adb pull /system/bin/wpa_supplicant ./wpa_supplicant_arm64
-  adb pull /system/bin/wpa_cli ./wpa_cli_arm64
-  ```
-  Luego cópialos a `app/src/main/assets/wifi/`.
-- **Opción C (compilar con gcc):** wpa_supplicant compila más fácil con
-  `arm-linux-androideabi-gcc` que con clang 18 del NDK.
+## 4. wpa_supplicant.conf
 
-## 3. libnl (opcional — solo para driver nl80211)
+El asset contiene la configuración base:
 
-libnl solo es necesario si usas el driver `nl80211` en wpa_supplicant.
-Con el driver `wext` (más antiguo, no necesita libnl) no es obligatorio.
-
-## 4. wpa_supplicant.conf ✅ YA INCLUIDO
-
-Ya está en `app/src/main/assets/wifi/wpa_supplicant.conf` con:
 ```
 ctrl_interface_group=wifi
+update_config=1
+ap_scan=1
 ```
+
+`PixieDustRunner.stageSupplicantConfig()` descarta las líneas
+`ctrl_interface*` y genera un config runtime con la ruta real del socket:
+
+```
+ctrl_interface=DIR=/data/vendor/wifi/amwf GROUP=wifi
+update_config=1
+ap_scan=1
+```
+
+El config se envía por stdin de `su` porque el dominio SELinux de `su` no puede
+leer `filesDir`. `update_config=1` permite que `save_config` persista el PSK
+tras la provisión WPS.
 
 ## 5. Permisos y SELinux
 
 - La app ejecuta los binarios vía `su`. El dispositivo debe estar rooteado.
-- En Android 10+ (API 29+) SELinux puede bloquear la creación de sockets de control
-  en `/data/vendor/wifi/wpa/`. El código usa `/data/vendor/wifi/wpa/amwf` (API >= 28)
-  o `/data/misc/wifi/amwf` (API < 28).
-- Si el ataque falla con "socket not created", revisa logcat y la política SELinux.
+- En Android 10+ (API 29+) el código usa `/data/vendor/wifi/amwf`; en versiones
+  anteriores, `/data/misc/wifi/amwf`.
+- El directorio de control se crea y se etiqueta con el contexto del proceso
+  `su`; el socket se crea correctamente siempre que el config declare
+  `ctrl_interface`. Si el ataque falla con "socket not created", revisa el
+  comando y el config runtime antes de culpar a SELinux.
+- No se debe borrar `/data/vendor/wifi/wpa/sockets`, que pertenece al
+  supplicant del sistema.
 
 ## 6. Verificación
 
-Instala la app en un dispositivo rooteado, abre "Auditoría WPS Pixie Dust" y
-comprueba que aparezcan interfaces disponibles. Si faltan binarios, la consola
-mostrará el mensaje correspondiente.
+Instala la app en un dispositivo rooteado, comprueba "Compatibilidad del
+Dispositivo" (fila **Binarios Pixie Dust**) y lanza "Auditoría WPS Pixie Dust".
+El log de la app debe mostrar `wpa_supplicant ctrl interface ready (PONG)` y,
+tras `wps_reg`, las seis líneas `WPS: ... - hexdump(len=...)` completas.
 
 ## Licencia de los binarios
 
 | Binario | Licencia | Implicación para AmWF (GPL-3.0) |
 |---------|----------|---------------------------------|
 | pixiewps | GPL-3.0-or-later | Compatible ✅ |
-| wpa_supplicant / wpa_cli | BSD-3-Clause | Compatible ✅ |
-| libnl | LGPL-2.1-or-later | Compatible ✅ |
+| wpa_supplicant / wpa_cli | BSD-3-Clause / GPL-2.0 | Compatible ✅ (rama BSD con atribución) |
+| libnl-3 / libnl-genl-3 | LGPL-2.1 | Compatible ✅ (enlace dinámico) |
 
-## Estado actual
-
-```
-app/src/main/assets/wifi/
-├── pixiewps              ✅ (arm64-v8a, compilado)
-├── pixiewps_32           ✅ (armeabi-v7a, compilado)
-├── wpa_supplicant.conf   ✅
-├── wpa_supplicant        ❌ (falta — usa build-wifi-binaries.sh)
-├── wpa_supplicant_32     ❌ (falta — usa build-wifi-binaries.sh)
-├── wpa_cli               ❌ (falta — usa build-wifi-binaries.sh)
-├── wpa_cli_32            ❌ (falta — usa build-wifi-binaries.sh)
-└── libnl-*               ⚠️  (opcional, solo para nl80211)
-```
+Ver detalles de procedencia, fuentes y parches en `THIRD-PARTY-NOTICES.md`.

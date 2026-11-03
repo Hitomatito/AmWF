@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     // Kotlin coroutines (structured concurrency para red de procesos root y streaming de salida)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
     // ViewModel + Lifecycle (UI state, ciclo de vida, repeatOnLifecycle)

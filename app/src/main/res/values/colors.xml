@@ -23,6 +23,9 @@
     <color name="monitor_active">#00E5CC</color>
     <color name="managed">#FF7043</color>
     <color name="unknown">#9E9E9E</color>
+    <color name="warning">#FFC857</color>
+    <color name="error_container">#4A241C</color>
+    <color name="on_error_container">#FFD9CF</color>
     
     <color name="card_background">#162422</color>
     <color name="card_stroke">#2D4743</color>
