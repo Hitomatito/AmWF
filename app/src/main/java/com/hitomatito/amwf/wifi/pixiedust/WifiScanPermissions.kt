@@ -98,12 +98,10 @@ object WifiScanPermissions {
     /**
      * `WifiManager.startScan()` y `getScanResults()` fallan si los servicios
      * de ubicación están desactivados, también en Android 13+ (el framework
-     * comprueba `isLocationModeEnabled()` antes de devolver resultados).
+     * comprueba `isLocationModeEnabled()` antes de devolver resultados). Por
+     * eso se exigen en todas las versiones soportadas.
      */
-    fun requiresLocationServices(): Boolean = true
-
     fun isLocationServicesEnabled(context: Context): Boolean {
-        if (!requiresLocationServices()) return true
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

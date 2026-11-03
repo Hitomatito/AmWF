@@ -105,9 +105,4 @@ class WifiScanPermissionsTest {
             WifiScanPermissions.requiredPermissionsForSdk(28)
         )
     }
-
-    @Test
-    fun `location services are required on every android version`() {
-        assertTrue(WifiScanPermissions.requiresLocationServices())
-    }
 }

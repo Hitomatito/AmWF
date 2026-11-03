@@ -170,20 +170,6 @@ object M3Parser {
         cancelRequested: () -> Boolean = { false },
         onLine: ((String) -> Unit)? = null,
         onM5M7: ((M5M7Capture) -> Unit)? = null
-    ): M3Capture = parseSource(
-        source = { timeout -> lines.poll(timeout, TimeUnit.MILLISECONDS) },
-        timeoutMs = timeoutMs,
-        cancelRequested = cancelRequested,
-        onLine = onLine,
-        onM5M7 = onM5M7
-    )
-
-    private fun parseSource(
-        source: (Long) -> String?,
-        timeoutMs: Long,
-        cancelRequested: () -> Boolean,
-        onLine: ((String) -> Unit)?,
-        onM5M7: ((M5M7Capture) -> Unit)?
     ): M3Capture {
         val fields = arrayOfNulls<String>(6)
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -202,7 +188,7 @@ object M3Parser {
             }
 
             try {
-                val line = source(50L) ?: continue
+                val line = lines.poll(50L, TimeUnit.MILLISECONDS) ?: continue
                 if (line == END_OF_STREAM) break
                 if (line.isEmpty()) continue
                 onLine?.invoke(line)
