@@ -260,6 +260,7 @@
     <string name="pixie_wps_error_pin_auth">El AP rechazó la autenticación del PIN (Device Password Auth Failure).</string>
     <string name="pixie_wps_error_unknown">El AP terminó la negociación WPS con un error desconocido.</string>
     <string name="pixie_wps_error_config_code">El AP terminó la negociación WPS con error de configuración %1$d.</string>
+    <string name="pixie_error_detail">Error: %1$s</string>
     <string name="diagnostics_subject">Diagnóstico de AmWF</string>
     <string name="diagnostics_exporting">Generando diagnóstico…</string>
     <string name="diagnostics_error">No se pudo generar el diagnóstico</string>

@@ -369,6 +369,9 @@ class PixieDustViewModel @JvmOverloads constructor(
 
         // La consola muestra los hitos del ataque; las líneas crudas del
         // supplicant se filtran para no inundar la UI (siguen en logcat).
+        // Última etapa real del ataque: RESTORING se emite siempre en el
+        // cleanup, así que no sirve para saber dónde falló la sesión.
+        var lastActiveStage = PixieDustStage.PREPARING
         val activeRunner = PixieDustRunner(
             context = appContext,
             ioDispatcher = ioDispatcher,
@@ -376,6 +379,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 if (!line.startsWith("[supplicant]")) addConsoleLine(line)
             },
             onStage = { newStage ->
+                if (newStage != PixieDustStage.RESTORING) lastActiveStage = newStage
                 // La etapa también puede llegar desde cleanup() al cancelar.
                 _uiState.update { if (it.isAttacking) it.copy(attackStage = newStage) else it }
             }
@@ -415,7 +419,14 @@ class PixieDustViewModel @JvmOverloads constructor(
                     it.copy(
                         isAttacking = false,
                         result = result,
-                        attackStage = PixieDustStage.COMPLETED,
+                        // Solo un éxito completa todas las fases. En un fallo se
+                        // conserva la etapa real para que el tracker no pinte la
+                        // fase de credenciales como la que falló.
+                        attackStage = if (result is PixieDustResult.Success) {
+                            PixieDustStage.COMPLETED
+                        } else {
+                            lastActiveStage
+                        },
                         attackFinishedAt = finishedAt
                     )
                 }
@@ -438,10 +449,13 @@ class PixieDustViewModel @JvmOverloads constructor(
                         isAttacking = false,
                         result = PixieDustResult.Failure(
                             bssid = network.bssid,
-                            reason = "Error: ${e.message}",
+                            reason = appContext.getString(
+                                R.string.pixie_error_detail,
+                                e.message ?: ""
+                            ),
                             rawOutput = ""
                         ),
-                        attackStage = PixieDustStage.COMPLETED,
+                        attackStage = lastActiveStage,
                         attackFinishedAt = System.currentTimeMillis()
                     )
                 }
