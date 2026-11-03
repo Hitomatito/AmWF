@@ -65,11 +65,19 @@ class PixieDustActivity : AppCompatActivity() {
     private var activeFilter = NetworkFilter.ALL
 
     // Permite retomar el escaneo al volver de Ajustes (permisos o ubicación).
+    // Se guarda en el estado de la instancia para sobrevivir a rotaciones y a
+    // la muerte del proceso mientras el usuario está fuera de la app.
     private var awaitingSettingsResult = false
+
+    // Distingue «nunca se pidió» de «el usuario bloqueó el permiso». Antes del
+    // primer intento shouldShowRequestPermissionRationale también devuelve
+    // false, así que no se puede consultar isPermanentlyDenied sin este flag.
+    private var permissionRequestAttempted = false
 
     private val permissionLauncher = registerForActivityResult(
         RequestMultiplePermissions()
     ) { granted ->
+        permissionRequestAttempted = true
         // Se valida solo lo obligatorio: COARSE se pide junto a FINE para que
         // Android 12 muestre la opción «precisa», pero el sistema puede
         // dejarlo sin conceder aunque FINE sí se haya concedido.
@@ -85,6 +93,10 @@ class PixieDustActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        awaitingSettingsResult = savedInstanceState
+            ?.getBoolean(STATE_AWAITING_SETTINGS) ?: false
+        permissionRequestAttempted = savedInstanceState
+            ?.getBoolean(STATE_PERMISSION_REQUESTED) ?: false
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         binding = ActivityPixieDustBinding.inflate(layoutInflater)
@@ -130,6 +142,12 @@ class PixieDustActivity : AppCompatActivity() {
                 handleDeniedScanPermissions()
             else -> showLocationServicesDialog()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_AWAITING_SETTINGS, awaitingSettingsResult)
+        outState.putBoolean(STATE_PERMISSION_REQUESTED, permissionRequestAttempted)
     }
 
     override fun onDestroy() {
@@ -360,7 +378,17 @@ class PixieDustActivity : AppCompatActivity() {
      */
     private fun ensureScanPermissions() {
         if (!WifiScanPermissions.hasRuntimePermissions(this)) {
-            permissionLauncher.launch(WifiScanPermissions.runtimePermissions())
+            // Antes del primer intento no se puede distinguir «nunca pedido» de
+            // «bloqueado»: shouldShowRequestPermissionRationale devuelve false
+            // en ambos casos. Solo tras un intento fallido se consulta.
+            if (permissionRequestAttempted &&
+                WifiScanPermissions.isPermanentlyDenied(this)
+            ) {
+                showPermissionSettingsDialog()
+            } else {
+                permissionRequestAttempted = true
+                permissionLauncher.launch(WifiScanPermissions.runtimePermissions())
+            }
             return
         }
         if (!WifiScanPermissions.isLocationServicesEnabled(this)) {
@@ -662,5 +690,10 @@ class PixieDustActivity : AppCompatActivity() {
         BAND_24,
         BAND_5,
         DUAL_BAND
+    }
+
+    private companion object {
+        private const val STATE_AWAITING_SETTINGS = "awaiting_settings_result"
+        private const val STATE_PERMISSION_REQUESTED = "permission_request_attempted"
     }
 }
