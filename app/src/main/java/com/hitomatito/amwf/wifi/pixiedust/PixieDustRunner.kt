@@ -458,6 +458,16 @@ class PixieDustRunner(
         return false
     }
 
+    /** Resuelve el mensaje localizado de un error de configuración WPS. */
+    private fun wpsFailureReason(configError: Int?): String {
+        val reasonRes = M3Parser.configErrorReasonRes(configError)
+        return if (configError == null) {
+            context.getString(reasonRes)
+        } else {
+            context.getString(reasonRes, configError)
+        }
+    }
+
     private suspend fun captureM3(
         supplicant: SupplicantHandle,
         bssid: String,
@@ -523,7 +533,7 @@ class PixieDustRunner(
                     // El motivo se registra una sola vez en runAttack.
                     return@coroutineScope M3Attempt(
                         data = null,
-                        failureReason = capture.reason,
+                        failureReason = wpsFailureReason(capture.configError),
                         m5m7 = null,
                         terminal = true
                     )

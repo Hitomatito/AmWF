@@ -7,6 +7,8 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import androidx.annotation.StringRes
+import com.hitomatito.amwf.R
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -110,7 +112,6 @@ object M3Parser {
          * bloqueado y no liberará las E-Hash hasta que se desbloquee.
          */
         data class Failed(
-            val reason: String,
             val configError: Int? = null
         ) : M3Capture()
     }
@@ -222,7 +223,7 @@ object M3Parser {
                     // Incomplete para que el runner reintente sin esperar los
                     // 25 s completos del timeout.
                     if (code == 18) break
-                    return M3Capture.Failed(configErrorReason(code), code)
+                    return M3Capture.Failed(code)
                 }
 
                 // Formato 1: línea WPS-M3: con pares clave=valor
@@ -311,22 +312,27 @@ object M3Parser {
     }
 
     /**
-     * Traduce los códigos de error de configuración WPS (wps_defs.h) a un
-     * mensaje accionable para la UI.
+     * Traduce los códigos de error de configuración WPS (wps_defs.h) al
+     * recurso de texto accionable que debe mostrar la UI.
+     *
+     * El parser es puro y no conoce el contexto: quien consume el resultado
+     * resuelve el recurso con [android.content.Context.getString]. Los códigos
+     * con argumento esperan el código como `%1$d`.
      */
-    private fun configErrorReason(code: Int?): String = when (code) {
-        5 -> "Señal WPS demasiado débil. Acerca el teléfono al AP y reintenta."
-        7 -> "El AP rechazó la asociación WPS. Comprueba que el WPS esté activo."
-        8 -> "El AP no obtuvo respuesta DHCP durante la provisión WPS."
-        11 -> "El AP no pudo conectar con el registrador WPS."
-        13 -> "El AP sospecha un intento de ataque (Rogue Suspected) y bloqueó la sesión."
-        14 -> "El AP está ocupado con otra sesión WPS. Espera y reintenta."
-        15 -> "WPS bloqueado en el AP (Setup Locked). " +
-            "Desbloquea el WPS desde el panel del router o reinícialo, y reintenta."
-        16 -> "La sesión WPS agotó el tiempo de espera."
-        17 -> "La sesión de registro WPS expiró. Reintenta."
-        18 -> "El AP rechazó la autenticación del PIN (Device Password Auth Failure)."
-        else -> "El AP terminó la negociación WPS con error de configuración $code."
+    @StringRes
+    fun configErrorReasonRes(code: Int?): Int = when (code) {
+        5 -> R.string.pixie_wps_error_weak_signal
+        7 -> R.string.pixie_wps_error_assoc_rejected
+        8 -> R.string.pixie_wps_error_dhcp
+        11 -> R.string.pixie_wps_error_registrar
+        13 -> R.string.pixie_wps_error_rogue_suspected
+        14 -> R.string.pixie_wps_error_busy
+        15 -> R.string.pixie_wps_error_setup_locked
+        16 -> R.string.pixie_wps_error_timeout
+        17 -> R.string.pixie_wps_error_registration_expired
+        18 -> R.string.pixie_wps_error_pin_auth
+        null -> R.string.pixie_wps_error_unknown
+        else -> R.string.pixie_wps_error_config_code
     }
 
     private fun fieldForLabel(label: String): M3Field? = when (label) {

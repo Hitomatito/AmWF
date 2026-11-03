@@ -7,6 +7,7 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import com.hitomatito.amwf.R
 import java.util.concurrent.LinkedBlockingQueue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -152,7 +153,26 @@ class M3ParserTest {
         assertTrue(capture is M3Parser.M3Capture.Failed)
         capture as M3Parser.M3Capture.Failed
         assertEquals(15, capture.configError)
-        assertTrue(capture.reason.contains("bloqueado", ignoreCase = true))
+        assertEquals(
+            R.string.pixie_wps_error_setup_locked,
+            M3Parser.configErrorReasonRes(capture.configError)
+        )
+    }
+
+    @Test
+    fun `maps unknown and null config errors to their own resources`() {
+        assertEquals(
+            R.string.pixie_wps_error_unknown,
+            M3Parser.configErrorReasonRes(null)
+        )
+        assertEquals(
+            R.string.pixie_wps_error_config_code,
+            M3Parser.configErrorReasonRes(99)
+        )
+        assertEquals(
+            R.string.pixie_wps_error_weak_signal,
+            M3Parser.configErrorReasonRes(5)
+        )
     }
 
     @Test
