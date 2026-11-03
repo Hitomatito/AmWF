@@ -327,15 +327,14 @@ object M3Parser {
         return true
     }
 
-    private fun fieldForLabel(label: String): M3Field? = when (label) {
-        "Enrollee Nonce" -> M3Field.ENROLLEE_NONCE
-        "DH own Public Key" -> M3Field.OWN_PUBLIC_KEY
-        "DH peer Public Key" -> M3Field.PEER_PUBLIC_KEY
-        "AuthKey" -> M3Field.AUTH_KEY
-        "E-Hash1" -> M3Field.E_HASH_1
-        "E-Hash2" -> M3Field.E_HASH_2
-        else -> null
-    }
+    /**
+     * Resuelve el campo a partir de la etiqueta que imprime wpa_supplicant.
+     *
+     * Se deriva del propio enum: si se añade un campo nuevo, su etiqueta no
+     * puede quedar desincronizada de este mapeo.
+     */
+    private fun fieldForLabel(label: String): M3Field? =
+        M3Field.entries.firstOrNull { it.label == label }
 
     private fun parseKeyValueLine(line: String, fields: Array<String?>, onCaptured: () -> Unit) {
         for (match in KEY_VALUE.findAll(line)) {

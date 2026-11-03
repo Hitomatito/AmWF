@@ -80,9 +80,6 @@ object WifiScanPermissions {
         }
 
     /** true si la versión de Android usa además NEARBY_WIFI_DEVICES. */
-    fun usesNearbyWifiPermission(): Boolean =
-        usesNearbyWifiPermissionForSdk(Build.VERSION.SDK_INT)
-
     internal fun usesNearbyWifiPermissionForSdk(sdk: Int): Boolean = sdk >= API_NEARBY_WIFI
 
     fun deniedPermissions(context: Context): List<String> =

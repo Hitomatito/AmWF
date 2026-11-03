@@ -46,6 +46,24 @@ class WifiNetworkInfoTest {
     }
 
     @Test
+    fun `un SSID vacio usa la etiqueta localizada de red oculta`() {
+        val hidden = PixieDustNetwork(
+            ssid = "",
+            bssid = "00:11:22:33:44:55",
+            frequency = 2437,
+            level = -50,
+            wpsCapable = true,
+            wpsLocked = false,
+            capabilities = "",
+            hiddenSsidLabel = "Red oculta"
+        )
+        assertEquals("Red oculta", hidden.displayName)
+
+        val named = network(2437, "").copy(ssid = "Casa")
+        assertEquals("Casa", named.displayName)
+    }
+
+    @Test
     fun `seguridad se interpreta desde capabilities`() {
         assertEquals(
             WifiSecurity.WPA2,

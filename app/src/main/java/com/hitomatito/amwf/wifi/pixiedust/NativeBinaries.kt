@@ -142,6 +142,27 @@ object NativeBinaries {
         return context.getString(reasonRes, displayNames(missing))
     }
 
+    /**
+     * Resumen corto para la fila de compatibilidad y el aviso al abrir la
+     * auditoría. Devuelve null si no falta ninguno.
+     *
+     * El detalle accionable (BINARIES_SETUP.md) vive en [missingBinariesMessage],
+     * que se usa como motivo cuando la auditoría falla. Ambos comparten aquí la
+     * decisión arm64/armeabi-v7a en lugar de repetirla en la Activity.
+     */
+    fun missingBinariesSummary(
+        context: Context,
+        missing: List<String> = missingCriticalBinaries(context)
+    ): String? {
+        if (missing.isEmpty()) return null
+        val summaryRes = if (is32BitUnsupported()) {
+            R.string.pixie_binaries_missing_32_names
+        } else {
+            R.string.pixie_binaries_missing_names
+        }
+        return context.getString(summaryRes, displayNames(missing))
+    }
+
     fun ctrlDir(): String =
         if (Build.VERSION.SDK_INT >= 28) CTRL_DIR_VENDOR else CTRL_DIR_LEGACY
 

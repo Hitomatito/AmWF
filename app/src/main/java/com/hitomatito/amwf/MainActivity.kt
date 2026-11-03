@@ -156,7 +156,6 @@ class MainActivity : AppCompatActivity() {
                 MonitorMode.MANAGED -> enableMonitorMode()
                 MonitorMode.MONITOR -> disableMonitorMode()
                 MonitorMode.UNKNOWN -> checkCurrentMode()
-                else -> {}
             }
         }
 
@@ -169,14 +168,11 @@ class MainActivity : AppCompatActivity() {
             if (compatCheckInProgress || missing.isNullOrEmpty()) {
                 startActivity(Intent(this, PixieDustActivity::class.java))
             } else {
-                Toast.makeText(
-                    this,
-                    getString(
-                        R.string.pixie_binaries_missing_detail,
-                        NativeBinaries.displayNames(missing)
-                    ),
-                    Toast.LENGTH_LONG
-                ).show()
+                // El mensaje lo centraliza NativeBinaries para incluir también
+                // la explicación de armeabi-v7a cuando aplica.
+                NativeBinaries.missingBinariesSummary(this, missing)?.let { detail ->
+                    Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -332,14 +328,8 @@ class MainActivity : AppCompatActivity() {
 
         // Mostrar estado de los binarios Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
         val pdb = result.deviceInfo.pixieDustBinaries
-        val pdbText = if (pdb.allAvailable) {
-            getString(R.string.pixie_binaries_available)
-        } else {
-            getString(
-                R.string.pixie_binaries_missing_names,
-                NativeBinaries.displayNames(pdb.missing)
-            )
-        }
+        val pdbText = NativeBinaries.missingBinariesSummary(this, pdb.missing)
+            ?: getString(R.string.pixie_binaries_available)
         updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
 
         // El botón permanece siempre habilitado y con un solo listener: si la
@@ -475,7 +465,6 @@ class MainActivity : AppCompatActivity() {
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
                 setToggleEnabled(true)
             }
-            else -> {}
         }
     }
 }

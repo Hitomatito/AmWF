@@ -1,7 +1,6 @@
 <resources>
     <string name="app_name">AmWF</string>
     <string name="monitor_mode">Control de Modo Monitor WiFi</string>
-    <string name="status">Estado</string>
     <string name="interface_info">Informacion</string>
     <string name="waiting">Esperando…</string>
     <string name="checking">Verificando…</string>
@@ -16,8 +15,6 @@
     <string name="checking_compatibility">Verificando…</string>
     <string name="device_compatible">Dispositivo Compatible</string>
     <string name="device_incompatible">Dispositivo No Compatible</string>
-    <string name="root_required">Root Requerido</string>
-    <string name="root_missing">Root no detectado</string>
     
     <string name="label_chipset">Chipset</string>
     <string name="label_driver">Driver WiFi</string>
@@ -29,15 +26,13 @@
     <string name="capability_not_verified">Captura no verificada</string>
     <string name="pixie_binaries_available">Binarios disponibles</string>
     <string name="pixie_binaries_missing_names">Faltan: %1$s</string>
-    <string name="pixie_binaries_missing_detail">No se puede iniciar la auditoría: faltan %1$s</string>
+    <string name="pixie_binaries_missing_32_names">Faltan: %1$s (Pixie Dust requiere arm64-v8a; no hay wpa_supplicant para armeabi-v7a)</string>
     <string name="capability_full">Monitor completo</string>
     <string name="capability_injection">Inyeccion de paquetes</string>
     <string name="capability_capture">Captura completa</string>
     <string name="capability_unknown">Por verificar</string>
     <string name="capability_unavailable">Sin con_mode (driver nuevo)</string>
     
-    <string name="check_pass">OK</string>
-    <string name="check_fail">Falla</string>
     <string name="check_na">N/A</string>
     <string name="no">No</string>
     <string name="not_found">No encontrado</string>
@@ -70,12 +65,6 @@
     <string name="pixie_dust_subtitle">Audita la resistencia WPS de tus propios routers</string>
     <string name="pixie_title">Auditoría WPS</string>
     <string name="pixie_subtitle">Pixie Dust · auditoría WPS de tu red</string>
-    <string name="pixie_step1_title">Busca redes cercanas</string>
-    <string name="pixie_step1_subtitle">Activa el WiFi y concede los permisos necesarios para ver las redes del entorno.</string>
-    <string name="pixie_step2_title">Elige tu red</string>
-    <string name="pixie_step2_subtitle">Toca una red con WPS disponible para marcarla como objetivo.</string>
-    <string name="pixie_step3_title">Audita la red elegida</string>
-    <string name="pixie_step3_subtitle">Revisa el objetivo y ejecuta la prueba Pixie Dust.</string>
     <string name="pixie_section_scan">Redes cercanas</string>
     <string name="pixie_section_networks">Redes detectadas</string>
     <string name="pixie_search_hint">Buscar por nombre o BSSID</string>
@@ -115,11 +104,10 @@
     <string name="pixie_wps_hint">Solo las redes con WPS disponible se pueden auditar.</string>
     <string name="pixie_target_none_title">Ninguna red seleccionada</string>
     <string name="pixie_target_none_message">Elige una red para auditar.</string>
-    <string name="pixie_change_target">Cambiar objetivo</string>
     <string name="pixie_choose_network_button">Elegir red</string>
     <string name="pixie_change_network_button">Cambiar red</string>
     <string name="pixie_sheet_title">Elegir red</string>
-    <string name="pixie_sheet_subtitle">Toca una red con WPS para auditar.</string>
+    <string name="pixie_sheet_subtitle">Toca una red con WPS para auditarla al instante con las opciones actuales.</string>
     <string name="pixie_sheet_close">Cerrar selector</string>
     <string name="pixie_sheet_rescan_short">Escanear</string>
     <string name="pixie_session_overline">Sesión de auditoría</string>
@@ -184,8 +172,8 @@
     <string name="pixie_interface_label">Interfaz WiFi</string>
     <string name="pixie_interface_value">Interfaz: %1$s</string>
     <string name="pixie_interface_hint">Se detecta automáticamente. El escaneo necesita permiso de ubicación y, en Android 13+, de dispositivos cercanos.</string>
-    <string name="pixie_target_title">Red objetivo</string>
     <string name="pixie_network_hint">Elige una red detectada</string>
+    <string name="pixie_hidden_network">Red oculta</string>
     <string name="pixie_networks_found">Redes detectadas: %1$d</string>
     <string name="pixie_no_network_selected">Ninguna red seleccionada</string>
     <string name="pixie_selected_network">Red seleccionada: %1$s</string>
@@ -236,6 +224,10 @@
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant no aceptó wps_reg. Posibles causas: interfaz no lista, WPS desactivado o WPS bloqueado.</string>
     <string name="pixie_reason_capture_incomplete">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). Posibles causas: señal débil, WPS desactivado o WPS bloqueado.</string>
     <string name="pixie_reason_capture_failed">No se pudo capturar el M3.</string>
+    <string name="pixie_reason_invalid_bssid">Formato de BSSID no válido: %1$s</string>
+    <string name="pixie_reason_invalid_interface">Nombre de interfaz no válido: %1$s</string>
+    <string name="pixie_reason_supplicant_socket">No se pudo crear el socket de wpa_supplicant (SELinux podría estar bloqueándolo)</string>
+    <string name="pixie_reason_no_m3_data">No hay datos suficientes para ejecutar el ataque Pixie Dust</string>
     <string name="pixie_error">Error durante la auditoría</string>
     <string name="pixie_timeout">Tiempo de espera agotado</string>
     <string name="pixie_console">Consola</string>
