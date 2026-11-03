@@ -11,7 +11,6 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.Log
-import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import com.hitomatito.amwf.destroyForciblyCompat
 import com.hitomatito.amwf.isAliveCompat
@@ -152,14 +151,9 @@ class PixieDustRunner(
         val missing = NativeBinaries.missingCriticalBinaries(context)
         if (missing.isNotEmpty()) {
             log("[-] Missing native assets: ${missing.joinToString(", ")}")
-            val reasonRes = if (NativeBinaries.archSuffix() == "_32") {
-                R.string.pixie_native_missing_32
-            } else {
-                R.string.pixie_native_missing
-            }
             return@withContext PixieDustResult.Failure(
                 bssid = bssid,
-                reason = context.getString(reasonRes, NativeBinaries.displayNames(missing)),
+                reason = NativeBinaries.missingBinariesMessage(context, missing).orEmpty(),
                 rawOutput = ""
             )
         }

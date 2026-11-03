@@ -378,7 +378,7 @@ class DeviceCompatibilityChecker(private val context: Context) {
                 type = IssueType.PIXIE_DUST,
                 severity = Severity.WARNING,
                 message = "Binarios de Pixie Dust faltantes: ${NativeBinaries.displayNames(missingPixieBinaries)}",
-                suggestion = if (NativeBinaries.archSuffix() == "_32") {
+                suggestion = if (NativeBinaries.is32BitUnsupported()) {
                     "Pixie Dust requiere un dispositivo arm64-v8a: el supplicant de " +
                         "32 bits no está soportado y no se puede empaquetar."
                 } else {

@@ -213,14 +213,7 @@ class PixieDustViewModel @JvmOverloads constructor(
      */
     private suspend fun nativeBinariesError(): String? = withContext(ioDispatcher) {
         NativeBinaries.ensure(appContext)
-        val missing = NativeBinaries.missingCriticalBinaries(appContext)
-        if (missing.isEmpty()) return@withContext null
-        val reasonRes = if (NativeBinaries.archSuffix() == "_32") {
-            R.string.pixie_native_missing_32
-        } else {
-            R.string.pixie_native_missing
-        }
-        appContext.getString(reasonRes, NativeBinaries.displayNames(missing))
+        NativeBinaries.missingBinariesMessage(appContext)
     }
 
     // ========================================================================

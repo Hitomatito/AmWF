@@ -10,6 +10,7 @@ package com.hitomatito.amwf.wifi.pixiedust
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import java.io.File
 
@@ -118,6 +119,28 @@ object NativeBinaries {
 
     fun displayNames(assets: List<String>): String =
         assets.map(::displayName).distinct().joinToString(", ")
+
+    /** true en armeabi-v7a, donde no hay supplicant empaquetado. */
+    fun is32BitUnsupported(): Boolean = archSuffix() == "_32"
+
+    /**
+     * Mensaje localizado para el usuario cuando faltan binarios críticos.
+     *
+     * Devuelve null si no falta ninguno. Centralizarlo evita que el runner y el
+     * ViewModel elijan recursos por su cuenta.
+     */
+    fun missingBinariesMessage(
+        context: Context,
+        missing: List<String> = missingCriticalBinaries(context)
+    ): String? {
+        if (missing.isEmpty()) return null
+        val reasonRes = if (is32BitUnsupported()) {
+            R.string.pixie_native_missing_32
+        } else {
+            R.string.pixie_native_missing
+        }
+        return context.getString(reasonRes, displayNames(missing))
+    }
 
     fun ctrlDir(): String =
         if (Build.VERSION.SDK_INT >= 28) CTRL_DIR_VENDOR else CTRL_DIR_LEGACY
