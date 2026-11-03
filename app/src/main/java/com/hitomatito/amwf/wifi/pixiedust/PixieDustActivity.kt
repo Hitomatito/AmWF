@@ -517,9 +517,12 @@ class PixieDustActivity : AppCompatActivity() {
 
         binding.swDisableWifi.isEnabled = !busy
 
-        binding.tvError.text = state.errorMessage ?: ""
+        // El aviso de binarios nativos es persistente; el error de escaneo o
+        // de selección es transitorio y tiene prioridad mientras esté visible.
+        val visibleError = state.errorMessage ?: state.nativeError
+        binding.tvError.text = visibleError ?: ""
         binding.tvError.visibility =
-            if (state.errorMessage.isNullOrBlank()) View.GONE else View.VISIBLE
+            if (visibleError.isNullOrBlank()) View.GONE else View.VISIBLE
 
         sessionRenderer.update(state)
 

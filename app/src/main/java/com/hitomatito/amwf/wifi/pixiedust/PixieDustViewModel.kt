@@ -48,6 +48,9 @@ data class PixieDustUiState(
     val result: PixieDustResult? = null,
     val consoleLines: List<String> = emptyList(),
     val errorMessage: String? = null,
+    // Aviso persistente de binarios nativos. Se mantiene aunque un escaneo o
+    // una selección sobrescriban el error transitorio de errorMessage.
+    val nativeError: String? = null,
     val attackStage: PixieDustStage? = null,
     val attackStartedAt: Long? = null,
     val attackFinishedAt: Long? = null,
@@ -151,7 +154,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 _uiState.value = state.copy(
                     interfacesAvailable = ifaces.isNotEmpty(),
                     selectedInterface = if (ifaces.isNotEmpty()) ifaces.first() else state.selectedInterface,
-                    errorMessage = binariesError ?: state.errorMessage
+                    nativeError = binariesError
                 )
                 addConsoleLine("Interfaces disponibles: ${ifaces.joinToString(", ")}")
             } catch (e: Exception) {
