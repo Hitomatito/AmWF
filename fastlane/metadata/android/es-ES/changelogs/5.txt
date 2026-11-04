@@ -1,0 +1,1 @@
+v2.0.1: Pixie Dust recovers the real PSK and restores WiFi reliably; compatibility check restores WiFi on every exit path; diagnostics redact SSIDs.

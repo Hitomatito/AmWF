@@ -1,0 +1,20 @@
+AmWF turns a rooted Qualcomm Snapdragon phone into a WiFi analysis tool. Enable monitor mode with a tap, verify what your hardware can do, and audit the WPS security of your own routers with the Pixie Dust technique — no terminal, no scripts, no accounts.
+
+Only audit networks you own or have explicit permission to test. See the legal notice in the repository.
+
+Features:
+
+• Monitor mode — capture 802.11 traffic from the phone's built-in WiFi adapter, no USB dongle needed.
+• Compatibility verification — chipset/driver detection plus capture and injection tests with a progress bar, and WiFi is always restored afterwards. Nothing runs automatically.
+• WPS Pixie Dust audit — scan nearby networks, see which ones have WPS enabled, audit with a single tap. When possible, recovers the WPS PIN and the WPA key.
+• Clear progress — phase-by-phase tracker, session timer, collapsible console with every step.
+• Privacy by design — AmWF has no INTERNET permission and no analytics or ads; the exportable diagnostic report redacts MAC addresses and SSIDs.
+
+Requirements:
+
+• Root access
+• Qualcomm Snapdragon SoC
+• Android 7.0 or newer
+• Bundled native toolchain: pixiewps, wpa_supplicant 2.11, libnl 3.2.25 (arm64-v8a and armeabi-v7a)
+
+Audit logs are stored locally and may contain plaintext credentials; they never leave the device. Source code is GPL-3.0-or-later. Interface in Spanish and English.
