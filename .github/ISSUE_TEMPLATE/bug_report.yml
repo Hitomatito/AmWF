@@ -1,0 +1,95 @@
+name: Bug report
+description: Report a problem with AmWF
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. **Never attach audit logs (`pixie-*.log`),
+        WPS PINs or WPA keys**: they contain credentials in plain text. Diagnostics
+        reports exported by the app already redact MACs and SSIDs — inspect them
+        before posting. For vulnerabilities, follow [SECURITY.md](https://github.com/Hitomatito/AmWF/blob/main/SECURITY.md) instead of this template.
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: App version
+      options:
+        - 2.0.1
+        - 2.0.0
+        - 1.2.x
+        - Other (specify in the description)
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and chipset
+      placeholder: "e.g. Redmi Note 10 Pro (M2101K6R), Snapdragon 732G"
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version and build
+      placeholder: "e.g. Android 13 (API 33), MIUI 14"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: root
+    attributes:
+      label: Root method
+      options:
+        - Magisk
+        - KernelSU
+        - APatch
+        - Other (specify in the description)
+        - Not rooted
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem clearly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, in order, if applicable.
+      placeholder: |
+        1. Tap "Verify compatibility"
+        2. Tap "Enable monitor"
+        3. …
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics report (optional)
+      description: |
+        Export it from the main screen ("Share diagnostics"), open it and **remove
+        anything sensitive anyway** — MACs/SSIDs are redacted but check it. Never
+        paste audit logs or credentials here.
+      placeholder: Paste the redacted report here
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed all credentials (WPS PIN, WPA key) from any log I am attaching
+          required: true
+        - label: I searched existing issues and found no report of the same problem
+          required: true

@@ -1,263 +1,120 @@
 <div align="center">
-  <img src="app/src/main/ic_launcher-playstore.png" alt="AmWF Logo" width="120">
+  <img src="app/src/main/ic_launcher-playstore.png" alt="AmWF" width="120">
 
-  # AmWF - Android WiFi Monitor Mode Controller
+  # AmWF
 
-  [![Release](https://img.shields.io/github/v/release/Hitomatito/AmWF?style=flat-square)](https://github.com/Hitomatito/AmWF/releases)
-  [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=flat-square&logo=android&logoColor=fff)](https://developer.android.com)
-  [![Language](https://img.shields.io/badge/Language-Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=fff)](https://kotlinlang.org)
-  [![UI](https://img.shields.io/badge/UI-Material%203-6750A4?style=flat-square)](https://m3.material.io)
-  [![License](https://img.shields.io/github/license/Hitomatito/AmWF?style=flat-square)](LICENSE)
+  **Your WiFi, under control.**
 
-  **Control WiFi monitor mode on rooted Snapdragon devices — now with a built-in WPS Pixie Dust audit.**
+  Monitor mode and WPS Pixie Dust auditing from your Android phone, without a terminal or commands.
 
-  [Features](#features) • [What's new in v2.0](#whats-new-in-v20) • [Requirements](#system-requirements) • [Installation](#installation) • [Usage](#usage) • [How it works](#how-it-works) • [Project structure](#project-structure) • [Tech stack](#tech-stack) • [Limitations](#limitations)
+  [![Release](https://img.shields.io/github/v/release/Hitomatito/AmWF?style=flat-square&label=release&color=0891b2)](https://github.com/Hitomatito/AmWF/releases)
+  [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com)
+  [![Root required](https://img.shields.io/badge/Root-required-orange?style=flat-square)](#common-questions)
+  [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 </div>
 
+---
+
+AmWF turns a rooted Qualcomm Snapdragon phone into a WiFi analysis tool. Enable monitor mode, verify what your hardware can do, and audit the WPS security of your own routers from a clean, one-handed interface.
+
+No terminal. No scripts. No accounts.
+
 > [!IMPORTANT]
-> AmWF is a security research tool. Use it only on devices and networks you own or are explicitly authorized to audit, and comply with your local laws. See [DISCLAIMER_es.md](DISCLAIMER_es.md).
+> AmWF is a security research tool. Only audit networks you own or have explicit permission to test. See the [legal notice](DISCLAIMER_en.md).
 
-AmWF enables and disables WiFi monitor mode through Qualcomm's `con_mode` driver parameter on rooted Android devices. Monitor mode is required for wireless network analysis, packet capture, and WPA/WPA2 handshake capture.
-
-## What's new in v2.0
-
-- **WPS Pixie Dust audit built in** — scan for WPS-enabled networks, tap one, and AmWF runs a full Pixie Dust attack with bundled native binaries (`wpa_supplicant`, `wpa_cli`, `pixiewps`). It recovers the WPS PIN, and the WPA PSK when an SSID is set.
-- **Manual compatibility check** — the disruptive check (radio switched to monitor mode, WiFi briefly drops) now runs only when you tap **Verificar compatibilidad**, with live progress and per-step status. It never runs automatically at startup.
-- **Audit logging** — every audit persists a detailed log with the raw process output for post-mortem analysis. See [BINARIES_SETUP.md](BINARIES_SETUP.md) for how the native binaries are built and verified.
-
-## Features
-
-- **Monitor mode on demand** — enable/disable monitor mode via Qualcomm's `con_mode`, with a compatibility probe you trigger explicitly.
-- **WPS Pixie Dust audit** — one-tap audit for WPS-enabled networks: network scan with band/WPS filters, phase tracker, session timer, live console, and PIN/PSK recovery.
-- **Native-first binaries** — purpose-built `wpa_supplicant` with complete WPS hexdumps (the system supplicant truncates them), bundled as ARM assets, with automatic fallback to system `wpa_cli`/`pixiewps` when available.
-- **Compatibility verification with progress** — chipset, driver, root, and capture/injection probing with a live progress indicator; results cached per process.
-- **Redacted diagnostics export** — one-tap share of passive device/WiFi state; MAC addresses and SSIDs are redacted by default.
-- **Spanish and English** — full ES/EN localization, switchable in-app.
-
-## Supported devices
-
-<details>
-<summary><b>Chipsets</b> (click to expand)</summary>
-
-AmWF identifies Snapdragon chipsets by codename and CPU part number:
-
-| Generation | Chipset | Codename |
-|------------|---------|----------|
-| Flagship | Snapdragon 8 Gen 3 | `kalama` |
-| Flagship | Snapdragon 8 Gen 2 | `cape` |
-| Flagship | Snapdragon 8+ Gen 2 | - |
-| Flagship | Snapdragon 8 Gen 1 | `taro` |
-| Flagship | Snapdragon 8+ Gen 1 | - |
-| Flagship | Snapdragon 888 / 888+ | `lahaina`, `haydn` |
-| Flagship | Snapdragon 870 | `kona`, `alioth`, `cpu7pro` |
-| Flagship | Snapdragon 865 | `kona`, `msmnile` |
-| Flagship | Snapdragon 860 | `vayu` |
-| Flagship | Snapdragon 855 / 855+ | `msmnile` |
-| High-end | Snapdragon 8s Gen 3 | `crown` |
-| High-end | Snapdragon 780G | `waipio` |
-| High-end | Snapdragon 778G / 778G+ | `waipio` |
-| High-end | Snapdragon 768G | `lito` |
-| High-end | Snapdragon 750G | `atoll`, `sm7225` |
-| Mid-range | Snapdragon 7 Gen 2 | `pineapple` |
-| Mid-range | Snapdragon 7 Gen 1 | `pineapple`, `yupik` |
-| Mid-range | Snapdragon 730G | `holi` |
-| Mid-range | Snapdragon 720G | `corona` |
-| Mid-range | Snapdragon 695 | `sm6350` |
-| Mid-range | Snapdragon 6 Gen 1/2 | `qsm` |
-| Entry | Snapdragon 680 | `bengal` |
-| Entry | Snapdragon 665/670/675 | `trinket` |
-| Entry | Snapdragon 662 | `bengal` |
-| Laptop | Snapdragon 7c Gen 2 | `saipan` |
-
-</details>
-
-### Root methods
-
-| Method | Supported |
-|--------|-----------|
-| Magisk | Yes |
-| KernelSU | Yes |
-| APatch | Yes |
-| phh-su | Yes |
-| SuperSU | Yes |
-| Generic su | Yes |
-
-### WiFi drivers
-
-The app searches for `con_mode` with root (`su`), because modern SELinux policies block the app UID from reading `/sys/module`. Out-of-tree driver variants such as `qca_cld3_*` are also matched:
-
-| Module Path | Typical Hardware |
-|-------------|------------------|
-| `/sys/module/wlan/parameters/con_mode` | Many Snapdragon (e.g. 855, 860, 732G) |
-| `/sys/module/hdd/parameters/con_mode` | Snapdragon 888, 8 Gen series |
-| `/sys/module/kiwi_v2/parameters/con_mode` | Snapdragon 8 Gen 2+ |
-| `/sys/module/qca_cld3_kiwi_v2/parameters/con_mode` | Snapdragon 8 Elite |
-| `/sys/module/kiwi/parameters/con_mode` | Snapdragon 6/7 series |
-| `/sys/module/wcn/parameters/con_mode` | Qualcomm WCN6xxx |
-
-### System requirements
-
-| Requirement | Minimum |
-|-------------|---------|
-| Android version | 7.0 (API 24) |
-| Root access | Required |
-| Architecture | ARM64 (`aarch64`) — 32-bit devices cannot run the bundled supplicant |
-
-Other Snapdragon chipsets may work if they expose `con_mode` through the Qualcomm WiFi driver (QCACLD).
-
-## Installation
-
-### From APK
-
-1. Download the latest version from [Releases](https://github.com/Hitomatito/AmWF/releases).
-2. Install the APK on your rooted Android device.
-3. Grant root access when prompted.
-
-### Build from source
-
-Requirements: JDK 21 (Gradle daemon), Android SDK 36, and an ARM device for real monitor-mode/Pixie Dust behavior.
-
-```bash
-./gradlew :app:assembleDebug
-```
-
-Unit tests and lint:
-
-```bash
-./gradlew :app:testDebugUnitTest :app:lintDebug
-```
-
-See [BINARIES_SETUP.md](BINARIES_SETUP.md) for rebuilding the native binaries (requires NDK r27+ and sibling source trees).
-
-## Usage
-
-### Main screen
-
-- **Device Compatibility** — chipset, driver, root, `con_mode` path, and tested capabilities. All checks are passive until you tap the verify button.
-- **WiFi Mode** — current mode (Normal / Monitor), interface name, MAC, and frequency.
-
-### Verify compatibility (manual)
-
-Tap **Verificar compatibilidad** in the Device Compatibility card. The probe temporarily switches the radio to monitor mode, tests capture/injection and the `con_mode` write, then restores normal mode. A progress bar and status message show each step (driver detection, root, capture test, restore...). WiFi may briefly disconnect — this is expected. The result is cached for the lifetime of the app process; it never runs automatically.
-
-### Enable / disable monitor mode
-
-- **ACTIVAR MONITOR** — requires a prior verification in the current session (a toast informs you otherwise).
-- **VOLVER A NORMAL** — always available, no verification required.
-
-### WPS Pixie Dust audit
-
-1. Tap the **WPS Pixie Dust Audit** button to open the audit screen.
-2. Scan networks; auditable networks advertise WPS and are not WPS-locked.
-3. Tap an auditable network — the audit starts immediately (disabling WiFi first, by default).
-4. AmWF runs the WPS exchange with the bundled `wpa_supplicant`, captures M1→M3, and cracks the Pixie Dust with `pixiewps`. On success you get the WPS PIN and, when an SSID is provided, the WPA PSK.
-
-> [!WARNING]
-> Audit logs under `/sdcard/AmWF/pixie-logs/` (fallback: app-private storage) contain the plaintext WPS PIN and WPA PSK in cleartext. They are written with owner-only permissions. Do not share them or commit them anywhere.
+<div align="center">
+  <img src="docs/screenshots/main-en.png" alt="AmWF main screen showing device compatibility, WiFi mode, and Pixie Dust audit controls" width="380">
+</div>
 
 > [!NOTE]
-> The audit only works against APs with WPS enabled and unlocked. Results depend on the AP's implementation. On 32-bit (`armeabi-v7a`) devices only `pixiewps_32` is bundled, so the full audit cannot run there.
+> Built for rooted Qualcomm Snapdragon devices running Android 7.0 or newer. Run **Verify compatibility** before enabling monitor mode.
 
-### Diagnostics / bug reports
+## Why AmWF?
 
-Tap **Compartir diagnóstico**: AmWF bundles passive device/WiFi state, the redacted in-app log buffer, and the last compatibility result into a shareable `.txt`. No capability test is run, so WiFi is untouched. MACs are reduced to their OUI prefix and SSIDs are replaced with `<redacted>`. Attach it when reporting an issue.
+A WiFi audit usually means a laptop, a supported adapter, a terminal, and a stack of scripts. AmWF moves that workflow to the phone in your pocket:
 
-### Language
+- **No terminal.** Every step has a clear button and a readable status.
+- **No guesswork.** The compatibility check tells you what your hardware can do before you change anything.
+- **No leftover state.** WiFi is restored automatically when an audit ends.
+- **No accounts, no cloud.** The app has no Internet permission.
 
-The language button (ES/EN) switches the app between Spanish and English; the interface recreates and keeps your choice.
+## What you can do
 
-## How it works
+### Monitor mode, without the hassle
 
-### Monitor mode activation flow
+Turn your phone's WiFi adapter into an 802.11 capture sensor with a single tap.
 
-```
-1. User taps "Verificar compatibilidad" (never automatic)
-   └─> Detects root, chipset, WiFi driver, con_mode path
-   └─> Tests write access to con_mode + capture/injection
-   └─> Probes bundled Pixie Dust binaries
-   └─> Restores normal WiFi at the end
+- Enable and disable monitor mode whenever you want.
+- Check your WiFi status, interface, and frequency at any time.
+- Return to normal mode instantly, without repeating checks.
 
-2. User taps "ACTIVAR MONITOR"
-   └─> svc wifi disable → con_mode = 4 → wlan0 down
-   └─> iw dev wlan0 set monitor → wlan0 up → svc wifi enable
+### Verification at your own pace
 
-3. User taps "VOLVER A NORMAL"
-   └─> svc wifi disable → con_mode = 0 → wlan0 down
-   └─> iw dev wlan0 set type managed → wlan0 up → svc wifi enable
-```
+Before changing anything, AmWF can make sure your device is ready.
 
-### con_mode values
+- Detects your chipset, driver, and root access.
+- Checks capture, injection, and WiFi control with a progress bar.
+- Nothing runs automatically: you decide when to verify.
+- The result stays available for the session, so you never have to repeat the test.
 
-| Value | Mode |
-|-------|------|
-| 0 | STA (managed / normal) |
-| 4 | Monitor mode |
+### WPS Pixie Dust auditing
 
-### WPS Pixie Dust flow
+Find out whether your routers' WPS can resist a Pixie Dust attack.
 
-```
-1. Scan → filter WPS-capable, WPS-unlocked networks
-2. svc wifi disable (default) → attach bundled wpa_supplicant
-3. WPS IE exchange M1 → M2 → M3 (hexdump-complete capture)
-4. pixiewps brute-force of the M3 nonce material
-5. On success: WPS PIN recovered; wpa_cli triggers provisioning → PSK from config
-6. Audit log persisted to /sdcard/AmWF/pixie-logs/ (mode 600)
-7. WiFi restored and framework state confirmed (svc wifi enable, verified + retried)
-```
+- Scan nearby networks and see which ones have WPS available.
+- Search by name or BSSID, and filter by auditable or dual-band networks.
+- Tap a network and the audit starts immediately, with no extra forms or buttons.
+- Recover the WPS PIN and, when possible, the WPA key.
+- Copy the credentials to your clipboard with one tap.
 
-## Project structure
+### The whole process, in plain sight
 
-```
-app/src/main/java/com/hitomatito/amwf/
-├── MainActivity.kt               # Monitor mode / compatibility UI and entry point
-├── MonitorModeManager.kt         # Monitor mode enable/disable logic
-├── DeviceCompatibilityChecker.kt # Chipset, root, driver detection + binary probe
-├── ShellExecutor.kt              # Root shell execution (deadlock-safe)
-├── ProcessCompat.kt              # API 26+ process helpers for minSdk 24
-├── LocaleHelper.kt               # Language switching (ES/EN)
-├── diagnostics/                  # Passive state collection + redaction
-│   ├── AppLogger.kt              # In-memory log ring buffer
-│   ├── DiagnosticsCollector.kt   # Passive device/WiFi state gathering
-│   ├── DiagnosticsExporter.kt    # Writes and shares the report
-│   └── DiagnosticsFormat.kt      # MAC/OUI redaction
-└── wifi/pixiedust/               # Native WPS Pixie Dust audit flow
-    ├── PixieDustActivity.kt      # Audit screen (network list, session, console)
-    ├── PixieDustViewModel.kt     # Audit state, scanning, cancellation
-    ├── PixieDustRunner.kt        # Attack orchestration, retries, WiFi restore
-    ├── SupplicantProcesses.kt    # Bundled wpa_supplicant/wpa_cli lifecycle
-    ├── PixiewpsExecutor.kt       # pixiewps execution
-    ├── PixiePskExtractor.kt      # WPA PSK extraction via WPS provisioning
-    ├── M3Parser.kt               # WPS M3 hexdump parsing + M5/M7 dwell
-    ├── NativeBinaries.kt         # Asset copy, missing-binary detection, messages
-    ├── PixieAuditLog.kt          # Audit log persistence (credentials, mode 600)
-    └── WifiScanPermissions.kt    # FINE location + NEARBY_WIFI_DEVICES (33+)
-```
+- Phase-by-phase progress, percentage, and session timer.
+- Collapsible console with the details of every step.
+- Stop the audit whenever you want.
 
-Unit tests live under `app/src/test/` (plain JUnit 4 over the parsing, filtering, permission, and transition logic); the ARM-only native binaries are not exercised by unit tests. See [AGENTS.md](AGENTS.md) for architecture details and the build/verify commands.
+### Privacy by design
 
-## Tech stack
+- AmWF has no Internet permission: nothing is sent to external servers.
+- The exportable diagnostic report redacts MAC addresses and network names before sharing.
+- Audit logs are stored locally with restricted permissions.
 
-| Technology | Purpose |
-|------------|---------|
-| Kotlin | Primary language |
-| Material Design 3 | UI components |
-| Coroutines | Async shell commands |
-| View Binding | Type-safe view access |
-| Shell (`su`) | Privileged `con_mode` / `iw` / `svc` operations |
+> [!WARNING]
+> Audit logs may contain the WPS PIN and WPA key in plain text. Do not share them or upload them anywhere.
 
-## Limitations
+## Quick start
 
-- **Qualcomm only** — does not work on MediaTek, Exynos, or other chipsets.
-- **Root required** — WiFi driver parameters cannot be modified without root.
-- **Driver dependent** — newer Qualcomm drivers (cnss_pci/WCN) may not expose `con_mode`.
-- **SELinux** — strict policies may block access to `con_mode`.
-- **Injection not guaranteed** — most devices support passive capture only; injection depends on driver and chipset.
-- **WPS required for Pixie Dust** — the audit only works against APs with WPS enabled and not locked; results depend on the AP's implementation.
-- **32-bit devices** — `armeabi-v7a` ships `pixiewps_32` only; there is no bundled supplicant, so the full audit cannot run there.
-- **Audit logs contain credentials** — `/sdcard/AmWF/pixie-logs/*.log` holds plaintext WPS PINs and WPA PSKs (owner-only permissions); treat and delete them accordingly.
+1. Open AmWF and tap **Verify compatibility**.
+2. Enable **Monitor Mode** whenever you want to analyze your surroundings.
+3. Open **WPS Pixie Dust Audit**, pick a network, and let AmWF do the rest.
+
+## Built for your device
+
+AmWF is designed for rooted Qualcomm Snapdragon devices running Android 7.0 or newer. It uses the phone's built-in WiFi adapter, so you do not need a dongle. The interface follows Material 3, is available in Spanish and English, and adapts to phone screens.
+
+## Common questions
+
+**Do I need root?**  
+Yes. Monitor mode and low-level WiFi control require root access. The guided check tells you whether your device is ready.
+
+**Which devices are supported?**  
+AmWF is built for Qualcomm Snapdragon devices. Run **Verify compatibility** to check capture, injection, and WiFi control on your specific phone.
+
+**Does it need an external WiFi adapter?**  
+No. AmWF uses your phone's built-in WiFi adapter.
+
+**Does it work on Android 13 and newer?**  
+Yes. Scanning nearby networks requires precise location on every Android version, plus the Nearby Wi-Fi Devices permission on Android 13 and newer.
+
+**Where does my data go?**  
+Nowhere. AmWF has no Internet permission. Diagnostics and audit logs stay on your device.
+
+**Is it legal to audit any network?**  
+No. Only audit networks you own or have explicit permission to test.
 
 ---
 
 <div align="center">
-  <p>AmWF &copy; 2026 Hitomatito &mdash; released under the GPL-3.0 license (see <a href="LICENSE">LICENSE</a>)</p>
+  <sub>AmWF &copy; 2026 Hitomatito</sub><br>
+  <sub>Free software under <a href="LICENSE">GPL-3.0</a> · <a href="THIRD-PARTY-NOTICES.md">Third-party notices</a> · <a href="DISCLAIMER_en.md">Legal notice</a> · <a href="SECURITY.md">Security policy</a> · <a href="https://github.com/Hitomatito/AmWF/issues">Report an issue</a></sub>
 </div>

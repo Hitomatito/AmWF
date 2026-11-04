@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Hitomatito/AmWF/blob/main/SECURITY.md
+    about: Report vulnerabilities privately — do not post credentials or audit logs

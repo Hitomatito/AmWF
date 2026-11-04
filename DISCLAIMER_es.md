@@ -1,40 +1,43 @@
 # Descargo de Responsabilidad (Disclaimer)
 
-**Última actualización: Marzo 2026**
+**Versión canónica en inglés: [DISCLAIMER_en.md](DISCLAIMER_en.md)**
+**Última actualización: noviembre de 2026**
 
-## ⚠️ Aviso Importante
+## Aviso Importante
 
 AmWF es una herramienta de desarrollo y auditoría de redes inalámbricas. El uso de esta aplicación implica la aceptación completa de los términos y condiciones establecidos en este documento.
 
-## 🔧 Naturaleza de la Aplicación
+## Naturaleza de la Aplicación
 
 AmWF es una aplicación que permite:
 
 - Activar y desactivar el modo monitor de la interfaz WiFi
 - Verificar la compatibilidad del dispositivo
 - Mostrar información técnica del sistema
+- Auditar la seguridad WPS de redes propias o con autorización expresa (WPS Pixie Dust)
+- Exportar un informe de diagnóstico local bajo demanda
 
-## ⚖️ Uso Legítimo
+## Uso Legítimo
 
 Esta herramienta está diseñada exclusivamente para:
 
-- ✅ **Auditoría de seguridad** en redes propias o con autorización explícita
-- ✅ **Pruebas de penetración** en redes bajo tu control
-- ✅ **Desarrollo y aprendizaje** de seguridad de redes inalámbricas
-- ✅ **Análisis de redes** con fines educativos o de investigación
+- **Auditoría de seguridad** en redes propias o con autorización explícita
+- **Pruebas de penetración** en redes bajo tu control
+- **Desarrollo y aprendizaje** de seguridad de redes inalámbricas
+- **Análisis de redes** con fines educativos o de investigación
 
-## 🚫 Uso Prohibido
+## Uso Prohibido
 
 Queda **estrictamente prohibido** el uso de esta aplicación para:
 
-- ❌ **Acceso no autorizado** a redes WiFi ajenas
-- ❌ **Interceptación de comunicaciones** sin consentimiento
-- ❌ **Captura de handshakes** para cracking de contraseñas
-- ❌ **Cualquier actividad ilegal** bajo las leyes locales, estatales o federales
-- ❌ **Ataques de denegación de servicio** (DoS/DDoS)
-- ❌ **Invasión a la privacidad** de terceros
+- **Acceso no autorizado** a redes WiFi ajenas
+- **Interceptación de comunicaciones** sin consentimiento
+- **Captura de handshakes** para cracking de contraseñas de terceros
+- **Cualquier actividad ilegal** bajo las leyes locales, estatales o federales
+- **Ataques de denegación de servicio** (DoS/DDoS)
+- **Invasión a la privacidad** de terceros
 
-## 📜 Marco Legal
+## Marco Legal
 
 El usuario es responsable de cumplir con todas las leyes aplicables, incluyendo pero no limitándose a:
 
@@ -45,26 +48,27 @@ El usuario es responsable de cumplir con todas las leyes aplicables, incluyendo 
 
 ### Ejemplos de Legislación Aplicable
 
-| País | Ley | Descripción |
-|------|-----|-------------|
-| EE.UU. | CFAA (Computer Fraud and Abuse Act) | Acceso no autorizado a sistemas |
-| España | Código Penal Art. 197 | Delitos contra la intimidad |
-| México | LFPDPPP | Ley Federal de Protección de Datos |
+| Jurisdicción | Ley | Descripción |
+|--------------|-----|-------------|
+| EE.UU. | CFAA (18 U.S.C. § 1030) | Acceso no autorizado a equipos protegidos |
+| España | Código Penal art. 197 bis (LO 10/1995) | Acceso ilícito a sistemas de información |
+| México | Código Penal Federal arts. 211 bis | Acceso ilícito a sistemas y equipos de informática |
 | Colombia | Ley 1273 de 2009 | Delitos informáticos |
-| Argentina | Ley 26.388 | Delitos informáticos |
+| Argentina | Ley 26.388 (2008) | Delitos informáticos (reforma al Código Penal) |
+| Unión Europea | Directiva 2013/40/UE | Ataques contra los sistemas de información |
 
 **Nota:** Esta lista es ilustrativa y no exhaustiva. Consulta la legislación de tu país.
 
-## 🔒 Responsabilidad del Usuario
+## Responsabilidad del Usuario
 
 Al usar AmWF, el usuario:
 
 1. **Declara ser propietario** o tener autorización explícita sobre el dispositivo y las redes utilizadas
 2. **Acepta la responsabilidad total** sobre sus acciones y sus consecuencias
-3. **Enten que cualquier uso indebido** es responsabilidad exclusiva del usuario
+3. **Entiende que cualquier uso indebido** es responsabilidad exclusiva del usuario
 4. **Se compromete a utilizar** la herramienta únicamente para fines legítimos
 
-## ⚠️ Riesgos y Limitaciones
+## Riesgos y Limitaciones
 
 ### Riesgos Técnicos
 
@@ -73,8 +77,9 @@ Al usar AmWF, el usuario:
 - Algunas configuraciones de SELinux pueden bloquear el acceso
 - No todos los dispositivos Snapdragon son compatibles
 - **El método con_mode solo proporciona modo monitor pasivo** en la mayoría de dispositivos
-- **No se garantiza inyección de paquetes ni captura completa** - depende del driver WiFi
+- **No se garantiza inyección de paquetes ni captura completa** — depende del driver WiFi
 - La verificación de capacidades puede no ser precisa en todos los dispositivos
+- Las auditorías WPS solo funcionan contra APs con WPS habilitado y desbloqueado; los resultados dependen de la implementación del AP
 
 ### Consecuencias Potenciales
 
@@ -86,7 +91,7 @@ El mal uso de esta herramienta puede resultar en:
 - **Baneo de red** por actividades maliciosas
 - **Persecución legal** según la jurisdicción aplicable
 
-## 🛡️ Medidas de Seguridad Recomendadas
+## Medidas de Seguridad Recomendadas
 
 Si utilizas esta herramienta:
 
@@ -96,17 +101,18 @@ Si utilizas esta herramienta:
 4. **Elimina correctamente** cualquier información sensible capturada
 5. **Documenta tus actividades** de auditoría para tu propia protección
 
-## 📊 Registro de Actividad
+## Registro de Actividad
 
-La aplicación:
+Lo que la aplicación almacena en tu dispositivo:
 
-- ❌ **NO registra** las redes WiFi escaneadas
-- ❌ **NO almacena** passwords o claves de redes
-- ❌ **NO transmite** datos a servidores externos
-- ❌ **NO recopila** información personal
-- ✅ **Solo almacena** preferencias locales (idioma)
+- **Los logs de auditoría** se guardan en local (en `/sdcard/AmWF/pixie-logs/` o, como alternativa, en el directorio privado de la app) y pueden contener el **PIN WPS y la clave WPA en texto plano**
+- Un **buffer de logs en memoria** alimenta el informe de diagnóstico; el informe exportado redacta las direcciones MAC (solo OUI) y los SSID
+- **No se transmiten datos** a servidores externos: la app no tiene permiso de Internet
+- Solo se almacenan **preferencias locales** (idioma) y los logs de auditoría descritos arriba
 
-## 🔄 Actualizaciones
+Los logs de auditoría se escriben con permisos solo para el propietario. Trátalos como secretos: no los compartas ni los subas a ningún sitio, y elimínalos cuando ya no los necesites.
+
+## Actualizaciones
 
 El desarrollador se reserva el derecho de:
 
@@ -114,19 +120,19 @@ El desarrollador se reserva el derecho de:
 - Cambiar los términos de este disclaimer con previo aviso
 - Actualizar los requisitos técnicos sin previo aviso
 
-## 📞 Contacto
+## Contacto
 
 Para reportar bugs, sugerir mejoras o reportar uso indebido:
 
-- **GitHub Issues**: [Reportar problema](https://github.com/Hitomatito/AmWF/issues)
-- **GitHub Discussions**: [Discutir características](https://github.com/Hitomatito/AmWF/discussions)
+- **GitHub Issues**: [Reportar un problema](https://github.com/Hitomatito/AmWF/issues)
+- **Reportes de seguridad**: ver [SECURITY.md](SECURITY.md)
 
-## 📋 Confirmación
+## Confirmación
 
 Al instalar y usar AmWF:
 
 ```
-Al instalar esta aplicación, confirmar que:
+Al instalar esta aplicación, confirmas que:
 
 □ Soy mayor de edad en mi jurisdicción
 □ Tengo autoridad legal sobre el dispositivo
@@ -137,7 +143,7 @@ Al instalar esta aplicación, confirmar que:
 □ Comprendo que el mal uso puede tener consecuencias legales graves
 ```
 
-## ⚖️ Exención de Responsabilidad Legal
+## Exención de Responsabilidad Legal
 
 **AmWF y sus desarrolladores:**
 
@@ -150,14 +156,10 @@ Al instalar esta aplicación, confirmar que:
 
 ---
 
-<div align="center">
-
-**ESTE DESCARGGO DE RESPONSABILIDAD ES PARTE INTEGRAL DE LOS TÉRMINOS DE USO DE LA APLICACIÓN.**
+**ESTE DESCARGO DE RESPONSABILIDAD ES PARTE INTEGRAL DE LOS TÉRMINOS DE USO DE LA APLICACIÓN.**
 
 **SI NO ESTÁS DE ACUERDO CON ESTOS TÉRMINOS, NO INSTALES NI UTILICES ESTA APLICACIÓN.**
 
 ---
 
-© 2026 AmWF. Todos los derechos reservados.
-
-</div>
+© 2026 AmWF. Software libre bajo [GPL-3.0-or-later](LICENSE).

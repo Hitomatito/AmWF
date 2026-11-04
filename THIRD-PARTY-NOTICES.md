@@ -9,11 +9,24 @@ listed under each entry.
 
 ## Runtime dependencies (already bundled)
 
-| Component | License | Copyright |
-|-----------|---------|-----------|
-| AndroidX (Core, AppCompat, View Binding) | Apache-2.0 | The Android Open Source Project |
-| Material Components for Android | Apache-2.0 | The Android Open Source Project |
-| Kotlin standard library & coroutines | Apache-2.0 | JetBrains s.r.o. |
+All of these are distributed under the Apache License 2.0 and are shipped inside
+the APK:
+
+| Component | Version | License | Copyright |
+|-----------|---------|---------|-----------|
+| AndroidX Core KTX (`androidx.core:core-ktx`) | 1.18.0 | Apache-2.0 | The Android Open Source Project |
+| AndroidX AppCompat (`androidx.appcompat:appcompat`) | 1.7.1 | Apache-2.0 | The Android Open Source Project |
+| AndroidX ConstraintLayout (`androidx.constraintlayout:constraintlayout`) | 2.1.4 | Apache-2.0 | The Android Open Source Project |
+| AndroidX CardView (`androidx.cardview:cardview`) | 1.0.0 | Apache-2.0 | The Android Open Source Project |
+| AndroidX RecyclerView (`androidx.recyclerview:recyclerview`) | 1.3.2 | Apache-2.0 | The Android Open Source Project |
+| AndroidX Lifecycle ViewModel KTX and Runtime KTX (`androidx.lifecycle:lifecycle-viewmodel-ktx`, `androidx.lifecycle:lifecycle-runtime-ktx`) | 2.8.2 | Apache-2.0 | The Android Open Source Project |
+| Material Components for Android (`com.google.android.material:material`) | 1.13.0 | Apache-2.0 | The Android Open Source Project |
+| Kotlin standard library & coroutines (`org.jetbrains.kotlinx:kotlinx-coroutines-android`) | 1.8.0 (coroutines) | Apache-2.0 | JetBrains s.r.o. |
+
+View Binding is a build-time code generator provided by the Android Gradle Plugin;
+no separate library is bundled for it. Unit- and instrumented-test dependencies
+(JUnit, AndroidX Test, Espresso) are only used during development and are not
+distributed in the APK.
 
 These libraries are distributed as required by the Apache License 2.0. The full
 license text for Apache-2.0 is available at <https://www.apache.org/licenses/LICENSE-2.0>.
