@@ -105,11 +105,39 @@
                     android:id="@+id/tvCompatStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/checking_compatibility"
+                    android:text="@string/compat_not_verified"
                     android:textColor="@color/md_theme_onSurfaceVariant"
                     android:textSize="14sp"
                     android:layout_marginTop="8dp"
                     android:layout_marginStart="40dp"/>
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/progressCompatibility"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginEnd="40dp"
+                    android:visibility="gone"
+                    app:trackColor="@color/card_stroke"
+                    app:indicatorColor="@color/md_theme_primary"
+                    app:trackThickness="6dp"
+                    app:trackCornerRadius="3dp"
+                    app:indicatorTrackGapSize="2dp"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVerifyCompatibility"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="40dp"
+                    android:text="@string/verify_compatibility"
+                    android:textStyle="bold"
+                    app:cornerRadius="16dp"
+                    app:icon="@drawable/ic_check_circle"
+                    app:iconSize="20dp"
+                    app:iconPadding="8dp"/>
 
                 <com.google.android.material.divider.MaterialDivider
                     android:layout_width="match_parent"

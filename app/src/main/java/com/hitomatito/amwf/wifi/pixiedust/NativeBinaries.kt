@@ -131,7 +131,7 @@ object NativeBinaries {
      */
     fun missingBinariesMessage(
         context: Context,
-        missing: List<String> = missingCriticalBinaries(context)
+        missing: List<String>
     ): String? {
         if (missing.isEmpty()) return null
         val reasonRes = if (is32BitUnsupported()) {
@@ -152,7 +152,7 @@ object NativeBinaries {
      */
     fun missingBinariesSummary(
         context: Context,
-        missing: List<String> = missingCriticalBinaries(context)
+        missing: List<String>
     ): String? {
         if (missing.isEmpty()) return null
         val summaryRes = if (is32BitUnsupported()) {

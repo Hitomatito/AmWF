@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
@@ -43,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnLanguage: MaterialButton
     private lateinit var btnExportDiagnostics: MaterialButton
     private lateinit var btnPixieDust: MaterialButton
+    private lateinit var btnVerifyCompatibility: MaterialButton
+    private lateinit var progressCompatibility: LinearProgressIndicator
     private lateinit var statusIndicator: View
     private lateinit var ivCompatIcon: ImageView
     private lateinit var layoutDeviceInfo: LinearLayout
@@ -60,13 +63,18 @@ class MainActivity : AppCompatActivity() {
     
     private var currentMode = MonitorMode.UNKNOWN
     private var isDeviceCompatible = false
+    // True solo después de que el usuario haya ejecutado la comprobación en esta
+    // sesión de proceso (o haya resultado cacheado). Sin verificar, la activación
+    // de monitor mode está bloqueada; desactivarlo siempre está permitido.
+    private var isCompatVerified = false
 
     companion object {
         private const val TAG = "AmWF"
-        
-        // Cache compatibility result to avoid re-running on configuration changes
-        // (language switch, rotation, etc.). This prevents testCapabilities() from
-        // disrupting WiFi unnecessarily when the Activity is recreated.
+
+        // La comprobación de compatibilidad NUNCA se ejecuta sola: solo desde el
+        // botón "Verificar compatibilidad" (interrumpe el WiFi). El resultado se
+        // cachea en statics para que recreate() (cambio de idioma, rotación) no
+        // repita el test ni la Activity nueva lo dispare de nuevo.
         @Volatile
         private var cachedCompatResult: CompatibilityResult? = null
         // True mientras hay una comprobación de compatibilidad en vuelo. Permite
@@ -91,8 +99,10 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         updateLanguageButton()
 
-        // Use cached result if available (e.g., after language change via recreate()).
-        // This prevents re-running testCapabilities() which disrupts WiFi.
+        // La comprobación de compatibilidad es manual: nunca se ejecuta sola al
+        // abrir la app (interrumpe el WiFi). Si hay un resultado en caché (p. ej.
+        // tras recreate() por cambio de idioma) se reutiliza; si hay un test en
+        // vuelo se espera; si no, se muestra el estado "sin verificar".
         val cached = cachedCompatResult
         if (cached != null) {
             Log.d(TAG, "Using cached compatibility result")
@@ -102,7 +112,9 @@ class MainActivity : AppCompatActivity() {
             // no relanzar el test, esperar el resultado que se está calculando.
             waitForCompatCheckInProgress()
         } else {
-            checkDeviceCompatibility()
+            showCompatNotVerified()
+            // El estado del modo WiFi es de solo lectura: mostrarlo siempre.
+            checkCurrentMode()
         }
     }
 
@@ -116,6 +128,8 @@ class MainActivity : AppCompatActivity() {
         btnLanguage = findViewById(R.id.btnLanguage)
         btnExportDiagnostics = findViewById(R.id.btnExportDiagnostics)
         btnPixieDust = findViewById(R.id.btnPixieDust)
+        btnVerifyCompatibility = findViewById(R.id.btnVerifyCompatibility)
+        progressCompatibility = findViewById(R.id.progressCompatibility)
         statusIndicator = findViewById(R.id.statusIndicator)
         ivCompatIcon = findViewById(R.id.ivCompatIcon)
         layoutDeviceInfo = findViewById(R.id.layoutDeviceInfo)
@@ -149,6 +163,12 @@ class MainActivity : AppCompatActivity() {
 
         btnExportDiagnostics.setOnClickListener {
             exportDiagnostics()
+        }
+
+        btnVerifyCompatibility.setOnClickListener {
+            if (!compatCheckInProgress) {
+                checkDeviceCompatibility()
+            }
         }
 
         btnToggle.setOnClickListener {
@@ -221,28 +241,44 @@ class MainActivity : AppCompatActivity() {
     private fun checkDeviceCompatibility() {
         // El boton no debe verse clickeable mientras se verifica.
         setToggleEnabled(false)
+        setVerifyButtonRunning(true)
         tvCompatStatus.text = getString(R.string.checking_compatibility)
-        
+
         compatCheckInProgress = true
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
                     // Cachear desde el hilo IO: si llega un recreate() durante la
                     // comprobación, la nueva Activity podrá reutilizar el resultado.
-                    compatibilityChecker.checkCompatibility().also { cachedCompatResult = it }
+                    compatibilityChecker.checkCompatibility { percent, phase ->
+                        runOnUiThread { updateCompatProgress(percent, phase) }
+                    }.also { cachedCompatResult = it }
                 }
                 applyCompatResult(result)
             } finally {
                 compatCheckInProgress = false
+                setVerifyButtonRunning(false)
             }
         }
     }
 
-    // Espera a que termine una comprobación que ya está en vuelo (lanzada por una
-    // instancia anterior de la Activity) y aplica su resultado. Evita relanzar el
-    // test, que volvería a cortar la WiFi.
+    // Refleja en la UI un hito real del check (llega desde Dispatchers.IO a través
+    // de runOnUiThread). Los porcentajes son los hitos del flujo en el checker,
+    // no una animación simulada.
+    private fun updateCompatProgress(percent: Int, phase: String) {
+        progressCompatibility.visibility = View.VISIBLE
+        progressCompatibility.isIndeterminate = false
+        progressCompatibility.setProgressCompat(percent, true)
+        tvCompatStatus.text = "$phase · $percent %"
+        btnVerifyCompatibility.text = "${getString(R.string.checking_compatibility)} $percent %"
+    }
+
+    // Espera a que termine una comprobación que ya está en vuelo (lanzada desde otra
+    // instancia de la Activity) y aplica su resultado. Evita relanzar el test, que
+    // volvería a cortar la WiFi.
     private fun waitForCompatCheckInProgress() {
         setToggleEnabled(false)
+        setVerifyButtonRunning(true)
         tvCompatStatus.text = getString(R.string.checking_compatibility)
 
         lifecycleScope.launch {
@@ -263,8 +299,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Estado inicial cuando el usuario aún no ha solicitado la comprobación: la
+    // tarjeta muestra "sin verificar" y el resultado detallado queda oculto.
+    private fun showCompatNotVerified() {
+        isCompatVerified = false
+        layoutDeviceInfo.visibility = View.GONE
+        ivCompatIcon.setImageResource(R.drawable.ic_info)
+        ivCompatIcon.setColorFilter(getColor(R.color.md_theme_onSurfaceVariant))
+        tvCompatTitle.text = getString(R.string.device_compatibility)
+        tvCompatStatus.text = getString(R.string.compat_not_verified)
+        tvCompatStatus.setTextColor(getColor(R.color.md_theme_onSurfaceVariant))
+        setVerifyButtonRunning(false)
+    }
+
+    // Estado del botón "Verificar compatibilidad": mientras hay un test en vuelo el
+    // botón se atenúa, y la barra de progreso se muestra indeterminada hasta que
+    // llega el primer hito real (updateCompatProgress la pasa a determinada).
+    private fun setVerifyButtonRunning(running: Boolean) {
+        btnVerifyCompatibility.isEnabled = !running
+        btnVerifyCompatibility.alpha = if (running) 0.6f else 1f
+        progressCompatibility.isIndeterminate = running
+        progressCompatibility.visibility = if (running) View.VISIBLE else View.GONE
+        if (!running) {
+            progressCompatibility.setProgressCompat(0, false)
+        }
+        btnVerifyCompatibility.text = getString(
+            if (running) R.string.checking_compatibility else R.string.verify_compatibility
+        )
+    }
+
     private fun applyCompatResult(result: CompatibilityResult) {
+        isCompatVerified = true
         isDeviceCompatible = result.isCompatible
+        setVerifyButtonRunning(false)
         updateCompatibilityUI(result)
 
         if (isDeviceCompatible) {
@@ -373,6 +440,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enableMonitorMode() {
+        // Sin comprobación manual no se activa el modo monitor (interrumpe el WiFi);
+        // desactivarlo sí está siempre permitido para poder recuperar el dispositivo.
+        if (!isCompatVerified) {
+            Toast.makeText(this, getString(R.string.verify_first), Toast.LENGTH_SHORT).show()
+            return
+        }
         if (!isDeviceCompatible) {
             Toast.makeText(this, getString(R.string.not_compatible), Toast.LENGTH_SHORT).show()
             return

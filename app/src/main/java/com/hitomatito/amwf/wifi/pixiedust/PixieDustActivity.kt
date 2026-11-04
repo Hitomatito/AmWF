@@ -649,25 +649,25 @@ class PixieDustActivity : AppCompatActivity() {
 
     /** Chip de la hoja que corresponde a cada filtro. */
     private val NetworkFilter.chipId: Int
-        get() = when (this) {
-            NetworkFilter.ALL -> R.id.chipAll
-            NetworkFilter.AUDITABLE -> R.id.chipAuditable
-            NetworkFilter.BAND_24 -> R.id.chipBand24
-            NetworkFilter.BAND_5 -> R.id.chipBand5
-            NetworkFilter.DUAL_BAND -> R.id.chipDualBand
-        }
+        get() = CHIP_BY_FILTER.getValue(this)
 
     /** Traduce el chip marcado (o ninguno) al filtro que aplica la lista. */
-    private fun networkFilterForChip(chipId: Int?): NetworkFilter = when (chipId) {
-        R.id.chipAuditable -> NetworkFilter.AUDITABLE
-        R.id.chipBand24 -> NetworkFilter.BAND_24
-        R.id.chipBand5 -> NetworkFilter.BAND_5
-        R.id.chipDualBand -> NetworkFilter.DUAL_BAND
-        else -> NetworkFilter.ALL
-    }
+    private fun networkFilterForChip(chipId: Int?): NetworkFilter =
+        chipId?.let(FILTER_BY_CHIP::get) ?: NetworkFilter.ALL
 
     private companion object {
         private const val STATE_AWAITING_SETTINGS = "awaiting_settings_result"
         private const val STATE_PERMISSION_REQUESTED = "permission_request_attempted"
+
+        /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
+        private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
+            NetworkFilter.ALL to R.id.chipAll,
+            NetworkFilter.AUDITABLE to R.id.chipAuditable,
+            NetworkFilter.BAND_24 to R.id.chipBand24,
+            NetworkFilter.BAND_5 to R.id.chipBand5,
+            NetworkFilter.DUAL_BAND to R.id.chipDualBand
+        )
+        private val FILTER_BY_CHIP: Map<Int, NetworkFilter> =
+            CHIP_BY_FILTER.entries.associate { (filter, chip) -> chip to filter }
     }
 }

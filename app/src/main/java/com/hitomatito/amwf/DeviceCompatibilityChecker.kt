@@ -310,9 +310,17 @@ class DeviceCompatibilityChecker(private val context: Context) {
                 ?.groupValues?.get(1)?.toIntOrNull() ?: 0
     }
 
-    fun checkCompatibility(): CompatibilityResult {
+    /**
+     * Ejecuta la comprobación completa. [onProgress] recibe (porcentaje, fase)
+     * desde el hilo IO; la UI debe volcarlo a su hilo principal. Los porcentajes
+     * son hitos reales del flujo, no una animación simulada.
+     */
+    fun checkCompatibility(
+        onProgress: (percent: Int, phase: String) -> Unit = { _, _ -> }
+    ): CompatibilityResult {
         val issues = mutableListOf<CompatibilityIssue>()
-        
+        val phase = { percent: Int, res: Int -> onProgress(percent, context.getString(res)) }
+
         logD(TAG, "=== Starting compatibility check ===")
 
         // Apaga el radio WiFi ANTES de los tests de escritura a con_mode.
@@ -320,10 +328,12 @@ class DeviceCompatibilityChecker(private val context: Context) {
         // "Operation not permitted", lo que marcaría un dispositivo
         // realmente compatible como no compatible. El radio se restaura
         // una única vez al final de checkCompatibility().
+        phase(5, R.string.phase_wifi_disable)
         execRoot("svc wifi disable")
         Thread.sleep(1000)
 
-        val deviceInfo = gatherDeviceInfo()
+        phase(15, R.string.phase_detect)
+        val deviceInfo = gatherDeviceInfo(phase)
         logD(TAG, "Device: ${deviceInfo.manufacturer} ${deviceInfo.model}")
         logD(TAG, "Chipset: ${deviceInfo.chipset}")
         logD(TAG, "Root: ${deviceInfo.rootInfo.rootName} v${deviceInfo.rootInfo.version}")
@@ -360,6 +370,7 @@ class DeviceCompatibilityChecker(private val context: Context) {
                 }
             ))
         } else {
+            phase(88, R.string.phase_conmode_write)
             val testResult = testConModeWrite(deviceInfo.conModePath)
             if (!testResult) {
                 issues.add(CompatibilityIssue(
@@ -397,6 +408,7 @@ class DeviceCompatibilityChecker(private val context: Context) {
         // Both testCapabilities() and testConModeWrite() modify con_mode,
         // which disrupts WiFi. A single restart here ensures WiFi is
         // properly restored after all tests finish.
+        phase(95, R.string.phase_restore)
         logD(TAG, "Restarting WiFi service to restore managed mode after all tests")
         try {
             execRoot("svc wifi disable")
@@ -534,16 +546,20 @@ class DeviceCompatibilityChecker(private val context: Context) {
         }
     }
 
-    private fun gatherDeviceInfo(): DeviceInfo {
+    private fun gatherDeviceInfo(phase: (Int, Int) -> Unit): DeviceInfo {
         val manufacturer = getSystemProperty("ro.product.manufacturer")
         val model = getSystemProperty("ro.product.model")
         val chipset = detectChipset()
         val kernelArch = execNoRoot("uname -m").output.ifEmpty { "Unknown" }
         val cpuAbi = getSystemProperty("ro.product.cpu.abi")
         val wlanDriver = detectWlanDriver()
+        phase(25, R.string.phase_conmode)
         val conMode = resolveConModePath()
+        phase(35, R.string.phase_root)
         val rootInfo = detectRoot()
+        phase(50, R.string.phase_capture)
         val capabilities = testCapabilities()
+        phase(80, R.string.phase_binaries)
         val pixieDustBinaries = detectPixieDustBinaries()
 
         return DeviceInfo(

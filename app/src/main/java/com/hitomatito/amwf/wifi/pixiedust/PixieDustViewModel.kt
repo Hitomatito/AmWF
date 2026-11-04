@@ -175,7 +175,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                     selectedInterface = if (ifaces.isNotEmpty()) ifaces.first() else state.selectedInterface,
                     nativeError = binariesError
                 )
-                addConsoleLine("Interfaces disponibles: ${ifaces.joinToString(", ")}")
+                addConsoleLine(appContext.getString(R.string.pixie_console_interfaces_available, ifaces.joinToString(", ")))
             } catch (e: Exception) {
                 ShellExecutor.logE(TAG, "Failed to load interfaces", e)
                 _uiState.update { it.copy(errorMessage = e.message) }
@@ -232,7 +232,8 @@ class PixieDustViewModel @JvmOverloads constructor(
      */
     private suspend fun nativeBinariesError(): String? = withContext(ioDispatcher) {
         NativeBinaries.ensure(appContext)
-        NativeBinaries.missingBinariesMessage(appContext)
+        val missing = NativeBinaries.missingCriticalBinaries(appContext)
+        NativeBinaries.missingBinariesMessage(appContext, missing)
     }
 
     // ========================================================================
@@ -258,7 +259,7 @@ class PixieDustViewModel @JvmOverloads constructor(
             )
         }
         scanJob = viewModelScope.launch {
-            addConsoleLine("Iniciando escaneo de redes WiFi...")
+            addConsoleLine(appContext.getString(R.string.pixie_console_scan_started))
             try {
                 val networks = withContext(ioDispatcher) {
                     scanWifiNetworks()
@@ -278,7 +279,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                         )
                     )
                 }
-                addConsoleLine("Escaneo completado: ${sorted.size} red(es) encontrada(s).")
+                addConsoleLine(appContext.getString(R.string.pixie_console_scan_finished, sorted.size))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -372,7 +373,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 )
             )
         }
-        addConsoleLine("Red seleccionada: ${network.displayName} (${network.bssid})")
+        addConsoleLine(appContext.getString(R.string.pixie_console_network_selected, network.displayName, network.bssid))
     }
 
     fun startAttack(disableWifi: Boolean) {
@@ -441,8 +442,8 @@ class PixieDustViewModel @JvmOverloads constructor(
         }
 
         attackJob = viewModelScope.launch {
-            addConsoleLine("Iniciando auditoría Pixie Dust contra ${network.displayName}...")
-            addConsoleLine("BSSID: ${network.bssid} | Interfaz: ${_uiState.value.selectedInterface}")
+            addConsoleLine(appContext.getString(R.string.pixie_console_attack_started, network.displayName))
+            addConsoleLine(appContext.getString(R.string.pixie_console_attack_target, network.bssid, _uiState.value.selectedInterface))
 
             try {
                 val result = activeRunner.runAttack(
@@ -474,18 +475,18 @@ class PixieDustViewModel @JvmOverloads constructor(
                 }
                 when (result) {
                     is PixieDustResult.Success -> {
-                        addConsoleLine("[+] Auditoría exitosa — PIN: ${result.wpsPin ?: "N/A"}")
-                        result.wpaPsk?.let { addConsoleLine("[+] Clave WPA: $it") }
+                        addConsoleLine(appContext.getString(R.string.pixie_console_attack_success, result.wpsPin ?: "N/A"))
+                        result.wpaPsk?.let { addConsoleLine(appContext.getString(R.string.pixie_console_wpa_key, it)) }
                     }
                     is PixieDustResult.Failure -> {
-                        addConsoleLine("[-] Auditoría falló: ${result.reason}")
+                        addConsoleLine(appContext.getString(R.string.pixie_console_attack_failed, result.reason))
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 ShellExecutor.logE(TAG, "Attack failed", e)
-                addConsoleLine("[-] Error: ${e.message}")
+                addConsoleLine(appContext.getString(R.string.pixie_console_error, e.message ?: e.javaClass.simpleName))
                 _uiState.update {
                     it.copy(
                         session = it.session.copy(
@@ -529,7 +530,7 @@ class PixieDustViewModel @JvmOverloads constructor(
             val stageBeforeStop = _uiState.value.session.stage
                 ?.takeIf { it != PixieDustStage.RESTORING }
             cleanupInProgress = true
-            addConsoleLine("[!] Deteniendo auditoría y limpiando procesos...")
+            addConsoleLine(appContext.getString(R.string.pixie_console_stopping))
             jobToCancel.cancel()
             viewModelScope.launch {
                 try {
@@ -563,7 +564,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                         }
                     }
                 }
-                addConsoleLine("[!] Detenido por el usuario")
+                addConsoleLine(appContext.getString(R.string.pixie_console_stopped))
             }
         } else {
             runner = null
@@ -573,7 +574,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                     scan = it.scan.copy(isScanning = false)
                 )
             }
-            if (wasScanning) addConsoleLine("[!] Detenido por el usuario")
+            if (wasScanning) addConsoleLine(appContext.getString(R.string.pixie_console_stopped))
         }
     }
 

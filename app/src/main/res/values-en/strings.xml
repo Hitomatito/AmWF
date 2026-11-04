@@ -14,6 +14,17 @@
     
     <string name="device_compatibility">Device Compatibility</string>
     <string name="checking_compatibility">Checking…</string>
+    <string name="verify_compatibility">Verify compatibility</string>
+    <string name="compat_not_verified">Your device has not been verified yet. The check only runs when you tap Verify compatibility and may briefly interrupt WiFi.</string>
+    <string name="phase_wifi_disable">Disabling WiFi…</string>
+    <string name="phase_detect">Detecting chipset, root and driver…</string>
+    <string name="phase_conmode">Resolving con_mode path…</string>
+    <string name="phase_root">Checking root access…</string>
+    <string name="phase_capture">Testing capture and injection (monitor mode)…</string>
+    <string name="phase_binaries">Checking Pixie Dust binaries…</string>
+    <string name="phase_conmode_write">Testing con_mode write access…</string>
+    <string name="phase_restore">Restoring WiFi…</string>
+    <string name="verify_first">Verify compatibility first</string>
     <string name="device_compatible">Device Compatible</string>
     <string name="device_incompatible">Device Not Compatible</string>
     
@@ -200,6 +211,8 @@
     <string name="pixie_reason_invalid_interface">Invalid interface name: %1$s</string>
     <string name="pixie_reason_supplicant_socket">wpa_supplicant socket was not created (SELinux may be blocking it)</string>
     <string name="pixie_reason_no_m3_data">Not enough data to run the Pixie Dust attack</string>
+    <string name="pixie_reason_pbc_only">This router only supports WPS via the physical button (PBC); it does not accept a PIN, so Pixie Dust cannot work on it.</string>
+    <string name="pixie_reason_assoc_rejected">The AP rejected the association repeatedly. It may be applying a temporary block: wait a few minutes and try again.</string>
     <string name="pixie_error">Error during the audit</string>
     <string name="pixie_timeout">Timed out</string>
     <string name="pixie_pin">WPS PIN</string>
@@ -258,4 +271,16 @@
     <string name="diagnostics_subject">AmWF diagnostics</string>
     <string name="diagnostics_exporting">Generating diagnostics…</string>
     <string name="diagnostics_error">Could not generate diagnostics</string>
+    <string name="pixie_console_interfaces_available">Available interfaces: %1$s</string>
+    <string name="pixie_console_scan_started">Starting WiFi network scan...</string>
+    <string name="pixie_console_scan_finished">Scan complete: %1$d network(s) found.</string>
+    <string name="pixie_console_network_selected">Selected network: %1$s (%2$s)</string>
+    <string name="pixie_console_attack_started">Starting Pixie Dust audit against %1$s...</string>
+    <string name="pixie_console_attack_target">BSSID: %1$s | Interface: %2$s</string>
+    <string name="pixie_console_attack_success">[+] Audit successful — PIN: %1$s</string>
+    <string name="pixie_console_wpa_key">[+] WPA key: %1$s</string>
+    <string name="pixie_console_attack_failed">[-] Audit failed: %1$s</string>
+    <string name="pixie_console_error">[-] Error: %1$s</string>
+    <string name="pixie_console_stopping">[!] Stopping audit and cleaning up processes...</string>
+    <string name="pixie_console_stopped">[!] Stopped by user</string>
 </resources>

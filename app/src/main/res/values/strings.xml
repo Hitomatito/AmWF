@@ -13,6 +13,17 @@
     
     <string name="device_compatibility">Compatibilidad del Dispositivo</string>
     <string name="checking_compatibility">Verificando…</string>
+    <string name="verify_compatibility">Verificar compatibilidad</string>
+    <string name="compat_not_verified">Aún no has verificado tu dispositivo. La comprobación solo se ejecuta al pulsar «Verificar compatibilidad» y puede interrumpir brevemente el WiFi.</string>
+    <string name="phase_wifi_disable">Deshabilitando WiFi…</string>
+    <string name="phase_detect">Detectando chipset, root y driver…</string>
+    <string name="phase_conmode">Resolviendo ruta de con_mode…</string>
+    <string name="phase_root">Comprobando acceso root…</string>
+    <string name="phase_capture">Probando captura e inyección (modo monitor)…</string>
+    <string name="phase_binaries">Verificando binarios Pixie Dust…</string>
+    <string name="phase_conmode_write">Probando escritura en con_mode…</string>
+    <string name="phase_restore">Restaurando WiFi…</string>
+    <string name="verify_first">Verifica la compatibilidad primero</string>
     <string name="device_compatible">Dispositivo Compatible</string>
     <string name="device_incompatible">Dispositivo No Compatible</string>
     
@@ -228,6 +239,8 @@
     <string name="pixie_reason_invalid_interface">Nombre de interfaz no válido: %1$s</string>
     <string name="pixie_reason_supplicant_socket">No se pudo crear el socket de wpa_supplicant (SELinux podría estar bloqueándolo)</string>
     <string name="pixie_reason_no_m3_data">No hay datos suficientes para ejecutar el ataque Pixie Dust</string>
+    <string name="pixie_reason_pbc_only">Este router solo admite WPS por botón físico (PBC); no acepta PIN, así que Pixie Dust no puede funcionar en él.</string>
+    <string name="pixie_reason_assoc_rejected">El AP rechazó la asociación repetidamente. Puede estar aplicando un bloqueo temporal: espera unos minutos y reintenta.</string>
     <string name="pixie_error">Error durante la auditoría</string>
     <string name="pixie_timeout">Tiempo de espera agotado</string>
     <string name="pixie_console">Consola</string>
@@ -259,4 +272,16 @@
     <string name="diagnostics_subject">Diagnóstico de AmWF</string>
     <string name="diagnostics_exporting">Generando diagnóstico…</string>
     <string name="diagnostics_error">No se pudo generar el diagnóstico</string>
+    <string name="pixie_console_interfaces_available">Interfaces disponibles: %1$s</string>
+    <string name="pixie_console_scan_started">Iniciando escaneo de redes WiFi...</string>
+    <string name="pixie_console_scan_finished">Escaneo completado: %1$d red(es) encontrada(s).</string>
+    <string name="pixie_console_network_selected">Red seleccionada: %1$s (%2$s)</string>
+    <string name="pixie_console_attack_started">Iniciando auditoría Pixie Dust contra %1$s...</string>
+    <string name="pixie_console_attack_target">BSSID: %1$s | Interfaz: %2$s</string>
+    <string name="pixie_console_attack_success">[+] Auditoría exitosa — PIN: %1$s</string>
+    <string name="pixie_console_wpa_key">[+] Clave WPA: %1$s</string>
+    <string name="pixie_console_attack_failed">[-] Auditoría falló: %1$s</string>
+    <string name="pixie_console_error">[-] Error: %1$s</string>
+    <string name="pixie_console_stopping">[!] Deteniendo auditoría y limpiando procesos...</string>
+    <string name="pixie_console_stopped">[!] Detenido por el usuario</string>
 </resources>
