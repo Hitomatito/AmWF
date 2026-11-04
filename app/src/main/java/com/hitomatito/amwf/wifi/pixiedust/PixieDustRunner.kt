@@ -61,6 +61,10 @@ class PixieDustRunner(
     // Límites de tiempo y reintentos.
     private val MAX_ATTACK_ROUNDS = 3
     private val M3_CAPTURE_TIMEOUT_MS = 25_000L
+    // `svc wifi enable` puede devolver 0 antes de que el framework encienda el
+    // radio; se comprueba el estado real y se reintenta.
+    private val WIFI_RESTORE_ATTEMPTS = 3
+    private val WIFI_RESTORE_RETRY_MS = 1_000L
 
     private val wifiManager =
         context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
@@ -240,6 +244,7 @@ class PixieDustRunner(
                     handle = handle,
                     bssid = bssid,
                     interfaceName = interfaceName,
+                    round = round,
                     log = ::log,
                     rawOutput = rawOutput
                 )
@@ -395,10 +400,14 @@ class PixieDustRunner(
         handle: SupplicantProcesses.Handle,
         bssid: String,
         interfaceName: String,
+        round: Int,
         log: (String) -> Unit,
         rawOutput: StringBuilder
     ): M3Attempt = coroutineScope {
         val maxAttempts = 3
+        // El motivo final se muestra solo cuando fallan todas las rondas: el
+        // total real de intentos es rondas completadas × intentos por ronda.
+        val attemptsSoFar = round * maxAttempts
         var lastIncomplete: M3Parser.M3Capture.Incomplete? = null
         var anyRegAccepted = false
 
@@ -474,7 +483,7 @@ class PixieDustRunner(
             !anyRegAccepted -> context.getString(R.string.pixie_reason_wps_reg_rejected)
             lastIncomplete != null -> context.getString(
                 R.string.pixie_reason_capture_incomplete,
-                maxAttempts,
+                attemptsSoFar,
                 lastIncomplete.capturedCount,
                 lastIncomplete.missing.joinToString(", ")
             )
@@ -521,11 +530,43 @@ class PixieDustRunner(
         } catch (_: Exception) {}
         if (wifiDisabledByAttack) {
             wifiDisabledByAttack = false
-            val r = execSu("svc wifi enable 2>/dev/null", timeoutSeconds = 5)
-            log("[*] Cleanup: svc wifi enable -> exit=${r.exitCode}")
+            restoreWifi()
         }
         log("[*] Cleanup done")
         cleanupDone = true
+    }
+
+    /**
+     * Restaura el WiFi comprobando el estado real del framework. `svc wifi
+     * enable` puede devolver 0 sin que el radio llegue a encenderse (visto al
+     * cancelar), así que se reintenta hasta confirmarlo. Bloquea a propósito:
+     * [cleanup] ya se ejecuta fuera del hilo principal.
+     */
+    private fun restoreWifi() {
+        var lastKnown: Boolean? = null
+        repeat(WIFI_RESTORE_ATTEMPTS) { index ->
+            val r = execSu("svc wifi enable 2>/dev/null", timeoutSeconds = 5)
+            log(
+                "[*] Cleanup: svc wifi enable -> exit=${r.exitCode} " +
+                    "(intento ${index + 1}/$WIFI_RESTORE_ATTEMPTS)"
+            )
+            lastKnown = wifiEnabled()
+            if (lastKnown == true) return
+            if (index < WIFI_RESTORE_ATTEMPTS - 1) Thread.sleep(WIFI_RESTORE_RETRY_MS)
+        }
+        if (lastKnown == false) {
+            log("[!] Cleanup: el WiFi sigue desactivado tras $WIFI_RESTORE_ATTEMPTS intentos")
+        } else if (lastKnown == null) {
+            log("[!] Cleanup: no se pudo confirmar el estado del WiFi")
+        }
+    }
+
+    private fun wifiEnabled(): Boolean? {
+        val status = execSu(
+            "dumpsys wifi 2>/dev/null | grep -m1 'Wi-Fi is'",
+            timeoutSeconds = 5
+        )
+        return WifiRestore.isEnabled(status.output)
     }
 
     private fun log(message: String) {
