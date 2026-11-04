@@ -113,7 +113,7 @@ internal object PixieAuditLog {
             val pathArg = PixieProcessSupport.shellQuote(sdcardPath)
             val written = ShellExecutor.execRootWithInput(
                 command = "mkdir -p $dirArg && cat > $tempArg && " +
-                    "chmod 644 $tempArg && mv -f $tempArg $pathArg",
+                    "chmod 600 $tempArg && mv -f $tempArg $pathArg",
                 input = staged,
                 timeoutMs = 10_000
             )

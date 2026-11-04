@@ -26,6 +26,14 @@ internal object PixieProcessSupport {
     /** Centinela que marca el fin de un stream drenado. */
     const val PROCESS_EOF = "\u0000AMWF_PROCESS_EOF"
 
+    /**
+     * Marcador que el wrapper de pixiewps imprime tras `wait` para señalar el
+     * fin real del binario aunque el shell siga reteniendo el pipe de stdout.
+     * Se usa como red de seguridad del EOF: el `sh` de Android puede mantener
+     * abierto el pipe más tiempo del que tarda el proceso vigilado.
+     */
+    const val PIXIEWPS_DONE_MARKER = "AMWF_PIXIEWPS_DONE_7f3a9c"
+
     private const val TAG = "PixieProcessSupport"
 
     /**
@@ -54,14 +62,20 @@ internal object PixieProcessSupport {
      * Cola de shell que espera a `$pid` y lo mata tras [timeoutSeconds], pero
      * solo si su starttime de /proc/<pid>/stat (campo 22) no cambió. Así no
      * puede terminar un proceso ajeno si el PID se reutiliza durante la espera.
-     * La salida del watchdog va a /dev/null para no mantener abierto el pipe
-     * del proceso vigilado.
+     *
+     * La subshell de fondo ejecuta un único comando (`sh -c ...`) a propósito:
+     * el `sh` de Android guarda una copia del descriptor de stdout en un fd
+     * alto cuando la subshell encadena varios comandos, y esa copia mantiene
+     * el pipe abierto hasta que termina el `sleep` (60 s en pixiewps). Al
+     * exec'ear un solo comando no queda ningún shell que retenga el pipe, así
+     * que el consumidor recibe EOF en cuanto muere el proceso vigilado.
      */
     fun pidWatchdogTail(timeoutSeconds: Int): String =
         "pid=\$!; start=\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null); " +
-            "( sleep $timeoutSeconds; [ -n \"\$start\" ] && " +
-            "[ \"\$(cut -d' ' -f22 /proc/\$pid/stat 2>/dev/null)\" = \"\$start\" ] && " +
-            "kill \$pid 2>/dev/null ) >/dev/null 2>&1 & wait \$pid"
+            "export pid start; ( sh -c 'sleep $timeoutSeconds; " +
+            "[ -n \"\$start\" ] && " +
+            "[ \"\$(cut -d\" \" -f22 /proc/\$pid/stat 2>/dev/null)\" = \"\$start\" ] && " +
+            "kill \$pid 2>/dev/null' ) >/dev/null 2>&1 & wait \$pid"
 
     /**
      * Cita un valor para que el shell lo reciba como un único argumento.
@@ -135,7 +149,7 @@ internal object PixieProcessSupport {
     ) {
         while (true) {
             val line = queue.poll() ?: return
-            if (line == PROCESS_EOF) continue
+            if (line == PROCESS_EOF || line == PIXIEWPS_DONE_MARKER) continue
             rawOutput.append(line).append('\n')
             log(if (prefix.isEmpty()) line else "$prefix$line")
         }

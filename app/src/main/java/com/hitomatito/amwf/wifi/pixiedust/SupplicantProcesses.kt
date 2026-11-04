@@ -178,6 +178,18 @@ internal class SupplicantProcesses(private val context: Context) {
         return PixieProcessSupport.runSuWithTimeout(cmd, timeoutSeconds = 5)
     }
 
+    /**
+     * Cierra la sesión WPS en curso. Estando asociados, wpa_supplicant envía
+     * un deauth al AP, que así aborta su lado de la sesión. Sin esto, matar el
+     * proceso deja al AP con la sesión WPS abierta y la extracción de PSK
+     * posterior (que ahora empieza en segundos) choca con ella: el AP
+     * retransmite su M1 y el nuevo registrador falla con "Unexpected state".
+     */
+    fun cancelWps(iface: String, log: (String) -> Unit) {
+        val result = cli(iface, "wps_cancel")
+        log("[*] WPS session closed (wps_cancel -> exit=${result.exitCode})")
+    }
+
     private suspend fun waitForSocket(
         socketPath: String,
         timeoutMs: Long,

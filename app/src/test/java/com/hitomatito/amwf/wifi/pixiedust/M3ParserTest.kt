@@ -186,6 +186,55 @@ class M3ParserTest {
     }
 
     @Test
+    fun `aborts when ap only supports push button`() {
+        // AP que solo admite PBC: el supplicant no puede construir el M2 con
+        // PIN y el NACK final llega como "Configuration Error 0".
+        val text = buildString {
+            appendLine("WPS: Received M1")
+            appendLine("WPS: Device Password ID 4")
+            appendLine("WPS: Unsupported Device Password ID 4")
+            appendLine("WPS: Building Message M2D")
+            appendLine("wlan0: WPS-FAIL msg=5 config_error=0")
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Aborted)
+        assertEquals(
+            R.string.pixie_reason_pbc_only,
+            (capture as M3Parser.M3Capture.Aborted).reasonRes
+        )
+    }
+
+    @Test
+    fun `aborts after repeated association rejects`() {
+        val text = buildString {
+            repeat(3) {
+                appendLine("wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1")
+            }
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Aborted)
+        assertEquals(
+            R.string.pixie_reason_assoc_rejected,
+            (capture as M3Parser.M3Capture.Aborted).reasonRes
+        )
+    }
+
+    @Test
+    fun `tolerates isolated association rejects`() {
+        // Un rechazo puntual no debe abortar la auditoría.
+        val text = buildString {
+            appendLine("wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1")
+            appendLine("wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1")
+        }
+
+        assertTrue(parse(text) is M3Parser.M3Capture.Incomplete)
+    }
+
+    @Test
     fun `parses lines from blocking queue used by runner`() {
         val queue = java.util.concurrent.LinkedBlockingQueue<String>()
         val text = buildString {

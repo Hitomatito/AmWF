@@ -94,6 +94,17 @@ object M3Parser {
         """Enrollee terminated negotiation with Configuration Error (\d+)"""
     )
 
+    // El supplicant avisa de que el AP solo admite PBC (Device Password ID 4)
+    // cuando la sesión pide un PIN. El AP acaba con un NACK "Configuration
+    // Error 0" que por sí solo no explica nada al usuario.
+    private const val PBC_ONLY_MARKER = "Unsupported Device Password ID"
+
+    // Asociación rechazada por el AP (p. ej. filtrado MAC o bloqueo temporal).
+    private const val ASSOC_REJECT_MARKER = "CTRL-EVENT-ASSOC-REJECT"
+
+    /** Rechazos de asociación tolerados antes de abortar la captura. */
+    private const val MAX_ASSOC_REJECTS = 3
+
     /**
      * Resultado del parseo del M3.
      */
@@ -113,6 +124,15 @@ object M3Parser {
          */
         data class Failed(
             val configError: Int? = null
+        ) : M3Capture()
+
+        /**
+         * La sesión no puede progresar y reintentar no cambia nada: el AP solo
+         * admite WPS por botón físico (PBC) o rechaza la asociación de forma
+         * reiterada. [reasonRes] es el texto accionable para la UI.
+         */
+        data class Aborted(
+            @param:StringRes val reasonRes: Int
         ) : M3Capture()
     }
 
@@ -179,6 +199,15 @@ object M3Parser {
         var bssid = ""
         var m5m7Notified = false
         var completeReturnAt = Long.MAX_VALUE
+        var assocRejects = 0
+
+        // Los tres formatos de captura comparten esta comprobación: al sexto
+        // campo se marca cuándo devolver el M3 completo.
+        fun markCompleteIfFull() {
+            if (counted == 6) {
+                completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
+            }
+        }
 
         while (System.currentTimeMillis() < deadline &&
             System.currentTimeMillis() < completeReturnAt
@@ -192,6 +221,21 @@ object M3Parser {
                 if (line == END_OF_STREAM) break
                 if (line.isEmpty()) continue
                 onLine?.invoke(line)
+
+                // AP que solo acepta WPS por botón físico: no hay PIN que
+                // probar, así que reintentar o esperar los 25 s no aporta nada.
+                if (line.contains(PBC_ONLY_MARKER)) {
+                    return M3Capture.Aborted(R.string.pixie_reason_pbc_only)
+                }
+
+                // Asociación rechazada una y otra vez: el AP no va a dejarnos
+                // completar el handshake en esta sesión.
+                if (line.contains(ASSOC_REJECT_MARKER)) {
+                    assocRejects++
+                    if (assocRejects >= MAX_ASSOC_REJECTS) {
+                        return M3Capture.Aborted(R.string.pixie_reason_assoc_rejected)
+                    }
+                }
 
                 // El AP puede abortar antes de M3 (p. ej. WPS bloqueado).
                 // En ese caso no tiene sentido seguir esperando ni reintentar.
@@ -216,9 +260,7 @@ object M3Parser {
                 if (line.contains(WPS_M3_PREFIX)) {
                     bssid = BSSID_VALUE.find(line)?.groupValues?.get(1) ?: bssid
                     parseKeyValueLine(line, fields) { counted++ }
-                    if (counted == 6) {
-                        completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
-                    }
+                    markCompleteIfFull()
                     continue
                 }
 
@@ -232,9 +274,7 @@ object M3Parser {
                         .trim()
                     if (captureField(hexdumpMatch.groupValues[1].trim(), hexValue, fields)) {
                         counted++
-                        if (counted == 6) {
-                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
-                        }
+                        markCompleteIfFull()
                     }
                     continue
                 }
@@ -245,9 +285,7 @@ object M3Parser {
                     val hexValue = fieldMatch.groupValues[2].replace(" ", "").replace(":", "")
                     if (captureField(fieldMatch.groupValues[1].trim(), hexValue, fields)) {
                         counted++
-                        if (counted == 6) {
-                            completeReturnAt = System.currentTimeMillis() + M5M7_DWELL_MS
-                        }
+                        markCompleteIfFull()
                     }
                     continue
                 }

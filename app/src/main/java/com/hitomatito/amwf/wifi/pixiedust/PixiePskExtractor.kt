@@ -38,7 +38,7 @@ internal class PixiePskExtractor(
         // el StringBuilder crudo y en la consola.
         var handle: SupplicantProcesses.Handle? = null
         try {
-            log("[*] ===== WPA PSK EXTRACTION (WPS with PIN $pin) =====")
+            log("[*] ===== WPA PSK EXTRACTION (SSID: $ssid, WPS PIN: $pin) =====")
             supplicant.stop(null)
 
             // Mismo arranque que el ataque (ctrl dir, config, socket y PONG):
@@ -53,28 +53,11 @@ internal class PixiePskExtractor(
 
             fun cli(cmd: String): ShellExecutor.Result = supplicant.cli(iface, cmd)
 
-            fun cliChecked(cmd: String): ShellExecutor.Result {
-                val result = cli(cmd)
-                if (result.exitCode != 0 ||
-                    result.output.lineSequence().any { it.trim() == "FAIL" }
-                ) {
-                    val detail = result.output.ifBlank { "exit=${result.exitCode}" }
-                    log("[-] wpa_cli '$cmd' failed: $detail")
-                }
-                return result
-            }
-
-            var netId = "0"
-            val addRes = cliChecked("add_network")
-            addRes.output.lines().firstOrNull { it.trim().toIntOrNull() != null }?.let { netId = it.trim() }
-            log("[+] Network id = $netId")
-
-            // El SSID viene del escaneo y puede contener comillas, `$()` o
-            // backticks: se cita para que el shell de `su` lo trate como un
-            // único argumento y no ejecute nada.
-            val safeSsid = ssid.replace('\r', ' ').replace('\n', ' ')
-            cliChecked("set_network $netId ssid ${PixieProcessSupport.shellQuote(safeSsid)}")
-            cliChecked("set_network $netId key_mgmt WPA-PSK")
+            // wps_reg crea internamente su propia red WPS y la sustituye por la
+            // que entrega el AP. No hace falta add_network/set_network: el
+            // `set_network ... ssid` siempre fallaba porque wpa_cli espera el
+            // SSID entre comillas dobles y el valor llegaba con comillas de
+            // shell. Se omite para no ensuciar el log con FAIL inútiles.
 
             // Sin `freq=`: wpa_cli 2.11 solo acepta BSSID y PIN (o los
             // seis argumentos de reconfiguración del AP). Tampoco se llama a
@@ -102,10 +85,9 @@ internal class PixiePskExtractor(
             var psk: String? = null
             while (System.currentTimeMillis() < deadline) {
                 supplicant.flushLines(supplicantLines, rawOutput, log)
-                // wps_reg crea su propia red WPS con un id nuevo; no se puede
-                // asumir que sea el de add_network. Se consultan todas las
-                // redes conocidas y también el id devuelto por add_network.
-                val ids = (listNetworkIds(::cli) + netId).distinct()
+                // wps_reg crea su propia red WPS con un id nuevo: se consultan
+                // todas las redes conocidas en lugar de asumir un id fijo.
+                val ids = listNetworkIds(::cli)
                 val found = ids.asSequence()
                     .map { extractPskValue(cli("get_network $it psk")) }
                     .firstOrNull { !it.isNullOrEmpty() }

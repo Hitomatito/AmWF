@@ -68,9 +68,12 @@ internal class PixiewpsExecutor(private val context: Context) {
         val stderr = LinkedBlockingQueue<String>()
         return try {
             // El watchdog conoce el PID nativo y lo mata incluso si el wrapper
-            // `su` o la app desaparecen antes de cumplirse el timeout.
+            // `su` o la app desaparecen antes de cumplirse el timeout. El
+            // marcador final garantiza que el bucle termine en cuanto pixiewps
+            // muere, aunque el shell retenga el pipe de stdout.
             val watchedCommand =
-                "($command & ${PixieProcessSupport.pidWatchdogTail(TIMEOUT_SECONDS)})"
+                "($command & ${PixieProcessSupport.pidWatchdogTail(TIMEOUT_SECONDS)}; " +
+                    "echo ${PixieProcessSupport.PIXIEWPS_DONE_MARKER})"
             val running = Runtime.getRuntime().exec(arrayOf("su", "-c", watchedCommand))
             process = running
             PixieProcessSupport.drainStream(running.inputStream, stdout)
@@ -87,7 +90,11 @@ internal class PixiewpsExecutor(private val context: Context) {
                 }
                 val line = stdout.poll(minOf(remaining, 250L), TimeUnit.MILLISECONDS)
                     ?: continue
-                if (line == PixieProcessSupport.PROCESS_EOF) break
+                // EOF real del pipe o marcador de fin del wrapper: en ambos
+                // casos pixiewps ya terminó y no hay más salida que esperar.
+                if (line == PixieProcessSupport.PROCESS_EOF ||
+                    line == PixieProcessSupport.PIXIEWPS_DONE_MARKER
+                ) break
                 rawOutput.append(line).append('\n')
                 log(line)
                 pinRegex.find(line)?.let { wpsPin = it.groupValues[2] }
@@ -106,6 +113,9 @@ internal class PixiewpsExecutor(private val context: Context) {
                 }
                 if (!exited) stop(running, binaryPath)
             }
+            // stderr se drena antes y después de stdout a propósito: el lector
+            // de stderr sigue encolando líneas mientras se consume stdout, y la
+            // última pasada recoge las que llegaron tarde.
             PixieProcessSupport.drainQueue(stderr, rawOutput, "[pixiewps-stderr] ", log)
             PixieProcessSupport.drainQueue(stdout, rawOutput, log = log)
             PixieProcessSupport.drainQueue(stderr, rawOutput, "[pixiewps-stderr] ", log)

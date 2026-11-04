@@ -88,6 +88,14 @@ class PixieDustRunner(
     private var wifiDisabledByAttack = false
 
     /**
+     * true cuando [cleanup] ya completó la restauración. [cancel] y el
+     * `finally` de [runAttack] pueden llamarlo: la segunda llamada no debe
+     * repetir `svc wifi enable` ni volver a registrar "Cleanup done".
+     */
+    @Volatile
+    private var cleanupDone = false
+
+    /**
      * Ejecuta una auditoría Pixie Dust contra el BSSID dado.
      *
      * @param bssid Dirección MAC del objetivo (validada estrictamente).
@@ -106,11 +114,12 @@ class PixieDustRunner(
     ): PixieDustResult = withContext(ioDispatcher) {
         ensureActive()
         auditEvents.clear()
+        cleanupDone = false
         stage(PixieDustStage.PREPARING)
 
         log("[*] ===== PIXIE DUST ATTACK START =====")
         log("[*] BSSID: $bssid | Interface: $interfaceName | SSID: $ssid | freq: ${freqMHz ?: "unknown"}")
-        log("[*] Arch suffix: ${NativeBinaries.archSuffix()}")
+        log("[*] Arch suffix: ${NativeBinaries.archSuffix().ifEmpty { "(none)" }}")
 
         val target = PixieAuditLog.Target(bssid, ssid, freqMHz, interfaceName)
         val rawOutput = StringBuilder()
@@ -143,10 +152,25 @@ class PixieDustRunner(
         // --- Preparar binarios nativos (best-effort: copia los assets a filesDir) ---
         // Debe ejecutarse ANTES de comprobar faltantes: en el primer arranque
         // los binarios empaquetados aún no están copiados.
+        // Si esto lanza, no habrá `finally` que persista el log: se captura
+        // aquí y se registra igual.
         log("[*] Preparing native binaries...")
-        NativeBinaries.ensure(context)
-
-        val missing = NativeBinaries.missingCriticalBinaries(context)
+        val missing = try {
+            NativeBinaries.ensure(context)
+            NativeBinaries.missingCriticalBinaries(context)
+        } catch (e: Exception) {
+            ShellExecutor.logE(TAG, "Error preparando binarios nativos", e)
+            val failure = PixieDustResult.Failure(
+                bssid = bssid,
+                reason = context.getString(
+                    R.string.pixie_error_detail,
+                    e.message ?: e.javaClass.simpleName
+                ),
+                rawOutput = ""
+            )
+            persistAuditLog(failure, target, rawOutput)
+            return@withContext failure
+        }
         if (missing.isNotEmpty()) {
             log("[-] Missing native assets: ${missing.joinToString(", ")}")
             val failure = PixieDustResult.Failure(
@@ -225,6 +249,11 @@ class PixieDustRunner(
 
                 if (m3Data != null) {
                     log("[+] M3 captured (round $round/$MAX_ATTACK_ROUNDS)")
+                    // Cierra la sesión WPS en el AP antes de matar el
+                    // supplicant: si solo se mata, el AP mantiene la sesión
+                    // abierta y la extracción de PSK (que empieza enseguida)
+                    // choca con ella.
+                    supplicant.cancelWps(interfaceName, ::log)
                     supplicant.stopAndFlush(handle, rawOutput, ::log)
                     currentSupplicant = null
                     break
@@ -334,6 +363,12 @@ class PixieDustRunner(
                 try {
                     cleanup()
                 } finally {
+                    // Salida sin resultado (normalmente cancelación del
+                    // usuario): queda constancia explícita en el log de
+                    // auditoría en vez de un "SIN RESULTADO" sin contexto.
+                    if (auditResult == null) {
+                        log("[!] Ataque interrumpido o cancelado antes de obtener un resultado")
+                    }
                     // Incluso si la restauración falla, ningún camino debe
                     // perder el registro. Se ejecuta tras cleanup() para
                     // incluir también sus mensajes cuando sea posible.
@@ -423,6 +458,15 @@ class PixieDustRunner(
                         terminal = true
                     )
                 }
+                is M3Parser.M3Capture.Aborted ->
+                    // Condición que no cambia al reintentar (PBC-only, AP que
+                    // rechaza la asociación): se aborta con el motivo real.
+                    return@coroutineScope M3Attempt(
+                        data = null,
+                        failureReason = context.getString(capture.reasonRes),
+                        m5m7 = null,
+                        terminal = true
+                    )
             }
         }
 
@@ -463,6 +507,7 @@ class PixieDustRunner(
      */
     @Synchronized
     private fun cleanup() {
+        if (cleanupDone) return
         stage(PixieDustStage.RESTORING)
         try {
             val dir = NativeBinaries.binaryDir(context)
@@ -480,6 +525,7 @@ class PixieDustRunner(
             log("[*] Cleanup: svc wifi enable -> exit=${r.exitCode}")
         }
         log("[*] Cleanup done")
+        cleanupDone = true
     }
 
     private fun log(message: String) {
