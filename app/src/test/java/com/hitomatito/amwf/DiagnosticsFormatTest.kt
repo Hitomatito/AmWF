@@ -53,6 +53,21 @@ class DiagnosticsFormatTest {
     }
 
     @Test
+    fun `redacts uppercase and colon-or-equals ssid forms`() {
+        assertEquals("SSID: <redacted>", DiagnosticsFormat.redactSsid("SSID: ZERO TWO"))
+        assertEquals("ssid=<redacted>", DiagnosticsFormat.redactSsid("ssid=ZERO TWO"))
+        assertEquals("  ssid <redacted>", DiagnosticsFormat.redactSsid("  ssid ZERO TWO"))
+    }
+
+    @Test
+    fun `does not treat bssid as an ssid line`() {
+        assertEquals(
+            "BSSID 00:11:22:33:44:55",
+            DiagnosticsFormat.redactSsid("BSSID 00:11:22:33:44:55")
+        )
+    }
+
+    @Test
     fun `redact applies both mac and ssid redaction`() {
         val input = "addr 06:af:bd:11:22:33\n\tssid ZERO TWO"
         assertEquals(

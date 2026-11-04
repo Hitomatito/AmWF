@@ -14,7 +14,9 @@ package com.hitomatito.amwf.diagnostics
 object DiagnosticsFormat {
 
     private val MAC_REGEX = Regex("\\b([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5})\\b")
-    private val SSID_REGEX = Regex("(?m)(ssid\\s+).+$")
+    // Case-insensitive y acepta `ssid valor`, `ssid: valor` y `ssid=valor`.
+    // `\bssid\b` no casa con "BSSID" (la B impide el límite de palabra).
+    private val SSID_REGEX = Regex("(?im)^(\\s*ssid\\b\\s*[:=]?\\s*).+$")
 
     /**
      * Sustituye cada direccion MAC por su prefijo OUI (3 primeros octetos) y
