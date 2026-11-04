@@ -6,7 +6,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Base gradient: brand teal -> darker teal -->
+    <!-- Fondo degradado del tema (verde profundo) -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
@@ -14,43 +14,22 @@
                 android:endX="54" android:endY="108"
                 android:type="linear">
                 <item android:offset="0.0" android:color="#FF0E2624" />
-                <item android:offset="1.0" android:color="#FF07130F" />
+                <item android:offset="1.0" android:color="#FF06110E" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Radial cyan glow behind the glyph (two soft layers) -->
-    <path android:pathData="M24,60a30,30 0 1,1 60,0a30,30 0 1,1 -60,0">
+    <!-- Halo cian detrás del símbolo -->
+    <path android:pathData="M22,58a32,32 0 1,1 64,0a32,32 0 1,1 -64,0">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="radial"
                 android:centerX="54" android:centerY="58"
-                android:gradientRadius="30">
-                <item android:offset="0.0" android:color="#B300E5CC" />
-                <item android:offset="0.55" android:color="#4000E5CC" />
+                android:gradientRadius="32">
+                <item android:offset="0.0" android:color="#8C00E5CC" />
+                <item android:offset="0.55" android:color="#2E00E5CC" />
                 <item android:offset="1.0" android:color="#0000E5CC" />
             </gradient>
         </aapt:attr>
     </path>
-    <path android:pathData="M34,62a20,20 0 1,1 40,0a20,20 0 1,1 -40,0">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="radial"
-                android:centerX="54" android:centerY="62"
-                android:gradientRadius="20">
-                <item android:offset="0.0" android:color="#5900E5CC" />
-                <item android:offset="1.0" android:color="#0000E5CC" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Subtle dot grid (network / matrix motif) -->
-    <path android:pathData="M18,18m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M90,18m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M18,90m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M90,90m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M18,54m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M90,54m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M54,18m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
-    <path android:pathData="M54,90m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" android:fillColor="#0DFFFFFF"/>
 </vector>

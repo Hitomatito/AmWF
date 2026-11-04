@@ -4,16 +4,31 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Monochrome version of the logo (single color, system tints it) -->
-    <path android:pathData="M25,54 a29,29 0 1,1 58,0 a29,29 0 1,1 -58,0"
-        android:strokeColor="#FF000000" android:strokeWidth="4" android:fillColor="#00000000"/>
-    <path android:pathData="M58.93,69.7 A8,8 0 0 1 49.07,69.7"
-        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
-    <path android:pathData="M63.85,63.39 A16,16 0 0 1 44.15,63.39"
-        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
-    <path android:pathData="M68.47,57.48 A23.5,23.5 0 0 1 39.53,57.48"
-        android:strokeColor="#FF000000" android:strokeWidth="5.6" android:strokeLineCap="round" android:fillColor="#00000000"/>
-    <path android:pathData="M48.5,76 a5.5,5.5 0 1,1 11.0,0 a5.5,5.5 0 1,1 -11.0,0"
-        android:fillColor="#FF000000"/>
+    <!-- Versión monocroma del icono (el sistema la tiñe) -->
+    <path
+        android:pathData="M23.00,54.00 a31.00,31.00 0 1,1 62.00,0 a31.00,31.00 0 1,1 -62.00,0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.4"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M61.37,56.84 A9.00,9.00 0 0 1 46.63,56.84"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M67.11,52.82 A16.00,16.00 0 0 1 40.89,52.82"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M72.84,48.81 A23.00,23.00 0 0 1 35.16,48.81"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M48.70,62.00 a5.30,5.30 0 1,1 10.60,0 a5.30,5.30 0 1,1 -10.60,0"
+        android:fillColor="#FF000000" />
 </vector>
