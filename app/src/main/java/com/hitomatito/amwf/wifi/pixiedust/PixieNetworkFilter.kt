@@ -7,6 +7,8 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import java.util.Locale
+
 /**
  * Filtros de la hoja de selección de red.
  *
@@ -63,16 +65,16 @@ fun filterNetworks(
     }
     val trimmed = query.trim()
     if (trimmed.isEmpty()) return byFilter
-    return byFilter.filter { it.matchesQuery(trimmed.lowercase()) }
+    return byFilter.filter { it.matchesQuery(trimmed.lowercase(Locale.ROOT)) }
 }
 
 /** [query] ya viene en minúsculas y sin espacios en los extremos. */
 private fun PixieDustNetwork.matchesQuery(query: String): Boolean {
-    if (displayName.lowercase().contains(query)) return true
+    if (displayName.lowercase(Locale.ROOT).contains(query)) return true
     val compactBssid = query.replace(":", "").replace(" ", "")
     // El límite se aplica antes de cualquier comparación con el BSSID, tanto
     // con separadores como sin ellos; si no, "aa" seguía coincidiendo aquí.
     if (compactBssid.length < 3) return false
-    return bssid.lowercase().contains(query) ||
-        bssid.replace(":", "").lowercase().contains(compactBssid)
+    return bssid.lowercase(Locale.ROOT).contains(query) ||
+        bssid.replace(":", "").lowercase(Locale.ROOT).contains(compactBssid)
 }

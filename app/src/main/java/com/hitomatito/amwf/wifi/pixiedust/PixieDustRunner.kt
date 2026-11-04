@@ -563,7 +563,7 @@ class PixieDustRunner(
 
     private fun wifiEnabled(): Boolean? {
         val status = execSu(
-            "dumpsys wifi 2>/dev/null | grep -m1 'Wi-Fi is'",
+            "dumpsys wifi 2>/dev/null | grep -m1 -E 'Wi-?Fi is'",
             timeoutSeconds = 5
         )
         return WifiRestore.isEnabled(status.output)
