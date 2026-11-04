@@ -370,8 +370,14 @@ class MainActivity : AppCompatActivity() {
         updateInfoRow(rowChipset, getString(R.string.label_chipset), result.deviceInfo.chipset, 
             result.issues.none { it.type == IssueType.CHIPSET })
         
-        updateInfoRow(rowDriver, getString(R.string.label_driver), result.deviceInfo.wlanDriver.ifEmpty { "Unknown" },
-            result.issues.none { it.type == IssueType.DRIVER })
+        val driverKnown = result.deviceInfo.wlanDriver.isNotBlank() &&
+            !result.deviceInfo.wlanDriver.equals("Unknown", ignoreCase = true)
+        updateInfoRow(
+            rowDriver,
+            getString(R.string.label_driver),
+            result.deviceInfo.wlanDriver.ifEmpty { getString(R.string.not_found) },
+            driverKnown
+        )
         
         val rootText = if (result.deviceInfo.rootInfo.isRooted) {
             "${result.deviceInfo.rootInfo.rootName} ${result.deviceInfo.rootInfo.version}"

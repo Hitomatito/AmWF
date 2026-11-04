@@ -323,6 +323,19 @@ class DeviceCompatibilityChecker(private val context: Context) {
 
         logD(TAG, "=== Starting compatibility check ===")
 
+        try {
+            return runCompatibilityChecks(phase, issues)
+        } finally {
+            // Toda salida (éxito, fallo o excepción) debe restaurar el radio:
+            // el check lo apaga antes de escribir con_mode.
+            restoreWifiAfterCheck(phase)
+        }
+    }
+
+    private fun runCompatibilityChecks(
+        phase: (Int, Int) -> Unit,
+        issues: MutableList<CompatibilityIssue>
+    ): CompatibilityResult {
         // Apaga el radio WiFi ANTES de los tests de escritura a con_mode.
         // Con el cliente conectado, "echo 4 > con_mode" falla con
         // "Operation not permitted", lo que marcaría un dispositivo
@@ -404,11 +417,25 @@ class DeviceCompatibilityChecker(private val context: Context) {
         logD(TAG, "=== Compatibility check complete ===")
         logD(TAG, "Compatible: $isCompatible")
 
-        // Restart WiFi service ONCE after ALL con_mode tests complete.
-        // Both testCapabilities() and testConModeWrite() modify con_mode,
-        // which disrupts WiFi. A single restart here ensures WiFi is
-        // properly restored after all tests finish.
-        phase(95, R.string.phase_restore)
+        return CompatibilityResult(
+            isCompatible = isCompatible,
+            issues = issues,
+            deviceInfo = deviceInfo
+        )
+    }
+
+    /**
+     * Restart WiFi service ONCE after ALL con_mode tests complete.
+     * Both testCapabilities() and testConModeWrite() modify con_mode,
+     * which disrupts WiFi. A single restart here ensures WiFi is
+     * properly restored after all tests finish, including exceptional exits.
+     */
+    private fun restoreWifiAfterCheck(phase: (Int, Int) -> Unit) {
+        try {
+            phase(95, R.string.phase_restore)
+        } catch (_: Exception) {
+            // El progreso es best-effort; nunca debe impedir la restauración.
+        }
         logD(TAG, "Restarting WiFi service to restore managed mode after all tests")
         try {
             execRoot("svc wifi disable")
@@ -418,42 +445,59 @@ class DeviceCompatibilityChecker(private val context: Context) {
         } catch (e: Exception) {
             logE(TAG, "Failed to restart WiFi service: ${e.message}", e)
         }
-
-        return CompatibilityResult(
-            isCompatible = isCompatible,
-            issues = issues,
-            deviceInfo = deviceInfo
-        )
     }
 
     private fun testConModeWrite(path: String): Boolean {
         logD(TAG, "Testing con_mode write at $path")
-        
+
         // Save original value before testing
         val originalValue = execRoot("cat $path 2>/dev/null").output.trim()
         logD(TAG, "Original con_mode value: $originalValue")
-        
+
         try {
-            val testResult = execRoot("echo 4 > $path 2>&1; echo \$?")
-            
-            if (testResult.output.contains("1") || testResult.error.contains("denied") || 
-                testResult.error.contains("Permission") || testResult.error.contains("readonly")) {
-                logD(TAG, "Write test failed: ${testResult.error}")
+            // El código de salida real lo imprime el último `echo`: el exit code
+            // de `su -c` es el de ese echo (siempre 0), así que no sirve para
+            // detectar el fallo de escritura. stderr va a /dev/null para no
+            // volcar el mensaje de error dentro del propio con_mode.
+            val testResult = execRoot("echo 4 > $path 2>/dev/null; echo \$?")
+            val echoedCode = testResult.output.lineSequence()
+                .map { it.trim() }
+                .lastOrNull { it.toIntOrNull() != null }
+                ?.toIntOrNull()
+
+            val timedOut = testResult.exitCode != 0
+            val writeFailed = echoedCode == null || echoedCode != 0
+            val permissionError = listOf(
+                "denied", "Permission", "readonly", "Read-only",
+                "Operation not permitted", "Input/output error"
+            ).any { testResult.error.contains(it, ignoreCase = true) }
+
+            if (timedOut || writeFailed || permissionError) {
+                logD(
+                    TAG,
+                    "Write test failed: exit=${testResult.exitCode}, code=$echoedCode, " +
+                        "error=${testResult.error}"
+                )
                 return false
             }
-            
+
             logD(TAG, "Write test passed")
             return true
         } catch (e: Exception) {
             logE(TAG, "Exception during write test: ${e.message}", e)
             return false
         } finally {
-            // CRITICAL: Always restore original value
-            logD(TAG, "Restoring con_mode to: $originalValue")
-            try {
-                execRoot("echo $originalValue > $path 2>&1")
-            } catch (e: Exception) {
-                logE(TAG, "Failed to restore con_mode: ${e.message}", e)
+            // CRITICAL: Always restore original value. Si la lectura falló, no
+            // se escribe nada: `echo > con_mode` dejaría un valor inválido.
+            if (originalValue.isNotEmpty()) {
+                logD(TAG, "Restoring con_mode to: $originalValue")
+                try {
+                    execRoot("echo $originalValue > $path 2>/dev/null")
+                } catch (e: Exception) {
+                    logE(TAG, "Failed to restore con_mode: ${e.message}", e)
+                }
+            } else {
+                logW(TAG, "No original con_mode value; skipping restore")
             }
         }
     }
