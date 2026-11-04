@@ -19,13 +19,15 @@ Unit tests are plain JUnit 4 over pure functions; there is no Robolectric. Extra
 ## Architecture and invariants
 
 - `MainActivity` is the monitor-mode/compatibility entry point; `MonitorModeManager` performs the radio and `con_mode` changes. `LocaleHelper` applies the persisted ES/EN locale in `attachBaseContext`.
-- `DeviceCompatibilityChecker` performs real capture/injection and `con_mode` write tests. It disables WiFi before those tests, toggles the radio during capability checks and centralizes the final restore/restart. Preserve that ordering to avoid extra WiFi drops. Results are cached in `MainActivity` statics so `recreate()` does not rerun the disruptive test.
+- `DeviceCompatibilityChecker` performs real capture/injection and `con_mode` write tests. It disables WiFi before those tests, toggles the radio during capability checks and centralizes the final restore/restart. Preserve that ordering to avoid extra WiFi drops. The check is never run automatically: it is triggered only by the "Verificar compatibilidad" button (it disrupts WiFi); results are cached in `MainActivity` statics so `recreate()` does not rerun the disruptive test. Disabling monitor mode must remain possible without a verification.
 - `resolveConModePath()` must retain root-based discovery: SELinux can hide `/sys/module` from the app UID, so a `File`-only scan misses valid paths.
 - Use `ShellExecutor` for one-shot `su`/`sh` commands and keep its reader threads/timeouts; naive pipe reads can deadlock. `SupplicantProcesses` and `PixiewpsExecutor` own long-lived processes that need streaming output.
+- `PixieProcessSupport.pidWatchdogTail` must keep the watchdog as a single `sh -c` command: a multi-command background subshell makes Android's `sh` retain the stdout fd, so the reader does not see EOF until the timeout. `PixiewpsExecutor` also breaks on `PIXIEWPS_DONE_MARKER` as a fallback.
 - With minSdk 24, API 26+ process calls (`destroyForcibly`, `Process.isAlive`, timed `waitFor`) must go through the `*Compat` helpers in `ProcessCompat.kt`.
 - `diagnostics/` exports passive state plus the in-memory `AppLogger` through FileProvider. `DiagnosticsFormat` redacts MACs and SSIDs; preserve redaction for new report fields.
 - In `wifi/pixiedust/`, `PixieDustRunner` orchestrates phases/retries and WiFi restoration. `SupplicantProcesses`, `PixiewpsExecutor`, `PixiePskExtractor` and `PixieProcessSupport` own native-process work; `PixieAuditLog` persists audit logs. Keep this separation instead of rebuilding a runner god class.
 - `runAttack` must persist the audit log on every exit path (validation, missing binaries, capture failure, success and cancellation) and flush the supplicant queue before cleanup, or the final M3 lines are lost. Logs in `/sdcard/AmWF/pixie-logs/` (fallback `filesDir/pixie-logs`) contain plaintext WPS/WPA credentials.
+- After a successful M3 capture, close the WPS session (`wps_cancel`) before killing the attack supplicant. Otherwise the AP keeps its session open and the PSK extraction, which now starts within seconds, collides with it (the AP retransmits M1 and the registrar fails with "Unexpected state (15)").
 - Pixie Dust UX is intentional: tapping an auditable network selects it and immediately starts the audit with current options (WiFi-disable defaults on); there is no Run button or confirmation dialog. Search, filters, session timer, phase tracker and collapsible console are intentional scope, not unused UI.
 - Keep `MainActivity`'s Pixie Dust button enabled even when its alpha is dimmed. If compatibility already confirmed missing binaries, the tap shows the summary instead of opening the audit; otherwise it opens the screen.
 - Route WiFi scan permission and location-services checks through `WifiScanPermissions`: precise location is required on every Android version, plus `NEARBY_WIFI_DEVICES` on Android 13+.
@@ -40,7 +42,9 @@ Unit tests are plain JUnit 4 over pure functions; there is no Robolectric. Extra
 - `NativeBinaries` is the single source of truth for paths, missing-binary detection and messages: `missingBinariesMessage` for detailed failure reasons, `missingBinariesSummary` for compatibility/warning UI. Keep all callers using it.
 - Call `NativeBinaries.ensure(context)` before `missingCriticalBinaries()`. Assets are copied lazily on first launch and after app updates, so checking first falsely reports missing binaries.
 - Never substitute Android's system `wpa_supplicant`: `CONFIG_ANDROID_LOG` truncates WPS hexdumps to 32 bytes. The bundled supplicant is mandatory for complete M3 capture.
-- Use `BINARIES_SETUP.md` for the native rebuild workflow and rationale; its runtime method names predate the runner split, so verify runtime details against current Kotlin. `README.md`'s project structure also predates Pixie Dust.
+- `wpa_cli` and `pixiewps` fall back to system paths (`/system/bin`, `/vendor/bin`, `/vendor/bin/hw`, `/system/xbin`, `/odm/bin`) when the bundled asset is missing; the "Binarios Pixie Dust" row can show available because of that. `wpa_supplicant` never falls back.
+- Supplicant control dir: `/data/vendor/wifi/amwf` on API 28+, `/data/misc/wifi/amwf` below; devices upgraded to P (not launched with it) keep the legacy path, so if the supplicant fails with "socket not created", try the other directory.
+- `BINARIES_SETUP.md` documents the native rebuild workflow, SELinux notes and the system-binary fallback; `README.md` documents the current project structure. Both are kept current — trust them over older notes.
 
 ## Conventions
 

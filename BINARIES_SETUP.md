@@ -52,6 +52,20 @@ WPS: E-Hash2 - hexdump(len=32): ...
 `-K` es imprescindible para que `wpa_hexdump_key()` imprima `AuthKey` en lugar
 de `[REMOVED]`.
 
+**Fallback a binarios del sistema (`wpa_cli` y `pixiewps`).** A diferencia del
+supplicant, `wpa_cli` y `pixiewps` **sí** pueden resolverse desde el sistema
+cuando el asset empaquetado no está disponible: `resolveBinaryPath()` busca
+primero en `filesDir` (donde `ensure()` copia los assets) y luego en las rutas
+`/system/bin`, `/vendor/bin`, `/vendor/bin/hw`, `/system/xbin` y `/odm/bin`,
+con el nombre sin sufijo de arquitectura. Si no se encuentra en ninguna, el
+binario se reporta como faltante con normalidad. El fallback es intencional:
+`wpa_cli` solo transmite comandos de texto al supplicant y `pixiewps` trabaja
+offline sobre los datos ya capturados; ninguno de los dos toca el hexdump WPS.
+El `wpa_supplicant` del sistema queda excluido de este fallback por el motivo
+explicado arriba. Consecuencia visible: la fila **Binarios Pixie Dust** puede
+aparecer como disponible aunque falte el asset empaquetado de `wpa_cli` o
+`pixiewps`, porque se está usando el del sistema.
+
 ## 2. Compilación reproducible
 
 El script `scripts/build-wifi-binaries.sh` compila los binarios de **arm64-v8a**
@@ -94,8 +108,8 @@ Pasos que realiza para el supplicant:
 
 ## 3. Runtime: librerías y LD_LIBRARY_PATH
 
-El `PixieDustRunner` exporta `LD_LIBRARY_PATH=<filesDir>` antes de ejecutar
-`wpa_supplicant`, de modo que el dynamic linker encuentra
+`SupplicantProcesses` exporta `LD_LIBRARY_PATH=<filesDir>` en el comando que
+lanza `wpa_supplicant`, de modo que el dynamic linker encuentra
 `libnl-3.so.200` y `libnl-genl-3.so.200` en el mismo directorio. `libc.so`,
 `liblog.so`, `libm.so`, `libdl.so` y el resto de bionic provienen del sistema
 del dispositivo y no se empaquetan.
@@ -112,7 +126,7 @@ update_config=1
 ap_scan=1
 ```
 
-`PixieDustRunner.stageSupplicantConfig()` descarta las líneas
+`SupplicantProcesses.stageConfig()` (invocado por el runner) descarta las líneas
 `ctrl_interface*` y genera un config runtime con la ruta real del socket:
 
 ```
@@ -128,8 +142,14 @@ tras la provisión WPS.
 ## 5. Permisos y SELinux
 
 - La app ejecuta los binarios vía `su`. El dispositivo debe estar rooteado.
-- En Android 10+ (API 29+) el código usa `/data/vendor/wifi/amwf`; en versiones
-  anteriores, `/data/misc/wifi/amwf`.
+- El directorio de control usa `/data/vendor/wifi/amwf` en Android 9+
+  (API 28+, la ruta concedida en la política SELinux principal para
+  dispositivos que estrenan P o posterior, y la única vigente en Android 10+).
+  En versiones anteriores (o dispositivos que **actualizaron** a P en lugar de
+  estrenarlo, que conservan la ruta heredada) el código usa
+  `/data/misc/wifi/amwf` (`SDK_INT < 28`). La distinción depende de qué estrenó
+  el dispositivo, no solo de la versión que reporta el sistema; si el
+  supplicant falla con "socket not created", prueba el directorio contrario.
 - El directorio de control se crea y se etiqueta con el contexto del proceso
   `su`; el socket se crea correctamente siempre que el config declare
   `ctrl_interface`. Si el ataque falla con "socket not created", revisa el
