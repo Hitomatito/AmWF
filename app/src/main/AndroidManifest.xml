@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- AmWF solo está verificada en teléfonos; tabletas y ChromeOS quedan fuera.
+         android:largeScreens="false" permite a Google Play filtrar su instalación allí. -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="false"
+        android:xlargeScreens="false" />
+
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -10,10 +18,13 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Android 13+ exige NEARBY_WIFI_DEVICES para las APIs WiFi modernas.
-         neverForLocation: la app no deriva ubicación de los resultados del escaneo. -->
+         neverForLocation: la app no deriva ubicación de los resultados del escaneo.
+         usesPermissionFlags solo existe desde API 31; por debajo se ignora, por eso
+         el atributo es intencionado (UnusedAttribute sería un falso positivo). -->
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
-        android:usesPermissionFlags="neverForLocation" />
+        android:usesPermissionFlags="neverForLocation"
+        tools:ignore="UnusedAttribute" />
 
     <application
         android:allowBackup="false"
@@ -25,10 +36,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AmWF">
 
+        <!-- Solo teléfonos por alcance del producto (ver supports-screens);
+             portrait es intencional y las grandes pantallas no se distribuyen. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -38,7 +52,8 @@
         <activity
             android:name=".wifi.pixiedust.PixieDustActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="portrait"
+            tools:ignore="LockedOrientationActivity,DiscouragedApi" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
