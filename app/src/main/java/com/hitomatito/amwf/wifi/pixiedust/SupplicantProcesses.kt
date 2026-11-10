@@ -31,7 +31,7 @@ internal fun isWpsRegAccepted(result: ShellExecutor.Result): Boolean =
  * en la cola del lector. Lo comparten el ataque Pixie Dust y la extracción de
  * PSK, que necesitan exactamente el mismo arranque y la misma limpieza.
  */
-internal class SupplicantProcesses(private val context: Context) {
+internal class SupplicantProcesses(private val context: Context) : SupplicantGateway {
 
     /** Proceso del supplicant junto con su cola de líneas y su hilo lector. */
     class Handle(
@@ -47,7 +47,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * No emite ninguna [PixieDustStage]: cada flujo conserva su propia fase
      * (STARTING_SUPPLICANT o EXTRACTING_PSK) y decide cuándo avanzar.
      */
-    suspend fun launch(
+    override suspend fun launch(
         iface: String,
         rawOutput: StringBuilder,
         log: (String) -> Unit
@@ -159,13 +159,13 @@ internal class SupplicantProcesses(private val context: Context) {
     }
 
     /** Ejecuta un comando de wpa_cli con el timeout corto usado por el ataque. */
-    fun cli(iface: String, args: String): ShellExecutor.Result =
+    override fun cli(iface: String, args: String): ShellExecutor.Result =
         PixieProcessSupport.runSuWithTimeout(
             cliCommand(iface, NativeBinaries.ctrlDir(), args),
             timeoutSeconds = 5
         )
 
-    fun sendWpsReg(
+    override fun sendWpsReg(
         bssid: String,
         iface: String,
         log: (String) -> Unit
@@ -185,7 +185,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * posterior (que ahora empieza en segundos) choca con ella: el AP
      * retransmite su M1 y el nuevo registrador falla con "Unexpected state".
      */
-    fun cancelWps(iface: String, log: (String) -> Unit) {
+    override fun cancelWps(iface: String, log: (String) -> Unit) {
         val result = cli(iface, "wps_cancel")
         log("[*] WPS session closed (wps_cancel -> exit=${result.exitCode})")
     }
@@ -287,7 +287,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * en ejecución hasta que expira su `sleep 110`, lo que dejaría dos
      * supplicants compitiendo por la misma interfaz en la ronda siguiente.
      */
-    fun stop(process: Process?) {
+    override fun stop(process: Process?) {
         process?.let {
             it.destroy()
             try {
@@ -315,7 +315,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * la captura M3 se pierden al morir el proceso y el log de auditoría queda
      * incompleto.
      */
-    fun stopAndFlush(
+    override fun stopAndFlush(
         handle: Handle?,
         rawOutput: StringBuilder,
         log: (String) -> Unit
@@ -331,7 +331,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * que acaba en el log de auditoría. Solo se llama desde la corrutina del
      * ataque: el hilo lector se limita a encolar líneas.
      */
-    fun recordLine(
+    override fun recordLine(
         line: String,
         rawOutput: StringBuilder,
         log: (String) -> Unit
@@ -341,7 +341,7 @@ internal class SupplicantProcesses(private val context: Context) {
     }
 
     /** Vuelca en la corrutina las líneas ya recibidas del supplicant. */
-    fun flushLines(
+    override fun flushLines(
         queue: BlockingQueue<String>,
         rawOutput: StringBuilder,
         log: (String) -> Unit
@@ -359,7 +359,7 @@ internal class SupplicantProcesses(private val context: Context) {
      * Se conserva el centinela de fin de stream: si el supplicant murió, el
      * parser debe enterarse en lugar de esperar hasta el timeout.
      */
-    fun discardStale(queue: BlockingQueue<String>) {
+    override fun discardStale(queue: BlockingQueue<String>) {
         var sawEof = false
         while (true) {
             val line = queue.poll() ?: break

@@ -62,6 +62,14 @@ android {
         viewBinding = true
     }
 
+    testOptions {
+        unitTests {
+            // android.util.Log y demás stubs no-op en tests JVM puros
+            // (devolver valores por defecto en vez de lanzar "not mocked").
+            isReturnDefaultValues = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -81,6 +89,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

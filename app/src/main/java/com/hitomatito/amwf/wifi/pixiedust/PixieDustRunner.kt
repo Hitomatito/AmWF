@@ -43,14 +43,24 @@ import kotlinx.coroutines.withContext
  * [PixieAuditLog] (persistencia del log). Aquí solo queda la secuencia de
  * fases, los reintentos de captura M3 y la limpieza/restauración del WiFi.
  *
- * @param context Contexto de la aplicación.
+ * Las dependencias llegan inyectadas por constructor (ver § gateways en
+ * PixieDustGateways.kt) para que los tests JVM puedan sustituirlas por fakes.
+ * En producción se construyen con [PixieDustRunner.create].
+ *
  * @param ioDispatcher Dispatcher para operaciones de E/S (inyectado para testabilidad).
  */
-class PixieDustRunner(
-    private val context: Context,
+internal class PixieDustRunner(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val onLog: (String) -> Unit = {},
-    private val onStage: (PixieDustStage) -> Unit = {}
+    private val onStage: (PixieDustStage) -> Unit = {},
+    private val supplicant: SupplicantGateway,
+    private val pixiewps: PixiewpsGateway,
+    private val pskExtractor: PskExtractorGateway,
+    private val nativeBinaries: NativeBinariesGateway,
+    private val auditLog: AuditLogGateway,
+    private val strings: (Int, Array<out Any>) -> String,
+    private val shellExec: (String, Int) -> ShellExecutor.Result,
+    private val isWifiEnabled: () -> Boolean?
 ) {
 
     // Validación estricta de BSSID (evita inyección de comandos en shell).
@@ -66,12 +76,6 @@ class PixieDustRunner(
     private val WIFI_RESTORE_ATTEMPTS = 3
     private val WIFI_RESTORE_RETRY_MS = 1_000L
 
-    private val wifiManager =
-        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-
-    private val supplicant = SupplicantProcesses(context)
-    private val pixiewps = PixiewpsExecutor(context)
-    private val pskExtractor = PixiePskExtractor(context, supplicant)
 
     /**
      * Mensajes de alto nivel del ataque (decisiones, PIN hallado, PSK, etc.).
@@ -123,7 +127,7 @@ class PixieDustRunner(
 
         log("[*] ===== PIXIE DUST ATTACK START =====")
         log("[*] BSSID: $bssid | Interface: $interfaceName | SSID: $ssid | freq: ${freqMHz ?: "unknown"}")
-        log("[*] Arch suffix: ${NativeBinaries.archSuffix().ifEmpty { "(none)" }}")
+        log("[*] Arch suffix: ${nativeBinaries.archSuffix().ifEmpty { "(none)" }}")
 
         val target = PixieAuditLog.Target(bssid, ssid, freqMHz, interfaceName)
         val rawOutput = StringBuilder()
@@ -135,7 +139,7 @@ class PixieDustRunner(
         if (!BSSID_REGEX.matches(bssid)) {
             val failure = PixieDustResult.Failure(
                 bssid = bssid,
-                reason = context.getString(R.string.pixie_reason_invalid_bssid, bssid),
+                reason = strings(R.string.pixie_reason_invalid_bssid, arrayOf(bssid)),
                 rawOutput = ""
             )
             // Salida antes del try principal: se persiste aquí porque el
@@ -146,7 +150,7 @@ class PixieDustRunner(
         if (!IFACE_REGEX.matches(interfaceName)) {
             val failure = PixieDustResult.Failure(
                 bssid = bssid,
-                reason = context.getString(R.string.pixie_reason_invalid_interface, interfaceName),
+                reason = strings(R.string.pixie_reason_invalid_interface, arrayOf(interfaceName)),
                 rawOutput = ""
             )
             persistAuditLog(failure, target, rawOutput)
@@ -160,15 +164,14 @@ class PixieDustRunner(
         // aquí y se registra igual.
         log("[*] Preparing native binaries...")
         val missing = try {
-            NativeBinaries.ensure(context)
-            NativeBinaries.missingCriticalBinaries(context)
+            nativeBinaries.prepare()
         } catch (e: Exception) {
             ShellExecutor.logE(TAG, "Error preparando binarios nativos", e)
             val failure = PixieDustResult.Failure(
                 bssid = bssid,
-                reason = context.getString(
+                reason = strings(
                     R.string.pixie_error_detail,
-                    e.message ?: e.javaClass.simpleName
+                    arrayOf(e.message ?: e.javaClass.simpleName)
                 ),
                 rawOutput = ""
             )
@@ -179,7 +182,7 @@ class PixieDustRunner(
             log("[-] Missing native assets: ${missing.joinToString(", ")}")
             val failure = PixieDustResult.Failure(
                 bssid = bssid,
-                reason = NativeBinaries.missingBinariesMessage(context, missing).orEmpty(),
+                reason = nativeBinaries.missingBinariesMessage(missing).orEmpty(),
                 rawOutput = ""
             )
             persistAuditLog(failure, target, rawOutput)
@@ -195,7 +198,7 @@ class PixieDustRunner(
             // --- Desactivar WiFi del sistema si se solicita ---
             // Solo se restaura al terminar si estaba encendido antes: nunca se
             // enciende el WiFi del usuario si lo tenía apagado.
-            val wifiWasEnabled = wifiManager?.isWifiEnabled == true
+            val wifiWasEnabled = isWifiEnabled() == true
             wifiDisabledByAttack = false
             if (disableWifiBeforeAttack && wifiWasEnabled) {
                 log("[*] Disabling system WiFi (svc wifi disable)...")
@@ -235,7 +238,7 @@ class PixieDustRunner(
                     rawOutput = rawOutput,
                     log = ::log
                 ) ?: run {
-                    captureReason = context.getString(R.string.pixie_reason_supplicant_socket)
+                    captureReason = strings(R.string.pixie_reason_supplicant_socket, emptyArray())
                     break
                 }
                 currentSupplicant = handle
@@ -276,7 +279,7 @@ class PixieDustRunner(
 
             if (m3Data == null) {
                 val reason = captureReason
-                    ?: context.getString(R.string.pixie_reason_no_m3_data)
+                    ?: strings(R.string.pixie_reason_no_m3_data, emptyArray())
                 log("[-] $reason")
                 val failure = PixieDustResult.Failure(
                     bssid = bssid,
@@ -351,7 +354,7 @@ class PixieDustRunner(
             } else {
                 val failure = PixieDustResult.Failure(
                     bssid = bssid,
-                    reason = context.getString(R.string.pixie_not_vulnerable),
+                    reason = strings(R.string.pixie_not_vulnerable, emptyArray()),
                     rawOutput = rawOutput.toString()
                 )
                 auditResult = failure
@@ -472,7 +475,7 @@ class PixieDustRunner(
                     // rechaza la asociación): se aborta con el motivo real.
                     return@coroutineScope M3Attempt(
                         data = null,
-                        failureReason = context.getString(capture.reasonRes),
+                        failureReason = strings(capture.reasonRes, emptyArray()),
                         m5m7 = null,
                         terminal = true
                     )
@@ -480,14 +483,16 @@ class PixieDustRunner(
         }
 
         val reason = when {
-            !anyRegAccepted -> context.getString(R.string.pixie_reason_wps_reg_rejected)
-            lastIncomplete != null -> context.getString(
+            !anyRegAccepted -> strings(R.string.pixie_reason_wps_reg_rejected, emptyArray())
+            lastIncomplete != null -> strings(
                 R.string.pixie_reason_capture_incomplete,
-                attemptsSoFar,
-                lastIncomplete.capturedCount,
-                lastIncomplete.missing.joinToString(", ")
+                arrayOf(
+                    attemptsSoFar,
+                    lastIncomplete.capturedCount,
+                    lastIncomplete.missing.joinToString(", ")
+                )
             )
-            else -> context.getString(R.string.pixie_reason_capture_failed)
+            else -> strings(R.string.pixie_reason_capture_failed, emptyArray())
         }
         return@coroutineScope M3Attempt(null, reason, null)
     }
@@ -496,9 +501,9 @@ class PixieDustRunner(
     private fun wpsFailureReason(configError: Int?): String {
         val reasonRes = M3Parser.configErrorReasonRes(configError)
         return if (configError == null) {
-            context.getString(reasonRes)
+            strings(reasonRes, emptyArray())
         } else {
-            context.getString(reasonRes, configError)
+            strings(reasonRes, arrayOf(configError))
         }
     }
 
@@ -507,7 +512,7 @@ class PixieDustRunner(
     // ========================================================================
 
     private fun execSu(command: String, timeoutSeconds: Int): ShellExecutor.Result =
-        PixieProcessSupport.execSu(command, timeoutSeconds)
+        shellExec(command, timeoutSeconds)
 
     /**
      * La limpieza puede invocarse a la vez desde [runAttack] (finally) y desde
@@ -519,14 +524,14 @@ class PixieDustRunner(
         if (cleanupDone) return
         stage(PixieDustStage.RESTORING)
         try {
-            val dir = NativeBinaries.binaryDir(context)
+            val dir = nativeBinaries.binaryDir()
             // Solo los binarios que lanzamos nosotros (cmdline empieza por su
             // ruta); nunca el supplicant del sistema ni el wrapper `su`.
             execSu(
                 "pkill -9 -f '^$dir/(wpa_supplicant|wpa_cli|pixiewps)' 2>/dev/null",
                 timeoutSeconds = 3
             )
-            execSu("rm -rf ${NativeBinaries.ctrlDir()} 2>/dev/null", timeoutSeconds = 3)
+            execSu("rm -rf ${nativeBinaries.ctrlDir()} 2>/dev/null", timeoutSeconds = 3)
         } catch (_: Exception) {}
         if (wifiDisabledByAttack) {
             wifiDisabledByAttack = false
@@ -604,8 +609,7 @@ class PixieDustRunner(
                     it.startsWith("[supplicant]") ||
                         it.startsWith("[pixiewps-stderr]")
                 }
-            PixieAuditLog.persist(
-                context = context,
+            auditLog.persist(
                 result = result,
                 target = target,
                 eventLines = events,
@@ -631,5 +635,35 @@ class PixieDustRunner(
 
     companion object {
         private const val TAG = "PixieDustRunner"
+
+        /**
+         * Crea el runner con las dependencias reales (producción).
+         * Los tests construyen [PixieDustRunner] directamente con fakes.
+         */
+        internal fun create(
+            context: Context,
+            ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+            onLog: (String) -> Unit = {},
+            onStage: (PixieDustStage) -> Unit = {}
+        ): PixieDustRunner {
+            val appContext = context.applicationContext
+            val supplicant = SupplicantProcesses(appContext)
+            return PixieDustRunner(
+                ioDispatcher = ioDispatcher,
+                onLog = onLog,
+                onStage = onStage,
+                supplicant = supplicant,
+                pixiewps = PixiewpsExecutor(appContext),
+                pskExtractor = PixiePskExtractor(appContext, supplicant),
+                nativeBinaries = SystemNativeBinaries(appContext),
+                auditLog = SystemAuditLog(appContext),
+                strings = { id, args -> appContext.getString(id, *args) },
+                shellExec = { cmd, timeout -> PixieProcessSupport.execSu(cmd, timeout) },
+                isWifiEnabled = {
+                    (appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
+                        ?.isWifiEnabled
+                }
+            )
+        }
     }
 }

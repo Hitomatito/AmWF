@@ -140,10 +140,10 @@ private fun unescapeQuoted(value: String): String {
  */
 internal class PixiePskExtractor(
     private val context: Context,
-    private val supplicant: SupplicantProcesses
-) {
+    private val supplicant: SupplicantGateway
+) : PskExtractorGateway {
 
-    suspend fun extract(
+    override suspend fun extract(
         bssid: String,
         iface: String,
         ssid: String,

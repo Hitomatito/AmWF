@@ -24,7 +24,7 @@ import kotlinx.coroutines.ensureActive
  * Se separa de [PixieDustRunner] porque tiene su propio ciclo de proceso
  * (timeout, kill, drenaje de stdout/stderr) independiente del supplicant.
  */
-internal class PixiewpsExecutor(private val context: Context) {
+internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway {
 
     /** Expresión regular para extraer el PIN WPS de la salida de pixiewps. */
     private val pinRegex =
@@ -33,7 +33,7 @@ internal class PixiewpsExecutor(private val context: Context) {
     /**
      * Construye el comando de línea para pixiewps a partir de los campos M3 capturados.
      */
-    fun buildCommand(
+    override fun buildCommand(
         m3: M3Parser.M3Data,
         m5m7: M3Parser.M5M7Capture?
     ): String {
@@ -51,7 +51,7 @@ internal class PixiewpsExecutor(private val context: Context) {
      * Lanza [command] como root, vuelca su salida en [rawOutput]/[log] y
      * devuelve el PIN encontrado (o null si no hubo o si falló).
      */
-    suspend fun run(
+    override suspend fun run(
         command: String,
         rawOutput: StringBuilder,
         log: (String) -> Unit
