@@ -11,7 +11,8 @@ AmWF is a single-module Android app (`:app`) for rooted Qualcomm Snapdragon devi
 - Full local check: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
 - Instrumented tests: `./gradlew :app:connectedDebugAndroidTest`. Real monitor-mode and Pixie Dust behavior requires a rooted ARM device; the native assets are ARM-only, so x86/x86_64 emulators cannot run them.
 - There is no CI workflow; run the relevant checks locally.
-- Toolchain: Gradle 9.3.1, AGP 9.1, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode. AGP 9 compiles Kotlin itself: do not add `org.jetbrains.kotlin.android`. The Gradle daemon uses Java 21 via `gradle/gradle-daemon-jvm.properties` and the foojay resolver.
+- CLI builds need `JAVA_HOME` pointing at a JDK (there is no system `java` on PATH; Android Studio's JBR works, e.g. `/opt/android-studio/jbr`).
+- Toolchain (see `gradle/wrapper/gradle-wrapper.properties`, `gradle/libs.versions.toml`, `app/build.gradle.kts`): Gradle 9.6.0, AGP 9.5.1, compileSdk 37.1 / targetSdk 37, minSdk 24, Java 11 bytecode. AGP 9 compiles Kotlin itself: do not add `org.jetbrains.kotlin.android`. The Gradle daemon uses Java 21 via `gradle/gradle-daemon-jvm.properties` and the foojay resolver.
 - Root `keystore.properties` is optional and gitignored. Release builds use it when present and remain unsigned otherwise.
 
 Unit tests are plain JUnit 4 over pure functions; there is no Robolectric. Extract parsing, filtering, permission-matrix and transition logic into pure functions rather than trying to unit-test Android/root code.

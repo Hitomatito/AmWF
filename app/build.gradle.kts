@@ -1,20 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
-import java.util.Properties
-import java.io.FileInputStream
-
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+if (keystorePropertiesFile.isFile) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
 android {
     namespace = "com.hitomatito.amwf"
     compileSdk {
-        version = release(36) {
+        version = release(37) {
             minorApiLevel = 1
         }
     }
@@ -22,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.hitomatito.amwf"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 5
         versionName = "2.0.1"
 
@@ -31,18 +30,17 @@ android {
         ndk {
             // Pixie Dust necesita binarios nativos ARM (wpa_supplicant, wpa_cli, pixiewps).
             // Soportamos arm64-v8a (dispositivos modernos) y armeabi-v7a (dispositivos antiguos).
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
-
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (keystorePropertiesFile.isFile) {
             create("release") {
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -50,7 +48,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (keystorePropertiesFile.exists()) {
+            if (keystorePropertiesFile.isFile) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(
@@ -59,7 +57,7 @@ android {
             )
         }
     }
-    
+
     buildFeatures {
         viewBinding = true
     }
@@ -74,14 +72,14 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.cardview:cardview:1.0.0")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.cardview)
+    implementation(libs.androidx.recyclerview)
     // Kotlin coroutines (structured concurrency para red de procesos root y streaming de salida)
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    implementation(libs.kotlinx.coroutines.android)
     // ViewModel + Lifecycle (UI state, ciclo de vida, repeatOnLifecycle)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
