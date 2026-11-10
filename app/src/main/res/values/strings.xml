@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">AmWF</string>
     <string name="monitor_mode">Control de Modo Monitor WiFi</string>
     <string name="interface_info">Informacion</string>
@@ -44,14 +44,12 @@
     <string name="capability_unknown">Por verificar</string>
     <string name="capability_unavailable">Sin con_mode (driver nuevo)</string>
     
-    <string name="check_na">N/A</string>
     <string name="no">No</string>
     <string name="not_found">No encontrado</string>
     <string name="not_compatible">NO COMPATIBLE</string>
     <string name="ready_to_use">Listo para usar</string>
     
     <string name="monitor_mode_on">Modo Monitor ACTIVADO</string>
-    <string name="monitor_mode_off">Modo Monitor DESACTIVADO</string>
     <string name="monitor_mode_normal">Modo Normal</string>
     <string name="error_root">Acceso root denegado</string>
     <string name="error_selinux">Restriccion SELinux</string>
@@ -73,19 +71,13 @@
 
     <!-- Pixie Dust -->
     <string name="pixie_dust">Auditoría WPS Pixie Dust</string>
-    <string name="pixie_dust_subtitle">Audita la resistencia WPS de tus propios routers</string>
     <string name="pixie_title">Auditoría WPS</string>
     <string name="pixie_subtitle">Pixie Dust · auditoría WPS de tu red</string>
     <string name="pixie_section_scan">Redes cercanas</string>
-    <string name="pixie_section_networks">Redes detectadas</string>
     <string name="pixie_search_hint">Buscar por nombre o BSSID</string>
-    <string name="pixie_networks_summary">%1$d redes · %2$d dual-band</string>
-    <string name="pixie_networks_count">%1$d redes</string>
-    <string name="pixie_networks_filtered">%1$d de %2$d redes</string>
     <string name="pixie_filter_all">Todas</string>
     <string name="pixie_filter_auditable">Auditables</string>
     <string name="pixie_filter_dual">Dual-band</string>
-    <string name="pixie_network_meta">%1$s · %2$d MHz · %3$d dBm</string>
     <string name="pixie_network_bssid">BSSID %1$s</string>
     <string name="pixie_network_channel_bssid">Canal %1$d · %2$s</string>
     <string name="pixie_signal_dbm">%1$d dBm</string>
@@ -93,7 +85,6 @@
     <string name="pixie_band_5ghz">5 GHz</string>
     <string name="pixie_band_6ghz">6 GHz</string>
     <string name="pixie_band_other">Otra banda</string>
-    <string name="pixie_band_unknown">%1$d MHz</string>
     <string name="pixie_also_on_band">También en %1$s</string>
     <string name="pixie_security_open">Abierta</string>
     <string name="pixie_security_unknown">Desconocida</string>
@@ -101,7 +92,6 @@
     <string name="pixie_network_row_selected_description">%1$s, seleccionada</string>
     <string name="pixie_scan_status_idle">Busca redes con WPS a tu alrededor.</string>
     <string name="pixie_scan_status_scanning">Escaneando redes cercanas…</string>
-    <string name="pixie_scan_status_done">%1$d redes detectadas · %2$d auditables.</string>
     <string name="pixie_scan_again">Volver a escanear</string>
     <string name="pixie_scanning">Escaneando…</string>
     <string name="pixie_empty_idle_title">Aún no hay redes</string>
@@ -127,7 +117,8 @@
     <string name="pixie_session_status_failure">SIN ÉXITO</string>
     <string name="pixie_session_status_cancelled">DETENIDA</string>
     <string name="pixie_session_elapsed">Tiempo</string>
-    <string name="pixie_session_progress_description">%1$d por ciento · %2$s</string>
+    <!-- "por ciento" no es un sustantivo contable: PluralsCandidate sería un falso positivo -->
+    <string name="pixie_session_progress_description" tools:ignore="PluralsCandidate">%1$d por ciento · %2$s</string>
     <string name="pixie_session_target_meta">%1$s · %2$s</string>
     <string name="pixie_percent">%1$d%%</string>
     <string name="pixie_percent_initial">0%</string>
@@ -176,33 +167,20 @@
     <string name="pixie_console_clear">Limpiar registro</string>
     <string name="pixie_console_hide">Ocultar registro</string>
     <string name="pixie_console_show">Mostrar registro</string>
-    <string name="pixie_console_lines">%1$d líneas</string>
     <string name="pixie_disable_wifi_option">Desactivar el WiFi del sistema durante la auditoría</string>
     <string name="pixie_back">Volver</string>
     <string name="pixie_legal_notice">Audita solo redes de tu propiedad o para las que tengas autorización expresa.</string>
-    <string name="pixie_interface_label">Interfaz WiFi</string>
     <string name="pixie_interface_value">Interfaz: %1$s</string>
-    <string name="pixie_interface_hint">Se detecta automáticamente. El escaneo necesita permiso de ubicación y, en Android 13+, de dispositivos cercanos.</string>
-    <string name="pixie_network_hint">Elige una red detectada</string>
     <string name="pixie_hidden_network">Red oculta</string>
-    <string name="pixie_networks_found">Redes detectadas: %1$d</string>
-    <string name="pixie_no_network_selected">Ninguna red seleccionada</string>
-    <string name="pixie_selected_network">Red seleccionada: %1$s</string>
     <string name="pixie_wps_available">WPS disponible</string>
     <string name="pixie_wps_locked">WPS bloqueado</string>
     <string name="pixie_wps_locked_chip">Bloqueado</string>
     <string name="pixie_wps_not_supported">Sin WPS</string>
     <string name="pixie_options_title">Opciones de auditoría</string>
     <string name="pixie_disable_wifi_hint">Libera la interfaz WiFi para que wpa_supplicant pueda usarla. El WiFi se restaura al terminar.</string>
-    <string name="pixie_result_title">Resultado</string>
-    <string name="pixie_result_overline">Resultado de la auditoría</string>
-    <string name="pixie_result_success_title">Credenciales recuperadas</string>
-    <string name="pixie_result_failure_title">Auditoría sin éxito</string>
     <string name="pixie_result_pin_label">PIN WPS</string>
     <string name="pixie_result_psk_label">Clave WPA</string>
-    <string name="pixie_result_empty">Aún no hay resultados.</string>
     <string name="pixie_console_empty">La consola aparecerá aquí.</string>
-    <string name="pixie_copy_result">Copiar resultado</string>
     <string name="pixie_location_permission_required">Se requieren permisos de ubicación y, en Android 13+, de dispositivos cercanos para escanear redes WiFi</string>
     <string name="pixie_permission_title">Permiso necesario</string>
     <string name="pixie_permission_rationale_location">Para buscar redes WiFi, la app necesita el permiso de ubicación precisa. En Android 12 o superior elige «Precisa».</string>
@@ -216,24 +194,19 @@
     <string name="pixie_location_services_message">El escaneo de redes WiFi necesita los servicios de ubicación activos. Actívalos y vuelve a intentarlo.</string>
     <string name="pixie_enable_location">Activar ubicación</string>
     <string name="pixie_location_services_required">Activa los servicios de ubicación para escanear redes WiFi</string>
-    <string name="pixie_audit_completed">Auditoría completada</string>
-    <string name="pixie_audit_failed">Auditoría falló: %1$s</string>
     <string name="pixie_copied">Copiado al portapapeles</string>
     <string name="pixie_result_success">✔ PIN WPS: %1$s\nClave WPA: %2$s</string>
     <string name="pixie_result_failure">✖ Falló: %1$s</string>
     <string name="pixie_not_available">N/A</string>
     <string name="pixie_scan_networks">Escanear redes WiFi</string>
-    <string name="pixie_choose_network">— Selecciona una red —</string>
     <string name="pixie_no_interfaces">No se encontró interfaz WiFi disponible</string>
     <string name="pixie_select_network">Selecciona una red con WPS activado</string>
     <string name="pixie_wps_required">Esta red no tiene WPS activado o no es auditable</string>
     <string name="pixie_stop_attack">Detener auditoría</string>
-    <string name="pixie_running">Auditando…</string>
-    <string name="pixie_pin_found">PIN WPS encontrado</string>
-    <string name="pixie_psk_found">Contraseña WPA obtenida</string>
     <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust (no se encontró el PIN WPS)</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant no aceptó wps_reg. Posibles causas: interfaz no lista, WPS desactivado o WPS bloqueado.</string>
-    <string name="pixie_reason_capture_incomplete">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). Posibles causas: señal débil, WPS desactivado o WPS bloqueado.</string>
+    <!-- getQuantityString no está disponible en el gateway `strings` del runner (%2$d/6 campos va fijo): se ignora con análisis -->
+    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). Posibles causas: señal débil, WPS desactivado o WPS bloqueado.</string>
     <string name="pixie_reason_capture_failed">No se pudo capturar el M3.</string>
     <string name="pixie_reason_invalid_bssid">Formato de BSSID no válido: %1$s</string>
     <string name="pixie_reason_invalid_interface">Nombre de interfaz no válido: %1$s</string>
@@ -241,16 +214,7 @@
     <string name="pixie_reason_no_m3_data">No hay datos suficientes para ejecutar el ataque Pixie Dust</string>
     <string name="pixie_reason_pbc_only">Este router solo admite WPS por botón físico (PBC); no acepta PIN, así que Pixie Dust no puede funcionar en él.</string>
     <string name="pixie_reason_assoc_rejected">El AP rechazó la asociación repetidamente. Puede estar aplicando un bloqueo temporal: espera unos minutos y reintenta.</string>
-    <string name="pixie_error">Error durante la auditoría</string>
-    <string name="pixie_timeout">Tiempo de espera agotado</string>
-    <string name="pixie_console">Consola</string>
-    <string name="pixie_root_required">Se requiere acceso root</string>
     <string name="pixie_interface">Interfaz</string>
-    <string name="pixie_bssid">BSSID</string>
-    <string name="pixie_ssid">SSID</string>
-    <string name="pixie_pin">PIN WPS</string>
-    <string name="pixie_key">Clave WPA</string>
-    <string name="pixie_launch">Abrir Auditoría Pixie Dust</string>
     <string name="pixie_wifi_disabled">Activa el WiFi para escanear redes</string>
     <string name="pixie_scan_failed">No se pudo iniciar el escaneo WiFi. Inténtalo de nuevo.</string>
     <string name="pixie_scan_failed_detail">Escaneo falló: %1$s</string>
@@ -273,15 +237,42 @@
     <string name="diagnostics_exporting">Generando diagnóstico…</string>
     <string name="diagnostics_error">No se pudo generar el diagnóstico</string>
     <string name="pixie_console_interfaces_available">Interfaces disponibles: %1$s</string>
-    <string name="pixie_console_scan_started">Iniciando escaneo de redes WiFi...</string>
-    <string name="pixie_console_scan_finished">Escaneo completado: %1$d red(es) encontrada(s).</string>
+    <string name="pixie_console_scan_started">Iniciando escaneo de redes WiFi…</string>
     <string name="pixie_console_network_selected">Red seleccionada: %1$s (%2$s)</string>
-    <string name="pixie_console_attack_started">Iniciando auditoría Pixie Dust contra %1$s...</string>
+    <string name="pixie_console_attack_started">Iniciando auditoría Pixie Dust contra %1$s…</string>
     <string name="pixie_console_attack_target">BSSID: %1$s | Interfaz: %2$s</string>
     <string name="pixie_console_attack_success">[+] Auditoría exitosa — PIN: %1$s</string>
     <string name="pixie_console_wpa_key">[+] Clave WPA: %1$s</string>
     <string name="pixie_console_attack_failed">[-] Auditoría falló: %1$s</string>
     <string name="pixie_console_error">[-] Error: %1$s</string>
-    <string name="pixie_console_stopping">[!] Deteniendo auditoría y limpiando procesos...</string>
+    <string name="pixie_console_stopping">[!] Deteniendo auditoría y limpiando procesos…</string>
     <string name="pixie_console_stopped">[!] Detenido por el usuario</string>
+    <string name="lang_code">ES</string>
+    <string name="row_status_icon">Resultado de la comprobación</string>
+    <string name="progress_phase_percent">%1$s · %2$d %%</string>
+    <string name="checking_compatibility_progress">%1$s %2$d %%</string>
+    <plurals name="pixie_networks_summary">
+        <item quantity="one">%1$d red · %2$d dual-band</item>
+        <item quantity="other">%1$d redes · %2$d dual-band</item>
+    </plurals>
+    <plurals name="pixie_networks_count">
+        <item quantity="one">%1$d red</item>
+        <item quantity="other">%1$d redes</item>
+    </plurals>
+    <plurals name="pixie_networks_filtered">
+        <item quantity="one">%1$d de %2$d red</item>
+        <item quantity="other">%1$d de %2$d redes</item>
+    </plurals>
+    <plurals name="pixie_scan_status_done">
+        <item quantity="one">%1$d red detectada · %2$d auditables.</item>
+        <item quantity="other">%1$d redes detectadas · %2$d auditables.</item>
+    </plurals>
+    <plurals name="pixie_console_lines">
+        <item quantity="one">%1$d línea</item>
+        <item quantity="other">%1$d líneas</item>
+    </plurals>
+    <plurals name="pixie_console_scan_finished">
+        <item quantity="one">Escaneo completado: %1$d red encontrada.</item>
+        <item quantity="other">Escaneo completado: %1$d redes encontradas.</item>
+    </plurals>
 </resources>

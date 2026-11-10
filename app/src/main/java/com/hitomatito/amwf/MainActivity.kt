@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -47,7 +48,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnVerifyCompatibility: MaterialButton
     private lateinit var progressCompatibility: LinearProgressIndicator
     private lateinit var statusIndicator: View
-    private lateinit var ivCompatIcon: ImageView
     private lateinit var layoutDeviceInfo: LinearLayout
     
     private lateinit var rowChipset: View
@@ -70,6 +70,11 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "AmWF"
+
+        private const val TAG_ROW_ICON = "rowIcon"
+        private const val TAG_ROW_LABEL = "rowLabel"
+        private const val TAG_ROW_VALUE = "rowValue"
+        private const val TAG_ROW_STATUS = "rowStatus"
 
         // La comprobación de compatibilidad NUNCA se ejecuta sola: solo desde el
         // botón "Verificar compatibilidad" (interrumpe el WiFi). El resultado se
@@ -131,7 +136,6 @@ class MainActivity : AppCompatActivity() {
         btnVerifyCompatibility = findViewById(R.id.btnVerifyCompatibility)
         progressCompatibility = findViewById(R.id.progressCompatibility)
         statusIndicator = findViewById(R.id.statusIndicator)
-        ivCompatIcon = findViewById(R.id.ivCompatIcon)
         layoutDeviceInfo = findViewById(R.id.layoutDeviceInfo)
         
         rowChipset = findViewById(R.id.rowChipset)
@@ -269,8 +273,12 @@ class MainActivity : AppCompatActivity() {
         progressCompatibility.visibility = View.VISIBLE
         progressCompatibility.isIndeterminate = false
         progressCompatibility.setProgressCompat(percent, true)
-        tvCompatStatus.text = "$phase · $percent %"
-        btnVerifyCompatibility.text = "${getString(R.string.checking_compatibility)} $percent %"
+        tvCompatStatus.text = getString(R.string.progress_phase_percent, phase, percent)
+        btnVerifyCompatibility.text = getString(
+            R.string.checking_compatibility_progress,
+            getString(R.string.checking_compatibility),
+            percent
+        )
     }
 
     // Espera a que termine una comprobación que ya está en vuelo (lanzada desde otra
@@ -299,13 +307,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setCompatTitleIcon(iconRes: Int, tintColorRes: Int) {
+        val sizePx = (28 * resources.displayMetrics.density).toInt()
+        val drawable = ContextCompat.getDrawable(this, iconRes)?.mutate()
+        drawable?.setBounds(0, 0, sizePx, sizePx)
+        drawable?.setTint(getColor(tintColorRes))
+        tvCompatTitle.setCompoundDrawablesRelative(drawable, null, null, null)
+    }
+
     // Estado inicial cuando el usuario aún no ha solicitado la comprobación: la
     // tarjeta muestra "sin verificar" y el resultado detallado queda oculto.
     private fun showCompatNotVerified() {
         isCompatVerified = false
         layoutDeviceInfo.visibility = View.GONE
-        ivCompatIcon.setImageResource(R.drawable.ic_info)
-        ivCompatIcon.setColorFilter(getColor(R.color.md_theme_onSurfaceVariant))
+        setCompatTitleIcon(R.drawable.ic_info, R.color.md_theme_onSurfaceVariant)
         tvCompatTitle.text = getString(R.string.device_compatibility)
         tvCompatStatus.text = getString(R.string.compat_not_verified)
         tvCompatStatus.setTextColor(getColor(R.color.md_theme_onSurfaceVariant))
@@ -354,26 +369,30 @@ class MainActivity : AppCompatActivity() {
         layoutDeviceInfo.visibility = View.VISIBLE
         
         if (result.isCompatible) {
-            ivCompatIcon.setImageResource(R.drawable.ic_check_circle)
-            ivCompatIcon.setColorFilter(getColor(R.color.monitor_active))
+            setCompatTitleIcon(R.drawable.ic_check_circle, R.color.monitor_active)
             tvCompatTitle.text = getString(R.string.device_compatible)
             tvCompatStatus.text = getString(R.string.ready_to_use)
             tvCompatStatus.setTextColor(getColor(R.color.monitor_active))
         } else {
-            ivCompatIcon.setImageResource(R.drawable.ic_close_circle)
-            ivCompatIcon.setColorFilter(getColor(R.color.managed))
+            setCompatTitleIcon(R.drawable.ic_close_circle, R.color.managed)
             tvCompatTitle.text = getString(R.string.device_incompatible)
             tvCompatStatus.text = getString(R.string.not_compatible)
             tvCompatStatus.setTextColor(getColor(R.color.managed))
         }
         
-        updateInfoRow(rowChipset, getString(R.string.label_chipset), result.deviceInfo.chipset, 
-            result.issues.none { it.type == IssueType.CHIPSET })
+        updateInfoRow(
+            rowChipset,
+            R.drawable.ic_chipset,
+            getString(R.string.label_chipset),
+            result.deviceInfo.chipset,
+            result.issues.none { it.type == IssueType.CHIPSET }
+        )
         
         val driverKnown = result.deviceInfo.wlanDriver.isNotBlank() &&
             !result.deviceInfo.wlanDriver.equals("Unknown", ignoreCase = true)
         updateInfoRow(
             rowDriver,
+            R.drawable.ic_driver,
             getString(R.string.label_driver),
             result.deviceInfo.wlanDriver.ifEmpty { getString(R.string.not_found) },
             driverKnown
@@ -382,9 +401,9 @@ class MainActivity : AppCompatActivity() {
         val rootText = if (result.deviceInfo.rootInfo.isRooted) {
             "${result.deviceInfo.rootInfo.rootName} ${result.deviceInfo.rootInfo.version}"
         } else getString(R.string.no)
-        updateInfoRow(rowRoot, getString(R.string.label_root), rootText, result.deviceInfo.rootInfo.isRooted)
-        
-        updateInfoRow(rowSysfs, getString(R.string.label_sysfs), result.deviceInfo.conModePath?.substringAfterLast('/') ?: getString(R.string.not_found),
+        updateInfoRow(rowRoot, R.drawable.ic_root, getString(R.string.label_root), rootText, result.deviceInfo.rootInfo.isRooted)
+
+        updateInfoRow(rowSysfs, R.drawable.ic_sysfs, getString(R.string.label_sysfs), result.deviceInfo.conModePath?.substringAfterLast('/') ?: getString(R.string.not_found),
             result.deviceInfo.conModePath != null)
         
         val capInfo = result.deviceInfo.capabilities
@@ -397,13 +416,13 @@ class MainActivity : AppCompatActivity() {
             else -> getString(R.string.capability_not_verified)
         }
         val capPassed = capInfo.canInject == true && capInfo.canCapture == true
-        updateInfoRow(rowCapabilities, getString(R.string.label_capabilities), capText, capPassed)
+        updateInfoRow(rowCapabilities, R.drawable.ic_capabilities, getString(R.string.label_capabilities), capText, capPassed)
 
         // Mostrar estado de los binarios Pixie Dust (wpa_supplicant, wpa_cli, pixiewps)
         val pdb = result.deviceInfo.pixieDustBinaries
         val pdbText = NativeBinaries.missingBinariesSummary(this, pdb.missing)
             ?: getString(R.string.pixie_binaries_available)
-        updateInfoRow(rowPixieDustBinaries, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
+        updateInfoRow(rowPixieDustBinaries, R.drawable.ic_wifi, getString(R.string.label_pixie_dust_binaries), pdbText, pdb.allAvailable)
 
         // El botón permanece siempre habilitado y con un solo listener: si la
         // comprobación ya confirmó que faltan binarios, el toque explica cuáles
@@ -412,22 +431,25 @@ class MainActivity : AppCompatActivity() {
         btnPixieDust.alpha = if (pdb.allAvailable) 1f else 0.45f
     }
 
-    private fun updateInfoRow(row: View, label: String, value: String, passed: Boolean) {
-        row.findViewById<TextView>(R.id.tvLabel)?.text = label
-        row.findViewById<TextView>(R.id.tvValue)?.text = value
-        row.findViewById<ImageView>(R.id.ivStatus)?.visibility = View.VISIBLE
-        
+    private fun updateInfoRow(row: View, iconRes: Int, label: String, value: String, passed: Boolean) {
+        // Las filas comparten un único layout con tags: los ids reasignados
+        // por <include> solo existen en los wrappers rowChipset…rowPixieDustBinaries.
+        row.findViewWithTag<ImageView>(TAG_ROW_ICON)?.setImageResource(iconRes)
+        row.findViewWithTag<TextView>(TAG_ROW_LABEL)?.text = label
+        row.findViewWithTag<TextView>(TAG_ROW_VALUE)?.text = value
+        row.findViewWithTag<ImageView>(TAG_ROW_STATUS)?.visibility = View.VISIBLE
+
         val checkIcon = if (passed) R.drawable.ic_check_circle else R.drawable.ic_close_circle
         val color = if (passed) R.color.monitor_active else R.color.managed
-        
-        row.findViewById<ImageView>(R.id.ivStatus)?.apply {
+
+        row.findViewWithTag<ImageView>(TAG_ROW_STATUS)?.apply {
             setImageResource(checkIcon)
             setColorFilter(getColor(color))
         }
-        row.findViewById<ImageView>(R.id.ivIcon)?.setColorFilter(getColor(color))
-        
+        row.findViewWithTag<ImageView>(TAG_ROW_ICON)?.setColorFilter(getColor(color))
+
         if (!passed) {
-            row.findViewById<TextView>(R.id.tvValue)?.setTextColor(getColor(color))
+            row.findViewWithTag<TextView>(TAG_ROW_VALUE)?.setTextColor(getColor(color))
         }
     }
 

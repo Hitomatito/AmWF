@@ -7,7 +7,6 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -296,49 +295,49 @@ class PixieDustActivity : AppCompatActivity() {
         // desplazado hacia arriba; así no se mueve la vista mientras lee.
         // También se aísla del scroll de la página para que el gesto no salte
         // de la consola al contenido exterior.
-        binding.svConsole.isNestedScrollingEnabled = false
-        binding.svConsole.setOnScrollChangeListener { view, _, _, _, _ ->
+        binding.cardSession.svConsole.isNestedScrollingEnabled = false
+        binding.cardSession.svConsole.setOnScrollChangeListener { view, _, _, _, _ ->
             val scroll = view as NestedScrollView
             val content = scroll.getChildAt(0)
             sessionRenderer.consoleAtBottom = content == null ||
                 scroll.scrollY + scroll.height >= content.height - 24
         }
 
-        binding.btnToggleConsole.setOnClickListener {
+        binding.cardSession.btnToggleConsole.setOnClickListener {
             sessionRenderer.consoleExpanded = !sessionRenderer.consoleExpanded
             if (sessionRenderer.consoleExpanded) sessionRenderer.consoleAtBottom = true
             sessionRenderer.update(viewModel.uiState.value)
         }
 
-        binding.btnClearConsole.setOnClickListener {
+        binding.cardSession.btnClearConsole.setOnClickListener {
             sessionRenderer.consoleExpanded = true
             sessionRenderer.consoleAtBottom = true
             viewModel.clearConsole()
             sessionRenderer.update(viewModel.uiState.value)
         }
 
-        binding.btnCopyLog.setOnClickListener {
+        binding.cardSession.btnCopyLog.setOnClickListener {
             val log = viewModel.uiState.value.consoleLines.joinToString("\n")
             if (log.isNotBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(log))
             }
         }
 
-        binding.btnCopyPin.setOnClickListener {
+        binding.cardSession.btnCopyPin.setOnClickListener {
             val pin = (viewModel.uiState.value.session.result as? PixieDustResult.Success)?.wpsPin
             if (!pin.isNullOrBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(pin))
             }
         }
 
-        binding.btnCopyPsk.setOnClickListener {
+        binding.cardSession.btnCopyPsk.setOnClickListener {
             val psk = (viewModel.uiState.value.session.result as? PixieDustResult.Success)?.wpaPsk
             if (!psk.isNullOrBlank()) {
                 viewModel.emitEvent(PixieDustEvent.CopyToClipboard(psk))
             }
         }
 
-        binding.btnCopyResult.setOnClickListener {
+        binding.cardSession.btnCopyResult.setOnClickListener {
             val result = viewModel.uiState.value.session.result
             val text = resultText(result)
             if (text.isNotBlank()) {
@@ -346,7 +345,7 @@ class PixieDustActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnChangeNetworkResult.setOnClickListener {
+        binding.cardSession.btnChangeNetworkResult.setOnClickListener {
             if (viewModel.uiState.value.scan.networks.isEmpty()) {
                 ensureScanPermissions()
             } else {
@@ -356,7 +355,7 @@ class PixieDustActivity : AppCompatActivity() {
 
         // Tras un fallo la acción prioritaria es buscar redes de nuevo, sin
         // pasar por el selector de una lista que ya no sirve.
-        binding.btnRescanResult.setOnClickListener {
+        binding.cardSession.btnRescanResult.setOnClickListener {
             ensureScanPermissions()
         }
     }
@@ -411,7 +410,7 @@ class PixieDustActivity : AppCompatActivity() {
         // El texto debe reflejar lo que realmente falta: en Android 13+ puede
         // estar concedido NEARBY y denegada solo la ubicación.
         val needsNearby = WifiScanPermissions.deniedPermissions(this)
-            .contains(Manifest.permission.NEARBY_WIFI_DEVICES)
+            .contains(WifiScanPermissions.PERMISSION_NEARBY_WIFI_DEVICES)
         val message = if (needsNearby) {
             getString(R.string.pixie_permission_rationale_nearby)
         } else {
@@ -475,8 +474,9 @@ class PixieDustActivity : AppCompatActivity() {
         }
         binding.tvScanStatus.text = when {
             state.scan.isScanning -> getString(R.string.pixie_scan_status_scanning)
-            state.scan.hasScanned -> getString(
-                R.string.pixie_scan_status_done,
+            state.scan.hasScanned -> resources.getQuantityString(
+                R.plurals.pixie_scan_status_done,
+                state.scan.networks.size,
                 state.scan.networks.size,
                 auditableCount
             )
@@ -554,17 +554,23 @@ class PixieDustActivity : AppCompatActivity() {
         sheet.tvNetworksCount.visibility = if (searchVisible) View.VISIBLE else View.GONE
         if (searchVisible) {
             sheet.tvNetworksCount.text = when {
-                activeFilter != NetworkFilter.ALL -> getString(
-                    R.string.pixie_networks_filtered,
+                activeFilter != NetworkFilter.ALL -> resources.getQuantityString(
+                    R.plurals.pixie_networks_filtered,
+                    state.scan.networks.size,
                     filtered.size,
                     state.scan.networks.size
                 )
-                dualBandCount > 0 -> getString(
-                    R.string.pixie_networks_summary,
+                dualBandCount > 0 -> resources.getQuantityString(
+                    R.plurals.pixie_networks_summary,
+                    state.scan.networks.size,
                     state.scan.networks.size,
                     dualBandCount
                 )
-                else -> getString(R.string.pixie_networks_count, state.scan.networks.size)
+                else -> resources.getQuantityString(
+                    R.plurals.pixie_networks_count,
+                    state.scan.networks.size,
+                    state.scan.networks.size
+                )
             }
         }
 

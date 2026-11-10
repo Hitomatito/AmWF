@@ -2,7 +2,6 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/rowPixieDustBinaries"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
@@ -10,35 +9,35 @@
     android:paddingVertical="8dp">
 
     <ImageView
-        android:id="@+id/ivIcon"
+        android:tag="rowIcon"
         android:layout_width="22dp"
         android:layout_height="22dp"
-        android:src="@drawable/ic_wifi"
+        android:contentDescription="@null"
         app:tint="@color/md_theme_primary"/>
 
     <TextView
-        android:id="@+id/tvLabel"
+        android:tag="rowLabel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:text="@string/label_pixie_dust_binaries"
+        android:layout_marginStart="14dp"
         android:textColor="@color/md_theme_onSurfaceVariant"
-        android:textSize="13sp"
-        android:layout_marginStart="14dp"/>
+        android:textSize="13sp"/>
 
     <TextView
-        android:id="@+id/tvValue"
+        android:tag="rowValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="-"
+        android:layout_marginStart="10dp"
         android:textColor="@color/md_theme_onSurface"
         android:textSize="13sp"
         android:textStyle="bold"/>
 
     <ImageView
-        android:id="@+id/ivStatus"
+        android:tag="rowStatus"
         android:layout_width="18dp"
         android:layout_height="18dp"
         android:layout_marginStart="10dp"
+        android:contentDescription="@string/row_status_icon"
         android:visibility="gone"/>
 </LinearLayout>

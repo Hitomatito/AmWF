@@ -97,7 +97,7 @@
                     android:paddingEnd="8dp"
                     android:paddingBottom="2dp"
                     android:textColor="@color/md_theme_onPrimaryContainer"
-                    android:textSize="10sp"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     tools:text="5 GHz" />
 
@@ -112,7 +112,7 @@
                     android:paddingEnd="8dp"
                     android:paddingBottom="2dp"
                     android:textColor="@color/md_theme_onSurfaceVariant"
-                    android:textSize="10sp"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     tools:text="WPA2" />
 
@@ -127,7 +127,7 @@
                     android:paddingEnd="8dp"
                     android:paddingBottom="2dp"
                     android:textColor="@color/md_theme_onPrimaryContainer"
-                    android:textSize="10sp"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     tools:text="WPS" />
             </LinearLayout>
@@ -143,7 +143,7 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="2dp"
                 android:textColor="@color/md_theme_onSurfaceVariant"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone"
                 tools:text="También en 5 GHz"

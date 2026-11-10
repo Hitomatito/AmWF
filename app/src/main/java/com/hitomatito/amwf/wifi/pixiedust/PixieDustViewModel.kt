@@ -253,7 +253,13 @@ class PixieDustViewModel @JvmOverloads constructor(
                 // mayor señal: el usuario ve antes lo que puede seleccionar.
                 val sorted = sortNetworksForList(networks)
                 _uiState.update { scanFinishedState(it, sorted) }
-                addConsoleLine(appContext.getString(R.string.pixie_console_scan_finished, sorted.size))
+                addConsoleLine(
+                    appContext.resources.getQuantityString(
+                        R.plurals.pixie_console_scan_finished,
+                        sorted.size,
+                        sorted.size
+                    )
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -507,7 +513,6 @@ class PixieDustViewModel @JvmOverloads constructor(
         // El ViewModel desaparece: la limpieza no puede esperar en
         // viewModelScope (ya cancelado), así que se hace en un hilo aparte.
         cancelRunnerInBackground(runnerToCancel)
-        super.onCleared()
     }
 
     // ========================================================================

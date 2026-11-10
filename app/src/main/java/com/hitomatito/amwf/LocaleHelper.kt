@@ -10,7 +10,7 @@ package com.hitomatito.amwf
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
-import android.os.Build
+import androidx.core.content.edit
 import java.util.Locale
 
 object LocaleHelper {
@@ -50,31 +50,21 @@ object LocaleHelper {
     
     private fun saveLanguage(language: String) {
         if (::prefs.isInitialized) {
-            prefs.edit().putString(KEY_LANGUAGE, language).apply()
+            prefs.edit { putString(KEY_LANGUAGE, language) }
         }
     }
-    
-    private fun getSystemLanguage(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            Locale.getDefault().language
-        } else {
-            java.util.Locale.getDefault().language
-        }
-    }
-    
+
+    // minSdk 24 == Android N: el chequeo de versión sería redundante.
+    private fun getSystemLanguage(): String = Locale.getDefault().language
+
     fun updateResources(context: Context, language: String): Context {
         val locale = Locale(language)
         Locale.setDefault(locale)
-        
+
         val config = Configuration(context.resources.configuration)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            config.setLocale(locale)
-            config.setLocales(android.os.LocaleList(locale))
-        } else {
-            config.setLocale(locale)
-        }
-        
+        config.setLocale(locale)
+        config.setLocales(android.os.LocaleList(locale))
+
         return context.createConfigurationContext(config)
     }
     

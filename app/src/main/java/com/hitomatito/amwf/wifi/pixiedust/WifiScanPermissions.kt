@@ -30,13 +30,18 @@ import androidx.core.content.ContextCompat
  *   [Manifest.permission.ACCESS_COARSE_LOCATION] (Android 12 exige pedirlos
  *   juntos) y servicios de ubicación activos.
  * - Android 13+: además de ubicación,
- *   [Manifest.permission.NEARBY_WIFI_DEVICES], que el resto de APIs WiFi
+ *   PERMISSION_NEARBY_WIFI_DEVICES, que el resto de APIs WiFi
  *   modernas requieren.
  *
  * La lógica dependiente de la versión está separada en funciones puras para
  * poder probarla en la JVM sin depender del SDK del dispositivo.
  */
 object WifiScanPermissions {
+
+    // Constante propia con el mismo valor que [Manifest.permission.NEARBY_WIFI_DEVICES]
+    // (API 33). Así ningún sitio referencia un campo más nuevo que minSdk 24 y el
+    // valor es inocuo en versiones anteriores (la constante se incrusta en el bytecode).
+    const val PERMISSION_NEARBY_WIFI_DEVICES = "android.permission.NEARBY_WIFI_DEVICES"
 
     private const val API_NEARBY_WIFI = 33 // Android 13 (Build.VERSION_CODES.TIRAMISU)
 
@@ -51,7 +56,7 @@ object WifiScanPermissions {
     internal fun runtimePermissionsForSdk(sdk: Int): Array<String> =
         if (sdk >= API_NEARBY_WIFI) {
             arrayOf(
-                Manifest.permission.NEARBY_WIFI_DEVICES,
+                PERMISSION_NEARBY_WIFI_DEVICES,
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
@@ -72,7 +77,7 @@ object WifiScanPermissions {
     internal fun requiredPermissionsForSdk(sdk: Int): Array<String> =
         if (sdk >= API_NEARBY_WIFI) {
             arrayOf(
-                Manifest.permission.NEARBY_WIFI_DEVICES,
+                PERMISSION_NEARBY_WIFI_DEVICES,
                 Manifest.permission.ACCESS_FINE_LOCATION
             )
         } else {

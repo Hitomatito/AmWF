@@ -18,6 +18,12 @@ android {
         }
     }
 
+    // Los binarios Pixie Dust son ARM-only (arm64-v8a/armeabi-v7a); no existe ABI
+    // x86_64 para ChromeOS que aportar. El alcance del producto es solo teléfonos.
+    lint {
+        disable += "ChromeOsAbiSupport"
+    }
+
     defaultConfig {
         applicationId = "com.hitomatito.amwf"
         minSdk = 24
@@ -60,6 +66,15 @@ android {
 
     buildFeatures {
         viewBinding = true
+    }
+
+    bundle {
+        // La app cambia el locale en runtime (LocaleHelper.attachBaseContext):
+        // sin esto, un AAB con splits de idioma podría no incluir ES/EN y el
+        // selector de idioma dejaría de funcionar.
+        language {
+            enableSplit = false
+        }
     }
 
     testOptions {

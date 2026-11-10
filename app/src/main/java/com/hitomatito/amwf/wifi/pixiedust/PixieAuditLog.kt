@@ -9,6 +9,7 @@ package com.hitomatito.amwf.wifi.pixiedust
 
 import android.content.Context
 import android.os.Build
+import android.os.Environment
 import com.hitomatito.amwf.ShellExecutor
 import java.io.File
 import java.text.SimpleDateFormat
@@ -98,8 +99,11 @@ internal object PixieAuditLog {
             appendLine("=== Fin del log ===")
         }
 
-        // 1) Ruta principal: /sdcard/AmWF/pixie-logs/ mediante root.
-        val sdcardDir = "/sdcard/AmWF/pixie-logs"
+        // 1) Ruta principal: almacenamiento compartido (/sdcard/AmWF/pixie-logs/)
+        //    mediante root. Se construye con la API pública (equivalente a /sdcard
+        //    en almacenamiento emulado) para no depender del literal.
+        @Suppress("DEPRECATION")
+        val sdcardDir = File(Environment.getExternalStorageDirectory(), "AmWF/pixie-logs").absolutePath
         val sdcardPath = "$sdcardDir/$fileName"
         val tempPath = "$sdcardPath.tmp"
         val staged = File(context.cacheDir, fileName)
@@ -131,7 +135,7 @@ internal object PixieAuditLog {
             staged.delete()
             if (!writtenToSdcard) {
                 // Si el shell falla o expira antes del mv, el temporal puede
-                // quedar con credenciales en /sdcard; se elimina best-effort.
+                // quedar con credenciales en el almacenamiento compartido; se elimina best-effort.
                 ShellExecutor.execRoot(
                     "rm -f ${PixieProcessSupport.shellQuote(tempPath)}",
                     timeoutMs = 3_000

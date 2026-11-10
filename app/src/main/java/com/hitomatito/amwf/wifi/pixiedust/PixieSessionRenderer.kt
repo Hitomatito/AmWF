@@ -58,11 +58,11 @@ class PixieSessionRenderer(
     fun update(state: PixieDustUiState) {
         val startedAt = state.session.startedAt
         if (startedAt == null) {
-            binding.cardSession.visibility = View.GONE
+            binding.cardSession.root.visibility = View.GONE
             stopChronometer()
             return
         }
-        binding.cardSession.visibility = View.VISIBLE
+        binding.cardSession.root.visibility = View.VISIBLE
 
         val outcome = when {
             state.session.isAttacking -> SessionOutcome.RUNNING
@@ -86,9 +86,9 @@ class PixieSessionRenderer(
 
     private fun bindTarget(state: PixieDustUiState) {
         val target = state.scan.selectedNetwork
-        binding.tvSessionTarget.text = target?.displayName
+        binding.cardSession.tvSessionTarget.text = target?.displayName
             ?: context.getString(R.string.pixie_target_none_title)
-        binding.tvSessionBssid.text = if (target != null) {
+        binding.cardSession.tvSessionBssid.text = if (target != null) {
             context.getString(
                 R.string.pixie_session_target_meta,
                 target.bssid,
@@ -125,11 +125,11 @@ class PixieSessionRenderer(
                 foregroundRes = R.color.on_error_container
             }
         }
-        binding.tvSessionStatus.setText(labelRes)
-        binding.tvSessionStatus.backgroundTintList = ColorStateList.valueOf(
+        binding.cardSession.tvSessionStatus.setText(labelRes)
+        binding.cardSession.tvSessionStatus.backgroundTintList = ColorStateList.valueOf(
             ContextCompat.getColor(context, backgroundRes)
         )
-        binding.tvSessionStatus.setTextColor(ContextCompat.getColor(context, foregroundRes))
+        binding.cardSession.tvSessionStatus.setTextColor(ContextCompat.getColor(context, foregroundRes))
     }
 
     /** Progreso, color y textos del indicador para un resultado. */
@@ -181,14 +181,14 @@ class PixieSessionRenderer(
 
     private fun bindProgress(state: PixieDustUiState, outcome: SessionOutcome) {
         val visual = progressVisual(state, outcome)
-        binding.progressSession.setProgressCompat(visual.progress, true)
-        binding.progressSession.setIndicatorColor(
+        binding.cardSession.progressSession.setProgressCompat(visual.progress, true)
+        binding.cardSession.progressSession.setIndicatorColor(
             ContextCompat.getColor(context, visual.colorRes)
         )
-        binding.tvSessionPercent.text = context.getString(R.string.pixie_percent, visual.progress)
-        binding.tvSessionStage.setText(visual.titleRes)
-        binding.tvSessionStageDetail.setText(visual.detailRes)
-        binding.progressSession.contentDescription = context.getString(
+        binding.cardSession.tvSessionPercent.text = context.getString(R.string.pixie_percent, visual.progress)
+        binding.cardSession.tvSessionStage.setText(visual.titleRes)
+        binding.cardSession.tvSessionStageDetail.setText(visual.detailRes)
+        binding.cardSession.progressSession.contentDescription = context.getString(
             R.string.pixie_session_progress_description,
             visual.progress,
             context.getString(visual.titleRes)
@@ -223,8 +223,8 @@ class PixieSessionRenderer(
                 // Chronometer usa la base de elapsedRealtime, no la hora de
                 // pared: convertimos el inicio guardado (wall clock) a esa base.
                 val sinceStart = System.currentTimeMillis() - startedAt
-                binding.chronSession.base = SystemClock.elapsedRealtime() - sinceStart
-                binding.chronSession.start()
+                binding.cardSession.chronSession.base = SystemClock.elapsedRealtime() - sinceStart
+                binding.cardSession.chronSession.start()
                 chronometerRunning = true
             }
         } else {
@@ -232,14 +232,14 @@ class PixieSessionRenderer(
             // Con la sesión terminada el cronómetro debe mostrar el total, no
             // reiniciarse a 00:00 al volver a pintar o recrear la pantalla.
             val elapsed = (finishedAt ?: System.currentTimeMillis()) - startedAt
-            binding.chronSession.base =
+            binding.cardSession.chronSession.base =
                 SystemClock.elapsedRealtime() - elapsed.coerceAtLeast(0L)
         }
     }
 
     private fun stopChronometer() {
         if (!chronometerRunning) return
-        binding.chronSession.stop()
+        binding.cardSession.chronSession.stop()
         chronometerRunning = false
     }
 
@@ -250,18 +250,18 @@ class PixieSessionRenderer(
             state.session.stage?.phase ?: PixieDustPhase.PREPARE
         }
         val bars = listOf(
-            binding.phase1Bar,
-            binding.phase2Bar,
-            binding.phase3Bar,
-            binding.phase4Bar,
-            binding.phase5Bar
+            binding.cardSession.phase1Bar,
+            binding.cardSession.phase2Bar,
+            binding.cardSession.phase3Bar,
+            binding.cardSession.phase4Bar,
+            binding.cardSession.phase5Bar
         )
         val labels = listOf(
-            binding.phase1Label,
-            binding.phase2Label,
-            binding.phase3Label,
-            binding.phase4Label,
-            binding.phase5Label
+            binding.cardSession.phase1Label,
+            binding.cardSession.phase2Label,
+            binding.cardSession.phase3Label,
+            binding.cardSession.phase4Label,
+            binding.cardSession.phase5Label
         )
         val doneColor = ContextCompat.getColor(context, R.color.md_theme_primaryContainer)
         val activeColor = ContextCompat.getColor(context, R.color.md_theme_primary)
@@ -332,17 +332,17 @@ class PixieSessionRenderer(
     private fun bindResult(state: PixieDustUiState, outcome: SessionOutcome) {
         val result = state.session.result
         val show = outcome != SessionOutcome.RUNNING
-        binding.layoutSessionResult.visibility = if (show) View.VISIBLE else View.GONE
+        binding.cardSession.layoutSessionResult.visibility = if (show) View.VISIBLE else View.GONE
         if (!show) return
 
         val visual = resultVisual(outcome)
-        binding.layoutResultBanner.backgroundTintList = ColorStateList.valueOf(
+        binding.cardSession.layoutResultBanner.backgroundTintList = ColorStateList.valueOf(
             ContextCompat.getColor(context, visual.bannerTint)
         )
-        binding.ivResultIcon.setImageResource(visual.iconRes)
-        binding.ivResultIcon.setColorFilter(ContextCompat.getColor(context, visual.iconTint))
-        binding.tvResultStatus.setTextColor(ContextCompat.getColor(context, visual.bannerText))
-        binding.tvResultSubtitle.setTextColor(ContextCompat.getColor(context, visual.subtitleText))
+        binding.cardSession.ivResultIcon.setImageResource(visual.iconRes)
+        binding.cardSession.ivResultIcon.setColorFilter(ContextCompat.getColor(context, visual.iconTint))
+        binding.cardSession.tvResultStatus.setTextColor(ContextCompat.getColor(context, visual.bannerText))
+        binding.cardSession.tvResultSubtitle.setTextColor(ContextCompat.getColor(context, visual.subtitleText))
 
         when (outcome) {
             SessionOutcome.SUCCESS -> bindSuccessResult(result as PixieDustResult.Success)
@@ -353,41 +353,41 @@ class PixieSessionRenderer(
     }
 
     private fun bindSuccessResult(result: PixieDustResult.Success) {
-        binding.tvResultStatus.setText(R.string.pixie_success_title)
-        binding.tvResultSubtitle.setText(
+        binding.cardSession.tvResultStatus.setText(R.string.pixie_success_title)
+        binding.cardSession.tvResultSubtitle.setText(
             if (result.wpaPsk.isNullOrBlank()) R.string.pixie_success_subtitle_pin_only
             else R.string.pixie_success_subtitle
         )
-        binding.layoutResultCredentials.visibility = View.VISIBLE
-        binding.tvResultReason.visibility = View.GONE
+        binding.cardSession.layoutResultCredentials.visibility = View.VISIBLE
+        binding.cardSession.tvResultReason.visibility = View.GONE
 
-        binding.tvResultPin.text = result.wpsPin ?: context.getString(R.string.pixie_not_available)
-        binding.btnCopyPin.isEnabled = !result.wpsPin.isNullOrBlank()
-        binding.btnCopyPin.alpha = if (binding.btnCopyPin.isEnabled) 1f else 0.4f
+        binding.cardSession.tvResultPin.text = result.wpsPin ?: context.getString(R.string.pixie_not_available)
+        binding.cardSession.btnCopyPin.isEnabled = !result.wpsPin.isNullOrBlank()
+        binding.cardSession.btnCopyPin.alpha = if (binding.cardSession.btnCopyPin.isEnabled) 1f else 0.4f
 
         val hasPsk = !result.wpaPsk.isNullOrBlank()
-        binding.rowResultPsk.visibility = if (hasPsk) View.VISIBLE else View.GONE
-        binding.tvResultPsk.text = result.wpaPsk ?: context.getString(R.string.pixie_not_available)
+        binding.cardSession.rowResultPsk.visibility = if (hasPsk) View.VISIBLE else View.GONE
+        binding.cardSession.tvResultPsk.text = result.wpaPsk ?: context.getString(R.string.pixie_not_available)
 
-        binding.btnCopyResult.visibility = View.VISIBLE
-        binding.btnCopyResult.isEnabled = true
+        binding.cardSession.btnCopyResult.visibility = View.VISIBLE
+        binding.cardSession.btnCopyResult.isEnabled = true
     }
 
     private fun bindFailureResult(result: PixieDustResult.Failure?) {
-        binding.tvResultStatus.setText(R.string.pixie_failure_title)
-        binding.tvResultSubtitle.setText(R.string.pixie_failure_subtitle)
-        binding.layoutResultCredentials.visibility = View.GONE
-        binding.tvResultReason.text = result?.reason.orEmpty()
-        binding.tvResultReason.visibility = if (result == null) View.GONE else View.VISIBLE
-        binding.btnCopyResult.visibility = View.GONE
+        binding.cardSession.tvResultStatus.setText(R.string.pixie_failure_title)
+        binding.cardSession.tvResultSubtitle.setText(R.string.pixie_failure_subtitle)
+        binding.cardSession.layoutResultCredentials.visibility = View.GONE
+        binding.cardSession.tvResultReason.text = result?.reason.orEmpty()
+        binding.cardSession.tvResultReason.visibility = if (result == null) View.GONE else View.VISIBLE
+        binding.cardSession.btnCopyResult.visibility = View.GONE
     }
 
     private fun bindStoppedResult() {
-        binding.tvResultStatus.setText(R.string.pixie_result_stopped_title)
-        binding.tvResultSubtitle.setText(R.string.pixie_result_stopped_subtitle)
-        binding.layoutResultCredentials.visibility = View.GONE
-        binding.tvResultReason.visibility = View.GONE
-        binding.btnCopyResult.visibility = View.GONE
+        binding.cardSession.tvResultStatus.setText(R.string.pixie_result_stopped_title)
+        binding.cardSession.tvResultSubtitle.setText(R.string.pixie_result_stopped_subtitle)
+        binding.cardSession.layoutResultCredentials.visibility = View.GONE
+        binding.cardSession.tvResultReason.visibility = View.GONE
+        binding.cardSession.btnCopyResult.visibility = View.GONE
     }
 
     /**
@@ -398,16 +398,20 @@ class PixieSessionRenderer(
     private fun bindConsole(state: PixieDustUiState) {
         val lines = state.consoleLines
         val signature = lines.hashCode()
-        binding.tvConsoleCount.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
-        binding.btnCopyLog.isEnabled = lines.isNotEmpty()
-        binding.btnCopyLog.alpha = if (lines.isNotEmpty()) 1f else 0.4f
+        binding.cardSession.tvConsoleCount.visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
+        binding.cardSession.btnCopyLog.isEnabled = lines.isNotEmpty()
+        binding.cardSession.btnCopyLog.alpha = if (lines.isNotEmpty()) 1f else 0.4f
 
         if (signature != lastConsoleSignature) {
-            binding.tvConsoleCount.text = context.getString(R.string.pixie_console_lines, lines.size)
-            binding.tvConsole.setTextColor(
+            binding.cardSession.tvConsoleCount.text = context.resources.getQuantityString(
+                R.plurals.pixie_console_lines,
+                lines.size,
+                lines.size
+            )
+            binding.cardSession.tvConsole.setTextColor(
                 ContextCompat.getColor(context, R.color.md_theme_onSurface)
             )
-            binding.tvConsole.text = if (lines.isEmpty()) {
+            binding.cardSession.tvConsole.text = if (lines.isEmpty()) {
                 context.getString(R.string.pixie_console_empty)
             } else {
                 formatLog(lines)
@@ -418,22 +422,22 @@ class PixieSessionRenderer(
             // Se usa scrollTo (no fullScroll) para que el gesto no arrastre
             // también la página exterior.
             if (lines.isNotEmpty() && consoleExpanded && consoleAtBottom) {
-                binding.svConsole.post {
-                    val content = binding.svConsole.getChildAt(0) ?: return@post
-                    binding.svConsole.scrollTo(
+                binding.cardSession.svConsole.post {
+                    val content = binding.cardSession.svConsole.getChildAt(0) ?: return@post
+                    binding.cardSession.svConsole.scrollTo(
                         0,
-                        (content.height - binding.svConsole.height).coerceAtLeast(0)
+                        (content.height - binding.cardSession.svConsole.height).coerceAtLeast(0)
                     )
                 }
             }
         }
 
-        binding.svConsole.visibility = if (consoleExpanded) View.VISIBLE else View.GONE
-        binding.btnToggleConsole.contentDescription = context.getString(
+        binding.cardSession.svConsole.visibility = if (consoleExpanded) View.VISIBLE else View.GONE
+        binding.cardSession.btnToggleConsole.contentDescription = context.getString(
             if (consoleExpanded) R.string.pixie_console_hide
             else R.string.pixie_console_show
         )
-        binding.btnToggleConsole.rotation = if (consoleExpanded) 180f else 0f
+        binding.cardSession.btnToggleConsole.rotation = if (consoleExpanded) 180f else 0f
     }
 
     /** Colorea timestamp y prefijo sin tocar el texto seleccionable. */

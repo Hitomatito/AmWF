@@ -7,9 +7,11 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import androidx.core.content.edit
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import java.io.File
@@ -293,7 +295,7 @@ object NativeBinaries {
                 applyAssetPermissions(asset, target)
             }
         }
-        prefs.edit().putLong(PREF_COPIED_UPDATE_TIME, lastUpdate).apply()
+        prefs.edit { putLong(PREF_COPIED_UPDATE_TIME, lastUpdate) }
     }
 
     private fun packageUpdateTime(context: Context): Long = try {
@@ -307,7 +309,13 @@ object NativeBinaries {
      * Ajusta permisos del asset copiado. Los ejecutables deben poder correr
      * desde `su`; los .so y .conf solo necesitan lectura. No se conceden
      * permisos de escritura (el proceso propietario ya puede escribirlos).
+     *
+     * Se marca world-readable a propósito: el binario lo ejecuta el dominio
+     * `su`, no el UID de la app, así que sin lectura para otros el exec
+     * falla en dispositivos donde filesDir no es transitable por ese dominio.
+     * No hay datos sensibles en estos assets (binarios y .conf públicos).
      */
+    @SuppressLint("SetWorldReadable")
     private fun applyAssetPermissions(asset: String, target: File) {
         target.setReadable(true, false)
         val executable = !asset.endsWith(".conf") && !asset.contains(".so")

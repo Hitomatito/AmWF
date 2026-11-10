@@ -7,6 +7,7 @@
 
 package com.hitomatito.amwf
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.hitomatito.amwf.ShellExecutor.execNoRoot
 import com.hitomatito.amwf.ShellExecutor.execRoot
@@ -179,6 +180,10 @@ class DeviceCompatibilityChecker(private val context: Context) {
             "/vendor/bin/su"
         )
         
+        // Rutas absolutas de binarios de OTROS paquetes/dominios (termux, SuperSU),
+        // heredadas de la detección clásica de root. No se pueden derivar de
+        // getFilesDir(): son ubicaciones fijas del sistema de ficheros raíz.
+        @SuppressLint("SdCardPath")
         private val ROOT_INDICATORS = mapOf(
             RootType.MAGISK to listOf(
                 "/data/adb/magisk",

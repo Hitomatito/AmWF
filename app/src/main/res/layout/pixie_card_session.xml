@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        style="@style/Widget.AmWF.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Objetivo y estado global de la sesión. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/card_padding"
+            android:paddingTop="@dimen/card_padding"
+            android:paddingEnd="@dimen/card_padding">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pixie_session_overline"
+                    android:textAppearance="@style/TextAppearance.AmWF.Overline" />
+
+                <TextView
+                    android:id="@+id/tvSessionTarget"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textColor="@color/md_theme_onSurface"
+                    android:textStyle="bold"
+                    tools:text="ZERO TWO" />
+
+                <TextView
+                    android:id="@+id/tvSessionBssid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="monospace"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.AmWF.BodySmall"
+                    tools:text="60:6c:63:df:7e:bf · 5 GHz" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvSessionStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_chip"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="@string/pixie_session_status_running"
+                android:textColor="@color/md_theme_onPrimaryContainer"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Porcentaje, etapa actual y tiempo transcurrido. -->
+        <LinearLayout
+            android:id="@+id/layoutSessionProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/card_padding"
+            android:paddingEnd="@dimen/card_padding">
+
+            <FrameLayout
+                android:layout_width="96dp"
+                android:layout_height="96dp">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/progressSession"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:indeterminate="false"
+                    android:max="100"
+                    android:progress="0"
+                    app:indicatorColor="@color/md_theme_primary"
+                    app:indicatorInset="4dp"
+                    app:indicatorSize="88dp"
+                    app:trackColor="@color/card_stroke"
+                    app:trackThickness="7dp" />
+
+                <TextView
+                    android:id="@+id/tvSessionPercent"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:importantForAccessibility="no"
+                    android:text="@string/pixie_percent_initial"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textColor="@color/md_theme_onSurface"
+                    android:textStyle="bold"
+                    tools:text="52%" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvSessionStage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:accessibilityLiveRegion="polite"
+                    android:text="@string/pixie_stage_preparing"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                    android:textColor="@color/md_theme_onSurface"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSessionStageDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:minLines="2"
+                    android:text="@string/pixie_stage_preparing_detail"
+                    android:textAppearance="@style/TextAppearance.AmWF.BodySmall" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/pixie_session_elapsed"
+                        android:textAppearance="@style/TextAppearance.AmWF.Label"
+                        android:textSize="11sp" />
+
+                    <Chronometer
+                        android:id="@+id/chronSession"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/md_theme_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Fases macro del flujo, compactas para no desplazar el registro. -->
+        <LinearLayout
+            android:id="@+id/layoutSessionPhases"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/card_padding"
+            android:paddingEnd="@dimen/card_padding">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/phase1Bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:background="@color/md_theme_outlineVariant" />
+
+                <TextView
+                    android:id="@+id/phase1Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/pixie_phase_prepare"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/phase2Bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:background="@color/md_theme_outlineVariant" />
+
+                <TextView
+                    android:id="@+id/phase2Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/pixie_phase_connect"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/phase3Bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:background="@color/md_theme_outlineVariant" />
+
+                <TextView
+                    android:id="@+id/phase3Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/pixie_phase_capture"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/phase4Bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:background="@color/md_theme_outlineVariant" />
+
+                <TextView
+                    android:id="@+id/phase4Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/pixie_phase_analyze"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <View
+                    android:id="@+id/phase5Bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:background="@color/md_theme_outlineVariant" />
+
+                <TextView
+                    android:id="@+id/phase5Label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:text="@string/pixie_phase_credentials"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Resultado final: éxito, fallo o detención. -->
+        <LinearLayout
+            android:id="@+id/layoutSessionResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/card_padding"
+            android:paddingEnd="@dimen/card_padding"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:id="@+id/layoutResultBanner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_result_banner"
+                android:backgroundTint="@color/md_theme_primaryContainer"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="16dp">
+
+                <ImageView
+                    android:id="@+id/ivResultIcon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_check_circle"
+                    app:tint="@color/monitor_active" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvResultStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:accessibilityLiveRegion="polite"
+                        android:text="@string/pixie_success_title"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:textColor="@color/md_theme_onPrimaryContainer"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvResultSubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/pixie_success_subtitle"
+                        android:textAppearance="@style/TextAppearance.AmWF.BodySmall"
+                        android:textColor="@color/md_theme_onPrimaryContainer" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutResultCredentials"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_target_summary"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pixie_result_pin_label"
+                            android:textAppearance="@style/TextAppearance.AmWF.Overline" />
+
+                        <TextView
+                            android:id="@+id/tvResultPin"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/md_theme_primary"
+                            android:textIsSelectable="true"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            tools:text="12345670" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCopyPin"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/pixie_copy_pin"
+                        app:icon="@drawable/ic_content_copy"
+                        app:iconGravity="textStart"
+                        app:iconSize="20dp"
+                        app:iconTint="@color/md_theme_primary" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/rowResultPsk"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_target_summary"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pixie_result_psk_label"
+                            android:textAppearance="@style/TextAppearance.AmWF.Overline" />
+
+                        <TextView
+                            android:id="@+id/tvResultPsk"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/md_theme_primary"
+                            android:textIsSelectable="true"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            tools:text="clave-de-ejemplo-2026" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCopyPsk"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/pixie_copy_psk"
+                        app:icon="@drawable/ic_content_copy"
+                        app:iconGravity="textStart"
+                        app:iconSize="20dp"
+                        app:iconTint="@color/md_theme_primary" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvResultReason"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:drawablePadding="8dp"
+                android:textColor="@color/managed"
+                android:textSize="13sp"
+                android:visibility="gone"
+                app:drawableStartCompat="@drawable/ic_error"
+                app:drawableTint="@color/managed"
+                tools:text="El objetivo no es vulnerable a Pixie Dust"
+                tools:visibility="visible" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCopyResult"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="12dp"
+                android:text="@string/pixie_copy_credentials"
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_content_copy"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRescanResult"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_marginTop="12dp"
+                android:text="@string/pixie_scan_again"
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_wifi"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChangeNetworkResult"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_gravity="center_horizontal"
+                android:text="@string/pixie_change_network_button"
+                android:textColor="@color/md_theme_primary"
+                app:icon="@drawable/ic_search"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                app:iconTint="@color/md_theme_primary" />
+        </LinearLayout>
+
+        <!-- Registro en vivo, siempre visible durante la sesión. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/card_padding"
+            android:paddingEnd="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/pixie_console_title"
+                android:textAppearance="@style/TextAppearance.AmWF.SectionTitle" />
+
+            <TextView
+                android:id="@+id/tvConsoleCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:textColor="@color/md_theme_onPrimaryContainer"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                tools:text="24 líneas" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCopyLog"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="@string/pixie_copy_log"
+                app:icon="@drawable/ic_content_copy"
+                app:iconGravity="textStart"
+                app:iconSize="20dp"
+                app:iconTint="@color/md_theme_onSurfaceVariant" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearConsole"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="@string/pixie_console_clear"
+                app:icon="@drawable/ic_delete_outline"
+                app:iconGravity="textStart"
+                app:iconSize="20dp"
+                app:iconTint="@color/md_theme_onSurfaceVariant" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToggleConsole"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="@string/pixie_console_hide"
+                app:icon="@drawable/ic_expand_more"
+                app:iconGravity="textStart"
+                app:iconSize="22dp"
+                app:iconTint="@color/md_theme_onSurfaceVariant" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/svConsole"
+            android:layout_width="match_parent"
+            android:layout_height="280dp"
+            android:layout_marginStart="@dimen/card_padding"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="@dimen/card_padding"
+            android:layout_marginBottom="@dimen/card_padding"
+            android:background="@drawable/bg_console"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:scrollbars="vertical">
+
+            <TextView
+                android:id="@+id/tvConsole"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="3dp"
+                android:padding="12dp"
+                android:text="@string/pixie_console_empty"
+                android:textColor="@color/md_theme_onSurfaceVariant"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">AmWF</string>
     <string name="monitor_mode">WiFi Monitor Control</string>
     <string name="interface_info">Information</string>
@@ -40,19 +40,13 @@
     <string name="pixie_binaries_missing_names">Missing: %1$s</string>
     <string name="pixie_binaries_missing_32_names">Missing: %1$s (Pixie Dust requires arm64-v8a; no wpa_supplicant is bundled for armeabi-v7a)</string>
     <string name="pixie_dust">Pixie Dust WPS Audit</string>
-    <string name="pixie_dust_subtitle">Audit the WPS resistance of your own routers</string>
     <string name="pixie_title">WPS Audit</string>
     <string name="pixie_subtitle">Pixie Dust · WPS audit for your network</string>
     <string name="pixie_section_scan">Nearby networks</string>
-    <string name="pixie_section_networks">Detected networks</string>
     <string name="pixie_search_hint">Search by name or BSSID</string>
-    <string name="pixie_networks_summary">%1$d networks · %2$d dual-band</string>
-    <string name="pixie_networks_count">%1$d networks</string>
-    <string name="pixie_networks_filtered">%1$d of %2$d networks</string>
     <string name="pixie_filter_all">All</string>
     <string name="pixie_filter_auditable">Auditable</string>
     <string name="pixie_filter_dual">Dual-band</string>
-    <string name="pixie_network_meta">%1$s · %2$d MHz · %3$d dBm</string>
     <string name="pixie_network_bssid">BSSID %1$s</string>
     <string name="pixie_network_channel_bssid">Channel %1$d · %2$s</string>
     <string name="pixie_signal_dbm">%1$d dBm</string>
@@ -60,7 +54,6 @@
     <string name="pixie_band_5ghz">5 GHz</string>
     <string name="pixie_band_6ghz">6 GHz</string>
     <string name="pixie_band_other">Other band</string>
-    <string name="pixie_band_unknown">%1$d MHz</string>
     <string name="pixie_also_on_band">Also on %1$s</string>
     <string name="pixie_security_open">Open</string>
     <string name="pixie_security_unknown">Unknown</string>
@@ -68,7 +61,6 @@
     <string name="pixie_network_row_selected_description">%1$s, selected</string>
     <string name="pixie_scan_status_idle">Look for WPS networks around you.</string>
     <string name="pixie_scan_status_scanning">Scanning nearby networks…</string>
-    <string name="pixie_scan_status_done">%1$d networks found · %2$d auditable.</string>
     <string name="pixie_scan_again">Scan again</string>
     <string name="pixie_scanning">Scanning…</string>
     <string name="pixie_empty_idle_title">No networks yet</string>
@@ -94,7 +86,8 @@
     <string name="pixie_session_status_failure">FAILED</string>
     <string name="pixie_session_status_cancelled">STOPPED</string>
     <string name="pixie_session_elapsed">Time</string>
-    <string name="pixie_session_progress_description">%1$d percent · %2$s</string>
+    <!-- "percent" is not a countable noun: PluralsCandidate would be a false positive -->
+    <string name="pixie_session_progress_description" tools:ignore="PluralsCandidate">%1$d percent · %2$s</string>
     <string name="pixie_session_target_meta">%1$s · %2$s</string>
     <string name="pixie_percent">%1$d%%</string>
     <string name="pixie_percent_initial">0%</string>
@@ -143,33 +136,20 @@
     <string name="pixie_console_clear">Clear log</string>
     <string name="pixie_console_hide">Hide log</string>
     <string name="pixie_console_show">Show log</string>
-    <string name="pixie_console_lines">%1$d lines</string>
     <string name="pixie_disable_wifi_option">Disable system WiFi during the audit</string>
     <string name="pixie_back">Back</string>
     <string name="pixie_legal_notice">Only audit networks you own or have explicit authorization for.</string>
-    <string name="pixie_interface_label">WiFi interface</string>
     <string name="pixie_interface_value">Interface: %1$s</string>
-    <string name="pixie_interface_hint">Detected automatically. Scanning requires location permission and, on Android 13+, nearby-devices permission.</string>
-    <string name="pixie_network_hint">Choose a detected network</string>
     <string name="pixie_hidden_network">Hidden network</string>
-    <string name="pixie_networks_found">Detected networks: %1$d</string>
-    <string name="pixie_no_network_selected">No network selected</string>
-    <string name="pixie_selected_network">Selected network: %1$s</string>
     <string name="pixie_wps_available">WPS available</string>
     <string name="pixie_wps_locked">WPS locked</string>
     <string name="pixie_wps_locked_chip">Locked</string>
     <string name="pixie_wps_not_supported">No WPS</string>
     <string name="pixie_options_title">Audit options</string>
     <string name="pixie_disable_wifi_hint">Releases the WiFi interface so wpa_supplicant can use it. WiFi is restored afterwards.</string>
-    <string name="pixie_result_title">Result</string>
-    <string name="pixie_result_overline">Audit result</string>
-    <string name="pixie_result_success_title">Credentials recovered</string>
-    <string name="pixie_result_failure_title">Audit unsuccessful</string>
     <string name="pixie_result_pin_label">WPS PIN</string>
     <string name="pixie_result_psk_label">WPA key</string>
-    <string name="pixie_result_empty">No results yet.</string>
     <string name="pixie_console_empty">The console will appear here.</string>
-    <string name="pixie_copy_result">Copy result</string>
     <string name="pixie_location_permission_required">Location permission and, on Android 13+, nearby devices permission are required to scan WiFi networks</string>
     <string name="pixie_permission_title">Permission required</string>
     <string name="pixie_permission_rationale_location">To scan WiFi networks, the app needs precise location permission. On Android 12 or newer, choose “Precise”.</string>
@@ -183,29 +163,20 @@
     <string name="pixie_location_services_message">WiFi scanning requires location services. Turn them on and try again.</string>
     <string name="pixie_enable_location">Turn on location</string>
     <string name="pixie_location_services_required">Turn on location services to scan WiFi networks</string>
-    <string name="pixie_audit_completed">Audit completed</string>
-    <string name="pixie_audit_failed">Audit failed: %1$s</string>
     <string name="pixie_copied">Copied to clipboard</string>
     <string name="pixie_result_success">✔ WPS PIN: %1$s\nWPA key: %2$s</string>
     <string name="pixie_result_failure">✖ Failed: %1$s</string>
     <string name="pixie_not_available">N/A</string>
     <string name="pixie_scan_networks">Scan WiFi networks</string>
-    <string name="pixie_choose_network">— Select a network —</string>
     <string name="pixie_no_interfaces">No WiFi interface found</string>
     <string name="pixie_select_network">Select a network with WPS enabled</string>
     <string name="pixie_wps_required">This network does not have WPS enabled or is not auditable</string>
     <string name="pixie_stop_attack">Stop audit</string>
-    <string name="pixie_console">Console</string>
-    <string name="pixie_root_required">Root access required</string>
     <string name="pixie_interface">Interface</string>
-    <string name="pixie_bssid">BSSID</string>
-    <string name="pixie_ssid">SSID</string>
-    <string name="pixie_running">Auditing…</string>
-    <string name="pixie_pin_found">WPS PIN found</string>
-    <string name="pixie_psk_found">WPA password obtained</string>
     <string name="pixie_not_vulnerable">Target is not vulnerable to Pixie Dust (WPS PIN not found)</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant did not accept wps_reg. Possible causes: interface not ready, WPS disabled or WPS locked.</string>
-    <string name="pixie_reason_capture_incomplete">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). Possible causes: weak signal, WPS disabled or WPS locked.</string>
+    <!-- getQuantityString is unavailable in the runner's `strings` gateway (%2$d/6 fields is fixed): analyzed and ignored -->
+    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). Possible causes: weak signal, WPS disabled or WPS locked.</string>
     <string name="pixie_reason_capture_failed">Could not capture M3.</string>
     <string name="pixie_reason_invalid_bssid">Invalid BSSID format: %1$s</string>
     <string name="pixie_reason_invalid_interface">Invalid interface name: %1$s</string>
@@ -213,25 +184,18 @@
     <string name="pixie_reason_no_m3_data">Not enough data to run the Pixie Dust attack</string>
     <string name="pixie_reason_pbc_only">This router only supports WPS via the physical button (PBC); it does not accept a PIN, so Pixie Dust cannot work on it.</string>
     <string name="pixie_reason_assoc_rejected">The AP rejected the association repeatedly. It may be applying a temporary block: wait a few minutes and try again.</string>
-    <string name="pixie_error">Error during the audit</string>
-    <string name="pixie_timeout">Timed out</string>
-    <string name="pixie_pin">WPS PIN</string>
-    <string name="pixie_key">WPA key</string>
-    <string name="pixie_launch">Open Pixie Dust Audit</string>
     <string name="capability_full">Full monitor</string>
     <string name="capability_injection">Packet injection</string>
     <string name="capability_capture">Full capture</string>
     <string name="capability_unknown">To verify</string>
     <string name="capability_unavailable">No con_mode (new driver)</string>
     
-    <string name="check_na">N/A</string>
     <string name="no">No</string>
     <string name="not_found">Not found</string>
     <string name="not_compatible">NOT COMPATIBLE</string>
     <string name="ready_to_use">Ready to use</string>
     
     <string name="monitor_mode_on">Monitor Mode ON</string>
-    <string name="monitor_mode_off">Monitor Mode OFF</string>
     <string name="monitor_mode_normal">Normal Mode</string>
     <string name="error_root">Root access denied</string>
     <string name="error_selinux">SELinux restriction</string>
@@ -272,15 +236,42 @@
     <string name="diagnostics_exporting">Generating diagnostics…</string>
     <string name="diagnostics_error">Could not generate diagnostics</string>
     <string name="pixie_console_interfaces_available">Available interfaces: %1$s</string>
-    <string name="pixie_console_scan_started">Starting WiFi network scan...</string>
-    <string name="pixie_console_scan_finished">Scan complete: %1$d network(s) found.</string>
+    <string name="pixie_console_scan_started">Starting WiFi network scan…</string>
     <string name="pixie_console_network_selected">Selected network: %1$s (%2$s)</string>
-    <string name="pixie_console_attack_started">Starting Pixie Dust audit against %1$s...</string>
+    <string name="pixie_console_attack_started">Starting Pixie Dust audit against %1$s…</string>
     <string name="pixie_console_attack_target">BSSID: %1$s | Interface: %2$s</string>
     <string name="pixie_console_attack_success">[+] Audit successful — PIN: %1$s</string>
     <string name="pixie_console_wpa_key">[+] WPA key: %1$s</string>
     <string name="pixie_console_attack_failed">[-] Audit failed: %1$s</string>
     <string name="pixie_console_error">[-] Error: %1$s</string>
-    <string name="pixie_console_stopping">[!] Stopping audit and cleaning up processes...</string>
+    <string name="pixie_console_stopping">[!] Stopping audit and cleaning up processes…</string>
     <string name="pixie_console_stopped">[!] Stopped by user</string>
+    <string name="lang_code">EN</string>
+    <string name="row_status_icon">Check result</string>
+    <string name="progress_phase_percent">%1$s · %2$d %%</string>
+    <string name="checking_compatibility_progress">%1$s %2$d %%</string>
+    <plurals name="pixie_networks_summary">
+        <item quantity="one">%1$d network · %2$d dual-band</item>
+        <item quantity="other">%1$d networks · %2$d dual-band</item>
+    </plurals>
+    <plurals name="pixie_networks_count">
+        <item quantity="one">%1$d network</item>
+        <item quantity="other">%1$d networks</item>
+    </plurals>
+    <plurals name="pixie_networks_filtered">
+        <item quantity="one">%1$d of %2$d network</item>
+        <item quantity="other">%1$d of %2$d networks</item>
+    </plurals>
+    <plurals name="pixie_scan_status_done">
+        <item quantity="one">%1$d network found · %2$d auditable.</item>
+        <item quantity="other">%1$d networks found · %2$d auditable.</item>
+    </plurals>
+    <plurals name="pixie_console_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
+    <plurals name="pixie_console_scan_finished">
+        <item quantity="one">Scan complete: %1$d network found.</item>
+        <item quantity="other">Scan complete: %1$d networks found.</item>
+    </plurals>
 </resources>
