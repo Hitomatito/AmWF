@@ -704,6 +704,8 @@ internal class PixieDustRunner(
             onLog: (String) -> Unit = {},
             onStage: (PixieDustStage) -> Unit = {}
         ): PixieDustRunner {
+            // `context` llega con el locale persistido de la app (ver
+            // PixieDustViewModel); el applicationContext no lo reflejaría.
             val appContext = context.applicationContext
             val supplicant = SupplicantProcesses(appContext)
             return PixieDustRunner(
@@ -713,9 +715,9 @@ internal class PixieDustRunner(
                 supplicant = supplicant,
                 pixiewps = PixiewpsExecutor(appContext),
                 pskExtractor = PixiePskExtractor(appContext, supplicant),
-                nativeBinaries = SystemNativeBinaries(appContext),
+                nativeBinaries = SystemNativeBinaries(context),
                 auditLog = SystemAuditLog(appContext),
-                strings = { id, args -> appContext.getString(id, *args) },
+                strings = { id, args -> context.getString(id, *args) },
                 shellExec = { cmd, timeout -> PixieProcessSupport.execSu(cmd, timeout) },
                 isWifiEnabled = {
                     (appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)

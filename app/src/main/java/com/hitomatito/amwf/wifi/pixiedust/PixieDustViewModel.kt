@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import java.net.NetworkInterface
@@ -125,6 +126,9 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     private val TAG = "PixieDustViewModel"
     private val appContext: Context = application.applicationContext
+    // El applicationContext conserva el locale del proceso y no refleja el
+    // idioma elegido en MainActivity. Todo texto visible pasa por aquí.
+    private val localeContext: Context = LocaleHelper.applyLocale(application.applicationContext)
 
     // SimpleDateFormat no es thread-safe: el runner registra líneas desde
     // varios hilos (IO y lector del supplicant).
@@ -170,7 +174,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 val ifaces = availableWifiInterfaces()
                 val binariesError = nativeBinariesError()
                 _uiState.value = interfacesLoadedState(_uiState.value, ifaces, binariesError)
-                addConsoleLine(appContext.getString(R.string.pixie_console_interfaces_available, ifaces.joinToString(", ")))
+                addConsoleLine(localeContext.getString(R.string.pixie_console_interfaces_available, ifaces.joinToString(", ")))
             } catch (e: Exception) {
                 ShellExecutor.logE(TAG, "Failed to load interfaces", e)
                 _uiState.update { it.copy(errorMessage = e.message) }
@@ -228,7 +232,7 @@ class PixieDustViewModel @JvmOverloads constructor(
     private suspend fun nativeBinariesError(): String? = withContext(ioDispatcher) {
         NativeBinaries.ensure(appContext)
         val missing = NativeBinaries.missingCriticalBinaries(appContext)
-        NativeBinaries.missingBinariesMessage(appContext, missing)
+        NativeBinaries.missingBinariesMessage(localeContext, missing)
     }
 
     // ========================================================================
@@ -244,7 +248,7 @@ class PixieDustViewModel @JvmOverloads constructor(
         // toque no arranque dos escaneos simultáneos.
         _uiState.update { scanStartingState(it) }
         scanJob = viewModelScope.launch {
-            addConsoleLine(appContext.getString(R.string.pixie_console_scan_started))
+            addConsoleLine(localeContext.getString(R.string.pixie_console_scan_started))
             try {
                 val networks = withContext(ioDispatcher) {
                     scanWifiNetworks()
@@ -254,7 +258,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                 val sorted = sortNetworksForList(networks)
                 _uiState.update { scanFinishedState(it, sorted) }
                 addConsoleLine(
-                    appContext.resources.getQuantityString(
+                    localeContext.resources.getQuantityString(
                         R.plurals.pixie_console_scan_finished,
                         sorted.size,
                         sorted.size
@@ -267,9 +271,9 @@ class PixieDustViewModel @JvmOverloads constructor(
                 _uiState.update {
                     scanFailedState(
                         it,
-                        appContext.getString(
+                        localeContext.getString(
                             R.string.pixie_scan_failed_detail,
-                            e.message ?: appContext.getString(R.string.pixie_scan_failed)
+                            e.message ?: localeContext.getString(R.string.pixie_scan_failed)
                         )
                     )
                 }
@@ -289,12 +293,12 @@ class PixieDustViewModel @JvmOverloads constructor(
     private suspend fun scanWifiNetworks(): List<PixieDustNetwork> = withContext(ioDispatcher) {
         if (!WifiScanPermissions.hasRuntimePermissions(appContext)) {
             throw SecurityException(
-                appContext.getString(R.string.pixie_location_permission_required)
+                localeContext.getString(R.string.pixie_location_permission_required)
             )
         }
         if (!WifiScanPermissions.isLocationServicesEnabled(appContext)) {
             throw IllegalStateException(
-                appContext.getString(R.string.pixie_location_services_required)
+                localeContext.getString(R.string.pixie_location_services_required)
             )
         }
         if (!wifiManager.isWifiEnabled) {
@@ -302,7 +306,7 @@ class PixieDustViewModel @JvmOverloads constructor(
             // (setWifiEnabled es un no-op). Se pide al usuario que lo active
             // en lugar de fallar más tarde con un error críptico.
             throw IllegalStateException(
-                appContext.getString(R.string.pixie_wifi_disabled)
+                localeContext.getString(R.string.pixie_wifi_disabled)
             )
         }
         if (!wifiManager.startScan()) {
@@ -312,7 +316,7 @@ class PixieDustViewModel @JvmOverloads constructor(
             val cached = wifiManager.scanResults
             if (cached.isEmpty()) {
                 throw IllegalStateException(
-                    appContext.getString(R.string.pixie_scan_failed)
+                    localeContext.getString(R.string.pixie_scan_failed)
                 )
             }
             return@withContext cached.map { it.toPixieDustNetwork() }
@@ -334,13 +338,13 @@ class PixieDustViewModel @JvmOverloads constructor(
             wpsCapable = wpsCapable,
             wpsLocked = wpsLocked,
             capabilities = caps,
-            hiddenSsidLabel = appContext.getString(R.string.pixie_hidden_network)
+            hiddenSsidLabel = localeContext.getString(R.string.pixie_hidden_network)
         )
     }
 
     fun selectNetwork(network: PixieDustNetwork) {
         _uiState.update { selectionState(it, network) }
-        addConsoleLine(appContext.getString(R.string.pixie_console_network_selected, network.displayName, network.bssid))
+        addConsoleLine(localeContext.getString(R.string.pixie_console_network_selected, network.displayName, network.bssid))
     }
 
     fun startAttack(disableWifi: Boolean) {
@@ -348,13 +352,13 @@ class PixieDustViewModel @JvmOverloads constructor(
         when (attackStartError(network, _uiState.value.session, _uiState.value.scan, cleanupInProgress)) {
             AttackStartError.NO_NETWORK -> {
                 _uiState.update {
-                    it.copy(errorMessage = appContext.getString(R.string.pixie_select_network))
+                    it.copy(errorMessage = localeContext.getString(R.string.pixie_select_network))
                 }
                 return
             }
             AttackStartError.NOT_AUDITABLE -> {
                 _uiState.update {
-                    it.copy(errorMessage = appContext.getString(R.string.pixie_wps_required))
+                    it.copy(errorMessage = localeContext.getString(R.string.pixie_wps_required))
                 }
                 return
             }
@@ -370,7 +374,7 @@ class PixieDustViewModel @JvmOverloads constructor(
         // cleanup, así que no sirve para saber dónde falló la sesión.
         var lastActiveStage = PixieDustStage.PREPARING
         val activeRunner = PixieDustRunner.create(
-            context = appContext,
+            context = localeContext,
             ioDispatcher = ioDispatcher,
             onLog = { line ->
                 if (!line.startsWith("[supplicant]")) addConsoleLine(line)
@@ -400,8 +404,8 @@ class PixieDustViewModel @JvmOverloads constructor(
         _uiState.update { attackStartingState(it, System.currentTimeMillis()) }
 
         attackJob = viewModelScope.launch {
-            addConsoleLine(appContext.getString(R.string.pixie_console_attack_started, selectedNetwork.displayName))
-            addConsoleLine(appContext.getString(R.string.pixie_console_attack_target, selectedNetwork.bssid, _uiState.value.selectedInterface))
+            addConsoleLine(localeContext.getString(R.string.pixie_console_attack_started, selectedNetwork.displayName))
+            addConsoleLine(localeContext.getString(R.string.pixie_console_attack_target, selectedNetwork.bssid, _uiState.value.selectedInterface))
 
             try {
                 val result = activeRunner.runAttack(
@@ -417,21 +421,21 @@ class PixieDustViewModel @JvmOverloads constructor(
                 _uiState.update { attackFinishedState(it, result, stage, finishedAt) }
                 when (result) {
                     is PixieDustResult.Success -> {
-                        addConsoleLine(appContext.getString(R.string.pixie_console_attack_success, result.wpsPin ?: "N/A"))
-                        result.wpaPsk?.let { addConsoleLine(appContext.getString(R.string.pixie_console_wpa_key, it)) }
+                        addConsoleLine(localeContext.getString(R.string.pixie_console_attack_success, result.wpsPin ?: "N/A"))
+                        result.wpaPsk?.let { addConsoleLine(localeContext.getString(R.string.pixie_console_wpa_key, it)) }
                     }
                     is PixieDustResult.Failure -> {
-                        addConsoleLine(appContext.getString(R.string.pixie_console_attack_failed, result.reason))
+                        addConsoleLine(localeContext.getString(R.string.pixie_console_attack_failed, result.reason))
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 ShellExecutor.logE(TAG, "Attack failed", e)
-                addConsoleLine(appContext.getString(R.string.pixie_console_error, e.message ?: e.javaClass.simpleName))
+                addConsoleLine(localeContext.getString(R.string.pixie_console_error, e.message ?: e.javaClass.simpleName))
                 val failure = PixieDustResult.Failure(
                     bssid = selectedNetwork.bssid,
-                    reason = appContext.getString(
+                    reason = localeContext.getString(
                         R.string.pixie_error_detail,
                         e.message ?: ""
                     ),
@@ -466,7 +470,7 @@ class PixieDustViewModel @JvmOverloads constructor(
             val stageBeforeStop = _uiState.value.session.stage
                 ?.takeIf { it != PixieDustStage.RESTORING }
             cleanupInProgress = true
-            addConsoleLine(appContext.getString(R.string.pixie_console_stopping))
+            addConsoleLine(localeContext.getString(R.string.pixie_console_stopping))
             jobToCancel.cancel()
             viewModelScope.launch {
                 try {
@@ -484,14 +488,14 @@ class PixieDustViewModel @JvmOverloads constructor(
                         )
                     }
                 }
-                addConsoleLine(appContext.getString(R.string.pixie_console_stopped))
+                addConsoleLine(localeContext.getString(R.string.pixie_console_stopped))
             }
         } else {
             runner = null
             _uiState.update {
                 attackStoppedState(it, wasAttacking, null, System.currentTimeMillis())
             }
-            if (wasScanning) addConsoleLine(appContext.getString(R.string.pixie_console_stopped))
+            if (wasScanning) addConsoleLine(localeContext.getString(R.string.pixie_console_stopped))
         }
     }
 

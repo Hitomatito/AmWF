@@ -360,8 +360,8 @@ class DeviceCompatibilityChecker(private val context: Context) {
             issues.add(CompatibilityIssue(
                 type = IssueType.ROOT,
                 severity = Severity.CRITICAL,
-                message = "Root no disponible",
-                suggestion = "Esta app requiere root. Usa Magisk, KernelSU, APatch, SuperSU o phh-su"
+                message = context.getString(R.string.issue_root_message),
+                suggestion = context.getString(R.string.issue_root_suggestion)
             ))
         }
 
@@ -369,8 +369,8 @@ class DeviceCompatibilityChecker(private val context: Context) {
             issues.add(CompatibilityIssue(
                 type = IssueType.CHIPSET,
                 severity = Severity.CRITICAL,
-                message = "Chipset no compatible: ${deviceInfo.chipset}",
-                suggestion = "Este método solo funciona en dispositivos con chipset Qualcomm Snapdragon"
+                message = context.getString(R.string.issue_chipset_message, deviceInfo.chipset),
+                suggestion = context.getString(R.string.issue_chipset_suggestion)
             ))
         }
 
@@ -379,12 +379,11 @@ class DeviceCompatibilityChecker(private val context: Context) {
             issues.add(CompatibilityIssue(
                 type = IssueType.SYSFS,
                 severity = Severity.CRITICAL,
-                message = "Archivo con_mode no encontrado",
+                message = context.getString(R.string.issue_conmode_missing_message),
                 suggestion = if (legacyDriver) {
-                    "El driver WiFi no expone con_mode en este dispositivo (revisa permisos o SELinux)"
+                    context.getString(R.string.issue_conmode_missing_suggestion_legacy)
                 } else {
-                    "Este dispositivo usa un driver Qualcomm de nueva generación (cnss_pci/WCN) " +
-                    "que no expone con_mode. El método de modo monitor de esta app no está soportado en este hardware."
+                    context.getString(R.string.issue_conmode_missing_suggestion_cnss)
                 }
             ))
         } else {
@@ -394,8 +393,8 @@ class DeviceCompatibilityChecker(private val context: Context) {
                 issues.add(CompatibilityIssue(
                     type = IssueType.SYSFS,
                     severity = Severity.CRITICAL,
-                    message = "No se puede escribir en con_mode",
-                    suggestion = "Las restricciones SELinux o de permisos impiden modificar el modo WiFi"
+                    message = context.getString(R.string.issue_conmode_write_message),
+                    suggestion = context.getString(R.string.issue_conmode_write_suggestion)
                 ))
             }
         }

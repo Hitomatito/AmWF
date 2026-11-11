@@ -26,7 +26,16 @@
     <string name="verify_first">Verifica la compatibilidad primero</string>
     <string name="device_compatible">Dispositivo Compatible</string>
     <string name="device_incompatible">Dispositivo No Compatible</string>
-    
+    <string name="issue_root_message">Root no disponible</string>
+    <string name="issue_root_suggestion">Esta app requiere root. Usa Magisk, KernelSU, APatch, SuperSU o phh-su</string>
+    <string name="issue_chipset_message">Chipset no compatible: %1$s</string>
+    <string name="issue_chipset_suggestion">Este método solo funciona en dispositivos con chipset Qualcomm Snapdragon</string>
+    <string name="issue_conmode_missing_message">Archivo con_mode no encontrado</string>
+    <string name="issue_conmode_missing_suggestion_legacy">El driver WiFi no expone con_mode en este dispositivo (revisa permisos o SELinux)</string>
+    <string name="issue_conmode_missing_suggestion_cnss">Este dispositivo usa un driver Qualcomm de nueva generación (cnss_pci/WCN) que no expone con_mode. El método de modo monitor de esta app no está soportado en este hardware.</string>
+    <string name="issue_conmode_write_message">No se puede escribir en con_mode</string>
+    <string name="issue_conmode_write_suggestion">Las restricciones SELinux o de permisos impiden modificar el modo WiFi</string>
+
     <string name="label_chipset">Chipset</string>
     <string name="label_driver">Driver WiFi</string>
     <string name="label_root">Acceso Root</string>

@@ -30,6 +30,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.databinding.ActivityPixieDustBinding
 import com.hitomatito.amwf.databinding.SheetPixieNetworkPickerBinding
@@ -90,6 +91,14 @@ class PixieDustActivity : AppCompatActivity() {
                 showLocationServicesDialog()
             else -> startScanAndOpenPicker()
         }
+    }
+
+    // Mismo tratamiento que MainActivity: el locale persistido se aplica en
+    // attachBaseContext para que toda la pantalla (y sus diálogos) siga el
+    // idioma elegido por el usuario, no el del sistema.
+    override fun attachBaseContext(newBase: Context) {
+        LocaleHelper.init(newBase)
+        super.attachBaseContext(LocaleHelper.applyLocale(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
