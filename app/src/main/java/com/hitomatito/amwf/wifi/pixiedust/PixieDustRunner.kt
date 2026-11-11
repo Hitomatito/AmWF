@@ -114,15 +114,13 @@ internal class PixieDustRunner(
      * @param interfaceName Nombre de la interfaz WiFi (por defecto "wlan0").
      * @param ssid SSID de la red (opcional, necesario para extraer el PSK).
      * @param freqMHz Frecuencia en MHz (opcional).
-     * @param disableWifiBeforeAttack Si true, desactiva el WiFi del sistema antes de atacar.
      * @return [PixieDustResult] con el resultado de la auditoría.
      */
     suspend fun runAttack(
         bssid: String,
         interfaceName: String = "wlan0",
         ssid: String? = null,
-        freqMHz: Int? = null,
-        disableWifiBeforeAttack: Boolean = true
+        freqMHz: Int? = null
     ): PixieDustResult = withContext(ioDispatcher) {
         ensureActive()
         auditEvents.clear()
@@ -205,12 +203,14 @@ internal class PixieDustRunner(
         try {
             stage(PixieDustStage.DISABLING_WIFI)
 
-            // --- Desactivar WiFi del sistema si se solicita ---
+            // --- Desactivar el WiFi del sistema ---
+            // wlan0 la comparten el framework y el wpa_supplicant empaquetado;
+            // sin liberar la interfaz el intercambio M1–M3 no llega a completarse.
             // Solo se restaura al terminar si estaba encendido antes: nunca se
             // enciende el WiFi del usuario si lo tenía apagado.
             val wifiWasEnabled = isWifiEnabled() == true
             wifiDisabledByAttack = false
-            if (disableWifiBeforeAttack && wifiWasEnabled) {
+            if (wifiWasEnabled) {
                 log("[*] Disabling system WiFi (svc wifi disable)...")
                 val wifiOff = execSu("svc wifi disable", timeoutSeconds = 5)
                 log("[*] svc wifi disable -> exit=${wifiOff.exitCode}")
@@ -224,7 +224,7 @@ internal class PixieDustRunner(
                 } else {
                     log("[!] Warning: svc wifi disable returned non-zero; will restore WiFi state anyway")
                 }
-            } else if (disableWifiBeforeAttack) {
+            } else {
                 log("[*] System WiFi already off; skipping svc wifi disable")
             }
 

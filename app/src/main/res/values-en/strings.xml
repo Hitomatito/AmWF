@@ -86,7 +86,7 @@
     <string name="pixie_choose_network_button">Choose network</string>
     <string name="pixie_change_network_button">Change network</string>
     <string name="pixie_sheet_title">Choose network</string>
-    <string name="pixie_sheet_subtitle">Tap a WPS network to audit it immediately with the current options.</string>
+    <string name="pixie_sheet_subtitle">Tap a WPS network to audit it immediately.</string>
     <string name="pixie_sheet_close">Close picker</string>
     <string name="pixie_sheet_rescan_short">Scan</string>
     <string name="pixie_session_overline">Audit session</string>
@@ -145,7 +145,6 @@
     <string name="pixie_console_clear">Clear log</string>
     <string name="pixie_console_hide">Hide log</string>
     <string name="pixie_console_show">Show log</string>
-    <string name="pixie_disable_wifi_option">Disable system WiFi during the audit</string>
     <string name="pixie_back">Back</string>
     <string name="pixie_legal_notice">Only audit networks you own or have explicit authorization for.</string>
     <string name="pixie_interface_value">Interface: %1$s</string>
@@ -154,8 +153,6 @@
     <string name="pixie_wps_locked">WPS locked</string>
     <string name="pixie_wps_locked_chip">Locked</string>
     <string name="pixie_wps_not_supported">No WPS</string>
-    <string name="pixie_options_title">Audit options</string>
-    <string name="pixie_disable_wifi_hint">Releases the WiFi interface so wpa_supplicant can use it. WiFi is restored afterwards.</string>
     <string name="pixie_result_pin_label">WPS PIN</string>
     <string name="pixie_result_psk_label">WPA key</string>
     <string name="pixie_console_empty">The console will appear here.</string>

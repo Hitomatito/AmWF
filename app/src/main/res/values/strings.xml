@@ -117,7 +117,7 @@
     <string name="pixie_choose_network_button">Elegir red</string>
     <string name="pixie_change_network_button">Cambiar red</string>
     <string name="pixie_sheet_title">Elegir red</string>
-    <string name="pixie_sheet_subtitle">Toca una red con WPS para auditarla al instante con las opciones actuales.</string>
+    <string name="pixie_sheet_subtitle">Toca una red con WPS para auditarla al instante.</string>
     <string name="pixie_sheet_close">Cerrar selector</string>
     <string name="pixie_sheet_rescan_short">Escanear</string>
     <string name="pixie_session_overline">Sesión de auditoría</string>
@@ -176,7 +176,6 @@
     <string name="pixie_console_clear">Limpiar registro</string>
     <string name="pixie_console_hide">Ocultar registro</string>
     <string name="pixie_console_show">Mostrar registro</string>
-    <string name="pixie_disable_wifi_option">Desactivar el WiFi del sistema durante la auditoría</string>
     <string name="pixie_back">Volver</string>
     <string name="pixie_legal_notice">Audita solo redes de tu propiedad o para las que tengas autorización expresa.</string>
     <string name="pixie_interface_value">Interfaz: %1$s</string>
@@ -185,8 +184,6 @@
     <string name="pixie_wps_locked">WPS bloqueado</string>
     <string name="pixie_wps_locked_chip">Bloqueado</string>
     <string name="pixie_wps_not_supported">Sin WPS</string>
-    <string name="pixie_options_title">Opciones de auditoría</string>
-    <string name="pixie_disable_wifi_hint">Libera la interfaz WiFi para que wpa_supplicant pueda usarla. El WiFi se restaura al terminar.</string>
     <string name="pixie_result_pin_label">PIN WPS</string>
     <string name="pixie_result_psk_label">Clave WPA</string>
     <string name="pixie_console_empty">La consola aparecerá aquí.</string>

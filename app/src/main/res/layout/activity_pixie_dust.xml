@@ -212,68 +212,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Ajustes de ejecución. -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardOptions"
-                style="@style/Widget.AmWF.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/section_spacing">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/card_padding">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/pixie_options_title"
-                        android:textAppearance="@style/TextAppearance.AmWF.SectionTitle" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:minHeight="56dp"
-                        android:orientation="horizontal">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp">
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:labelFor="@id/swDisableWifi"
-                                android:text="@string/pixie_disable_wifi_option"
-                                android:textAppearance="@style/TextAppearance.AmWF.Body"
-                                android:textColor="@color/md_theme_onSurface" />
-
-                            <TextView
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="2dp"
-                                android:text="@string/pixie_disable_wifi_hint"
-                                android:textAppearance="@style/TextAppearance.AmWF.BodySmall" />
-                        </LinearLayout>
-
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/swDisableWifi"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:checked="true"
-                            android:minWidth="48dp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <TextView
                 android:id="@+id/tvLegalFooter"
                 android:layout_width="match_parent"

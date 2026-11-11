@@ -325,8 +325,7 @@ class PixieDustRunnerTest {
         val result = runner.runAttack(
             bssid = "aa:bb:cc:dd:ee:ff",
             interfaceName = "wlan0",
-            ssid = "Casa",
-            disableWifiBeforeAttack = false
+            ssid = "Casa"
         )
 
         assertTrue(result is PixieDustResult.Success)
@@ -354,8 +353,7 @@ class PixieDustRunnerTest {
 
         val result = runner.runAttack(
             bssid = "aa:bb:cc:dd:ee:ff",
-            ssid = null,
-            disableWifiBeforeAttack = false
+            ssid = null
         )
 
         assertTrue(result is PixieDustResult.Success)
@@ -375,8 +373,7 @@ class PixieDustRunnerTest {
 
         val result = runner.runAttack(
             bssid = "aa:bb:cc:dd:ee:ff",
-            ssid = "Casa",
-            disableWifiBeforeAttack = false
+            ssid = "Casa"
         )
 
         assertTrue(result is PixieDustResult.Failure)
@@ -397,8 +394,7 @@ class PixieDustRunnerTest {
         )
 
         val result = runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = false
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         assertTrue(result is PixieDustResult.Failure)
@@ -427,8 +423,7 @@ class PixieDustRunnerTest {
         )
 
         val result = runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = false
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         assertTrue(result is PixieDustResult.Failure)
@@ -456,8 +451,7 @@ class PixieDustRunnerTest {
         )
 
         val result = runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = false
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         assertTrue(result is PixieDustResult.Failure)
@@ -479,8 +473,7 @@ class PixieDustRunnerTest {
         )
 
         val result = runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = false
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         assertTrue(result is PixieDustResult.Failure)
@@ -500,8 +493,7 @@ class PixieDustRunnerTest {
             )
 
             val result = runner.runAttack(
-                bssid = "aa:bb:cc:dd:ee:ff",
-                disableWifiBeforeAttack = false
+                bssid = "aa:bb:cc:dd:ee:ff"
             )
 
             assertTrue(result is PixieDustResult.Failure)
@@ -524,8 +516,7 @@ class PixieDustRunnerTest {
 
         val result = runner.runAttack(
             bssid = "aa:bb:cc:dd:ee:ff",
-            ssid = null,
-            disableWifiBeforeAttack = true
+            ssid = null
         )
 
         assertTrue(result is PixieDustResult.Success)
@@ -544,8 +535,7 @@ class PixieDustRunnerTest {
         )
 
         runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = true
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         assertFalse(shell.commands.any { it == "svc wifi disable" })
@@ -563,8 +553,7 @@ class PixieDustRunnerTest {
         )
 
         runner.runAttack(
-            bssid = "aa:bb:cc:dd:ee:ff",
-            disableWifiBeforeAttack = true
+            bssid = "aa:bb:cc:dd:ee:ff"
         )
 
         val pkillCount = shell.commands.count { it.contains("pkill") }
@@ -591,8 +580,7 @@ class PixieDustRunnerTest {
         try {
             runner.runAttack(
                 bssid = "aa:bb:cc:dd:ee:ff",
-                ssid = "Casa",
-                disableWifiBeforeAttack = false
+                ssid = "Casa"
             )
         } catch (e: CancellationException) {
             // Esperado: la cancelación propaga, pero el log debe quedar guardado.

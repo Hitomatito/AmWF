@@ -347,7 +347,7 @@ class PixieDustViewModel @JvmOverloads constructor(
         addConsoleLine(localeContext.getString(R.string.pixie_console_network_selected, network.displayName, network.bssid))
     }
 
-    fun startAttack(disableWifi: Boolean) {
+    fun startAttack() {
         val network = _uiState.value.scan.selectedNetwork
         when (attackStartError(network, _uiState.value.session, _uiState.value.scan, cleanupInProgress)) {
             AttackStartError.NO_NETWORK -> {
@@ -412,8 +412,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                     bssid = selectedNetwork.bssid,
                     interfaceName = _uiState.value.selectedInterface,
                     ssid = selectedNetwork.ssid.takeIf { it.isNotBlank() },
-                    freqMHz = selectedNetwork.frequency,
-                    disableWifiBeforeAttack = disableWifi
+                    freqMHz = selectedNetwork.frequency
                 )
 
                 val finishedAt = System.currentTimeMillis()

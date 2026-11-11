@@ -41,9 +41,9 @@ import kotlinx.coroutines.launch
  *
  * Flujo: escanear redes, elegir una red con WPS en el selector y ejecutar la
  * auditoría en el mismo toque. No hay un botón «ejecutar» aparte: tocar una red
- * auditable la marca como objetivo y arranca el ataque con las opciones
- * visibles en ese momento. La barra inferior solo aparece mientras hay una
- * auditoría o un escaneo en curso, para poder detenerlo.
+ * auditable la marca como objetivo y arranca el ataque. La barra inferior solo
+ * aparece mientras hay una auditoría o un escaneo en curso, para poder
+ * detenerlo.
  *
  * Requiere acceso root, permiso de escaneo WiFi (ACCESS_FINE_LOCATION en todas
  * las versiones y NEARBY_WIFI_DEVICES desde Android 13) y los binarios nativos
@@ -171,11 +171,10 @@ class PixieDustActivity : AppCompatActivity() {
                 viewModel.selectNetwork(network)
                 closeNetworkPicker()
                 // Tocar la red es la acción completa: la selecciona y arranca
-                // la auditoría con la configuración actual (incluido el switch
-                // de WiFi). No hay botón «ejecutar» aparte; el ataque root y el
-                // posible corte de WiFi son intencionales al elegir la red.
+                // la auditoría. No hay botón «ejecutar» aparte; el ataque root y
+                // el corte temporal de WiFi son intencionales al elegir la red.
                 sessionRenderer.consoleExpanded = true
-                viewModel.startAttack(binding.swDisableWifi.isChecked)
+                viewModel.startAttack()
             } else {
                 Toast.makeText(
                     this,
@@ -494,12 +493,10 @@ class PixieDustActivity : AppCompatActivity() {
 
         updateNetworkPicker(state, bands, dualBandCount)
 
-        // Durante la auditoría la pantalla se centra en la sesión: se ocultan
-        // las tarjetas de escaneo/opciones para que el registro no compita ni
-        // desplace la vista.
+        // Durante la auditoría la pantalla se centra en la sesión: se oculta
+        // la tarjeta de escaneo para que el registro no compita ni desplace la vista.
         val running = state.session.isAttacking
         binding.cardScan.visibility = if (running) View.GONE else View.VISIBLE
-        binding.cardOptions.visibility = if (running) View.GONE else View.VISIBLE
         binding.tvLegalFooter.visibility = if (running) View.GONE else View.VISIBLE
 
         val busy = state.session.isAttacking || state.scan.isScanning
@@ -511,8 +508,6 @@ class PixieDustActivity : AppCompatActivity() {
         } else {
             getString(R.string.pixie_stop_attack)
         }
-
-        binding.swDisableWifi.isEnabled = !busy
 
         // El aviso de binarios nativos es persistente; el error de escaneo o
         // de selección es transitorio y tiene prioridad mientras esté visible.
