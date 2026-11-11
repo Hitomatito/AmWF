@@ -9,9 +9,9 @@ AmWF is a single-module Android app (`:app`) for rooted Qualcomm Snapdragon devi
 - One test class: `./gradlew :app:testDebugUnitTest --tests "com.hitomatito.amwf.wifi.pixiedust.M3ParserTest"`
 - Lint: `./gradlew :app:lintDebug`
 - Full local check: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
-- Instrumented tests: `./gradlew :app:connectedDebugAndroidTest` (`app/src/androidTest` holds only an empty `java/` dir; real monitor-mode and Pixie Dust behavior requires a rooted ARM device, and the native assets are ARM-only, so x86/x86_64 emulators cannot run them).
-- There is no CI workflow and no pre-commit hooks or task runner; run the relevant checks locally.
-- CLI builds need `JAVA_HOME` pointing at a JDK (there is no system `java` on PATH; Android Studio's JBR works, e.g. `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:testDebugUnitTest`).
+- Instrumented tests: `./gradlew :app:connectedDebugAndroidTest` (`app/src/androidTest` has no test files; real monitor-mode and Pixie Dust behavior requires a rooted ARM device, and the native assets are ARM-only, so x86/x86_64 emulators cannot run them).
+- There is no CI workflow and no pre-commit hooks or task runner (`.github/` holds only issue templates); run the relevant checks locally.
+- CLI builds need `JAVA_HOME` pointing at a JDK (there is no system `java` on PATH; Android Studio's JBR works, e.g. `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:testDebugUnitTest`) and the Android SDK location: `local.properties` (gitignored, `sdk.dir=...`) or `ANDROID_HOME`.
 - Toolchain (see `gradle/wrapper/gradle-wrapper.properties`, `gradle/libs.versions.toml`, `app/build.gradle.kts`): Gradle 9.6.0, AGP 9.5.1, compileSdk 37.1 / targetSdk 37, minSdk 24, Java 11 bytecode. AGP 9 compiles Kotlin itself: do not add `org.jetbrains.kotlin.android`. The Gradle daemon uses Java 21 via `gradle/gradle-daemon-jvm.properties` and the foojay resolver.
 - Root `keystore.properties` is optional and gitignored. Release builds use it when present and remain unsigned otherwise. Never stage `keystore.properties`, `local.properties` or `*.logcat`; they may hold signing secrets or device data.
 - No formatter/static-analysis setup beyond `lintDebug` (no ktlint/detekt/editorconfig); match the existing style.
