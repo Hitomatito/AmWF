@@ -21,6 +21,7 @@ Unit tests are plain JUnit 4 (plus `kotlinx-coroutines-test` for suspend code); 
 ## Architecture and invariants
 
 - `MainActivity` is the monitor-mode/compatibility entry point; `MonitorModeManager` performs the radio and `con_mode` changes. `LocaleHelper` applies the persisted ES/EN locale in `attachBaseContext`.
+- The app is phone-only and portrait-locked by design: `supports-screens` excludes large screens, both activities set `screenOrientation="portrait"`, and `ChromeOsAbiSupport` is disabled in `app/build.gradle.kts`. It declares no `INTERNET` permission; don't add screens, orientations or network access as a drive-by fix.
 - `DeviceCompatibilityChecker` performs real capture/injection and `con_mode` write tests. It disables WiFi before those tests, toggles the radio during capability checks and centralizes the final restore/restart. Preserve that ordering to avoid extra WiFi drops. The check is never run automatically: it is triggered only by the "Verificar compatibilidad" button (it disrupts WiFi); results are cached in `MainActivity` statics so `recreate()` does not rerun the disruptive test, and a recreated Activity waits for an in-flight check instead of starting a second one. Enabling monitor mode requires a prior verification in the process (otherwise a toast); disabling must always remain possible without one.
 - `resolveConModePath()` (top-level in `DeviceCompatibilityChecker.kt`) must retain root-based discovery: SELinux can hide `/sys/module` from the app UID, so a `File`-only scan misses valid paths.
 - Use `ShellExecutor` for one-shot `su`/`sh` commands and keep its reader threads/timeouts; naive pipe reads can deadlock. `SupplicantProcesses` and `PixiewpsExecutor` own long-lived processes that need streaming output.
@@ -33,7 +34,7 @@ Unit tests are plain JUnit 4 (plus `kotlinx-coroutines-test` for suspend code); 
 - Pixie Dust UX is intentional: tapping an auditable network selects it and immediately starts the audit with current options (WiFi-disable defaults on); there is no Run button or confirmation dialog. Search, filters, session timer, phase tracker and collapsible console are intentional scope, not unused UI.
 - Keep `MainActivity`'s Pixie Dust button enabled even when its alpha is dimmed. If compatibility already confirmed missing binaries, the tap shows the summary instead of opening the audit; otherwise it opens the screen.
 - Route WiFi scan permission and location-services checks through `WifiScanPermissions`: precise location is required on every Android version, plus `NEARBY_WIFI_DEVICES` on Android 13+.
-- `PixieDustReducers.kt` holds the ViewModel's UI-state decisions as pure functions (`attackStartError`, `canStartScan`, `sortNetworksForList`, `attackOutcomeStage`, `*State` transitions). New UI-state decisions go there with unit tests, not inline in the ViewModel.
+- `PixieDustReducers.kt` holds the ViewModel's UI-state decisions as pure functions (`attackStartError`, `canStartScan`, `sortNetworksForList`, `attackOutcomeStage`, `*State` transitions); `PixieNetworkFilter.kt` does the same for the network picker (search, chips, dual-band). New UI-state decisions go there with unit tests, not inline in the ViewModel/Activity.
 - Validate BSSID/interface input and shell-quote user-controlled values before privileged commands.
 
 ## Native Pixie Dust binaries
