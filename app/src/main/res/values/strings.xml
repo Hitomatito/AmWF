@@ -206,14 +206,15 @@
     <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust (no se encontró el PIN WPS)</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant no aceptó wps_reg. Posibles causas: interfaz no lista, WPS desactivado o WPS bloqueado.</string>
     <!-- getQuantityString no está disponible en el gateway `strings` del runner (%2$d/6 campos va fijo): se ignora con análisis -->
-    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). Posibles causas: señal débil, WPS desactivado o WPS bloqueado.</string>
+    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). El AP no completó el handshake WPS: señal débil, WPS bloqueado o filtro de asociación del AP.</string>
     <string name="pixie_reason_capture_failed">No se pudo capturar el M3.</string>
     <string name="pixie_reason_invalid_bssid">Formato de BSSID no válido: %1$s</string>
     <string name="pixie_reason_invalid_interface">Nombre de interfaz no válido: %1$s</string>
     <string name="pixie_reason_supplicant_socket">No se pudo crear el socket de wpa_supplicant (SELinux podría estar bloqueándolo)</string>
     <string name="pixie_reason_no_m3_data">No hay datos suficientes para ejecutar el ataque Pixie Dust</string>
     <string name="pixie_reason_pbc_only">Este router solo admite WPS por botón físico (PBC); no acepta PIN, así que Pixie Dust no puede funcionar en él.</string>
-    <string name="pixie_reason_assoc_rejected">El AP rechazó la asociación repetidamente. Puede estar aplicando un bloqueo temporal: espera unos minutos y reintenta.</string>
+    <string name="pixie_reason_assoc_rejected">El AP rechazó la asociación repetidamente (timeout=assoc/auth). Suele ser un bloqueo temporal o un filtro del router: espera unos minutos y reintenta.</string>
+    <string name="pixie_reason_no_response">El AP no responde al wps_reg (sin asociación ni M1): la señal es débil o el AP está fuera de alcance. Acércate al router y reintenta.</string>
     <string name="pixie_interface">Interfaz</string>
     <string name="pixie_wifi_disabled">Activa el WiFi para escanear redes</string>
     <string name="pixie_scan_failed">No se pudo iniciar el escaneo WiFi. Inténtalo de nuevo.</string>

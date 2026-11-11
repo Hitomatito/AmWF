@@ -224,6 +224,142 @@ class M3ParserTest {
     }
 
     @Test
+    fun `m1 m2 exchange captures four of six fields without e-hashes`() {
+        // Caso real de los logs de campo: el AP nunca llega a enviar M3, pero
+        // el supplicant ya volcó en M1/M2 el nonce del enrollee, las claves
+        // DH propias y ajenas y la AuthKey. Quedan 4/6 y faltan las E-Hashes.
+        val text = buildString {
+            appendLine("WPS: Enrollee Nonce - hexdump(len=16): ${hex(16, 1)}")
+            appendLine("WPS: DH Private Key - hexdump(len=192): ${hex(192, 2)}")
+            appendLine("WPS: DH own Public Key - hexdump(len=192): ${hex(192, 3)}")
+            appendLine("WPS: DH peer Public Key - hexdump(len=192): ${hex(192, 4)}")
+            appendLine("WPS: DH shared key - hexdump(len=192): ${hex(192, 5)}")
+            appendLine("WPS: DHKey - hexdump(len=32): ${hex(32, 6)}")
+            appendLine("WPS: AuthKey - hexdump(len=32): ${hex(32, 7)}")
+            appendLine("WPS: Unexpected state (15) for receiving M1")
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Incomplete)
+        capture as M3Parser.M3Capture.Incomplete
+        assertEquals(4, capture.capturedCount)
+        assertEquals(listOf("E_HASH_1", "E_HASH_2"), capture.missing)
+    }
+
+    @Test
+    fun `aborts on timeout-auth association rejects as seen in field logs`() {
+        val text = buildString {
+            repeat(3) {
+                appendLine(
+                    "wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff " +
+                        "status_code=1 timeout=auth"
+                )
+            }
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Aborted)
+        assertEquals(
+            R.string.pixie_reason_assoc_rejected,
+            (capture as M3Parser.M3Capture.Aborted).reasonRes
+        )
+    }
+
+    @Test
+    fun `returns NoResponse when deadline expires without activity`() {
+        // Caso real (COPITO 5G): el AP nunca llega a generar actividad ni a
+        // rechazar asociación; la ventana vence sin ninguna línea de progreso
+        // (ni asociación, ni M1, ni WPS-FAIL, ni rechazos). Distinto de una
+        // cola drenada con EOF (supplicant terminado), que sigue siendo
+        // Incomplete para compatibilidad.
+        val text = buildString {
+            appendLine("wlan0: Starting AP scan for wildcard SSID")
+            appendLine("Scan requested (ret=0) - scan timeout 30 seconds")
+            appendLine("WPS: Order scan results with WPS provisioning rules")
+            appendLine("EAPOL: disable timer tick")
+        }
+        val queue = queueOf(text)
+
+        val capture = M3Parser.parse(lines = queue, timeoutMs = 0L)
+
+        assertTrue(capture is M3Parser.M3Capture.NoResponse)
+    }
+
+    @Test
+    fun `returns Incomplete for eof drained queue without activity`() {
+        // Cola agotada con EOF y sin actividad: el supplicant terminó antes
+        // de tiempo; se conserva el contrato clásico Incomplete.
+        val text = buildString {
+            appendLine("Scan requested (ret=0) - scan timeout 30 seconds")
+            appendLine("WPS: Order scan results with WPS provisioning rules")
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Incomplete)
+    }
+
+    @Test
+    fun `returns Incomplete when progress lines exist but fields missing`() {
+        // Hubo actividad real (asociación intentada o rechazada): no es un
+        // AP silencioso aunque falten los seis campos.
+        val text = buildString {
+            appendLine("wlan0: Trying to associate with aa:bb:cc:dd:ee:ff")
+            appendLine("wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1 timeout=auth")
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Incomplete)
+        assertEquals(0, (capture as M3Parser.M3Capture.Incomplete).capturedCount)
+    }
+
+    @Test
+    fun `shared tracker aborts across separate parse calls`() {
+        // Sin rastreador compartido cada parse() tolera 2 rechazos y la auditoría
+        // nunca aborta; con él, el tercero global corta la corrida.
+        val tracker = M3Parser.AssocRejectTracker()
+        val twoRejects = buildString {
+            repeat(2) {
+                appendLine(
+                    "wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff " +
+                        "status_code=1 timeout=auth"
+                )
+            }
+        }
+
+        val first = M3Parser.parse(
+            lines = queueOf(twoRejects),
+            timeoutMs = 2_000L,
+            assocRejectTracker = tracker
+        )
+        assertTrue(first is M3Parser.M3Capture.Incomplete)
+        assertEquals(2, tracker.count())
+        assertTrue(!tracker.exhausted())
+
+        val second = M3Parser.parse(
+            lines = queueOf(twoRejects),
+            timeoutMs = 2_000L,
+            assocRejectTracker = tracker
+        )
+        assertTrue(second is M3Parser.M3Capture.Aborted)
+        assertEquals(
+            R.string.pixie_reason_assoc_rejected,
+            (second as M3Parser.M3Capture.Aborted).reasonRes
+        )
+        assertTrue(tracker.exhausted())
+    }
+
+    private fun queueOf(text: String): LinkedBlockingQueue<String> {
+        val queue = LinkedBlockingQueue<String>()
+        text.lineSequence().forEach { queue.offer(it) }
+        queue.offer(M3Parser.END_OF_STREAM)
+        return queue
+    }
+
+    @Test
     fun `tolerates isolated association rejects`() {
         // Un rechazo puntual no debe abortar la auditoría.
         val text = buildString {

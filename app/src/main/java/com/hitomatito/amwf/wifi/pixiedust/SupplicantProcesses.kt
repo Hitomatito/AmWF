@@ -196,6 +196,10 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
         log: (String) -> Unit
     ): Boolean {
         log("[*] Waiting for wpa_supplicant socket: $socketPath ($timeoutMs ms)...")
+        // El supplicant tarda ~300-500 ms en crear el socket; comprobar de
+        // inmediato garantiza un chequeo inútil con su (attempt 1 siempre
+        // fallaba en los logs de campo). Se espera antes del primer test.
+        delay(300)
         val start = System.currentTimeMillis()
         val deadline = start + timeoutMs
         var attempts = 0

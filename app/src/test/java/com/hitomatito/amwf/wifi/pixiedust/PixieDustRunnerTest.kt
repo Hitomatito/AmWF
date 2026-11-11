@@ -409,6 +409,40 @@ class PixieDustRunnerTest {
     }
 
     @Test
+    fun `un AP que rechaza la asociación aborta antes de agotar las rondas`() = runTest {
+        // Caso real de los logs de campo (CHASKY/PATIO): el AP devuelve
+        // CTRL-EVENT-ASSOC-REJECT ... timeout=auth en cada intento. La auditoría
+        // debe cortar en la primera ronda en vez de repetir rondas a ciegas.
+        val supplicant = FakeSupplicant(
+            fixture = listOf(
+                "wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1 timeout=auth",
+                "wlan0: CTRL-EVENT-ASSOC-REJECT bssid=aa:bb:cc:dd:ee:ff status_code=1 timeout=auth"
+            )
+        )
+        val audit = FakeAuditLog()
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = supplicant,
+            audit = audit
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            disableWifiBeforeAttack = false
+        )
+
+        assertTrue(result is PixieDustResult.Failure)
+        // Con el fixture de 2 rechazos por ronda, el presupuesto global se
+        // agota en la ronda 2: la ronda 3 nunca llega a lanzar supplicant.
+        // Sin rastreador global cada parse() vería solo 2 rechazos y el
+        // ataque se agotaría en las 3 rondas (launchCount == 3).
+        assertEquals(2, supplicant.launchCount)
+        assertEquals(4, supplicant.sendWpsRegCount)
+        assertEquals(1, audit.calls.size)
+        assertTrue(audit.calls[0].result is PixieDustResult.Failure)
+    }
+
+    @Test
     fun `un AP que solo admite PBC aborta sin agotar las rondas`() = runTest {
         val supplicant = FakeSupplicant(
             fixture = listOf(

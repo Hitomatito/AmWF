@@ -68,6 +68,10 @@ internal class PixieDustRunner(
     // Nombre de interfaz alfanumérico simple (evita inyección).
     private val IFACE_REGEX = Regex("^[a-zA-Z0-9]+$")
 
+    // Intentos silenciosos (AP mudo, sin asociación ni M1) seguidos que
+    // cortan la auditoría: señal débil o fuera de alcance.
+    private val MAX_SILENT_ATTEMPTS = 2
+
     // Límites de tiempo y reintentos.
     private val MAX_ATTACK_ROUNDS = 3
     private val M3_CAPTURE_TIMEOUT_MS = 25_000L
@@ -192,6 +196,12 @@ internal class PixieDustRunner(
 
         var currentSupplicant: SupplicantProcesses.Handle? = null
 
+        // Rechazos de asociación acumulados a nivel de ataque (todas las
+        // rondas e intentos). Un AP que filtra la asociación nunca deja que
+        // un parse() individual llegue al umbral; el presupuesto global
+        // aborta antes de agotar rondas en `scan timeout` y timeouts.
+        val assocRejectTracker = M3Parser.AssocRejectTracker()
+
         try {
             stage(PixieDustStage.DISABLING_WIFI)
 
@@ -225,9 +235,15 @@ internal class PixieDustRunner(
             // Intentar capturar el M3 en varias rondas (frescas claves DH cada ronda).
             for (round in 1..MAX_ATTACK_ROUNDS) {
                 ensureActive()
+                if (assocRejectTracker.exhausted()) {
+                    log("[-] El AP rechazó la asociación repetidamente; no se inicia una nueva ronda")
+                    captureReason = captureReason
+                        ?: strings(R.string.pixie_reason_assoc_rejected, emptyArray())
+                    break
+                }
                 if (round > 1) {
                     log("[*] M3 capture failed in previous round, restarting supplicant for round $round/$MAX_ATTACK_ROUNDS")
-                    delay(1000)
+                    delay((1_000L * round).coerceAtMost(3_000L))
                 }
 
                 supplicant.stopAndFlush(currentSupplicant, rawOutput, ::log)
@@ -249,7 +265,8 @@ internal class PixieDustRunner(
                     interfaceName = interfaceName,
                     round = round,
                     log = ::log,
-                    rawOutput = rawOutput
+                    rawOutput = rawOutput,
+                    assocRejectTracker = assocRejectTracker
                 )
                 m3Data = attempt.data
                 m5m7 = attempt.m5m7
@@ -405,7 +422,8 @@ internal class PixieDustRunner(
         interfaceName: String,
         round: Int,
         log: (String) -> Unit,
-        rawOutput: StringBuilder
+        rawOutput: StringBuilder,
+        assocRejectTracker: M3Parser.AssocRejectTracker
     ): M3Attempt = coroutineScope {
         val maxAttempts = 3
         // El motivo final se muestra solo cuando fallan todas las rondas: el
@@ -413,12 +431,28 @@ internal class PixieDustRunner(
         val attemptsSoFar = round * maxAttempts
         var lastIncomplete: M3Parser.M3Capture.Incomplete? = null
         var anyRegAccepted = false
+        // Intentos silenciados seguidos (ninguna línea de progreso tras
+        // wps_reg): el AP está mudo (señal débil, fuera de alcance). Dos
+        // silencios consecutivos cortan la auditoría con el motivo real en
+        // vez de agotar los 9 intentos en timeouts de escaneo.
+        var consecutiveSilentAttempts = 0
 
         for (attempt in 1..maxAttempts) {
             ensureActive()
+            if (assocRejectTracker.exhausted()) {
+                log("[-] El AP agotó el presupuesto de rechazos de asociación; abortando la auditoría")
+                return@coroutineScope M3Attempt(
+                    data = null,
+                    failureReason = strings(R.string.pixie_reason_assoc_rejected, emptyArray()),
+                    m5m7 = null,
+                    terminal = true
+                )
+            }
             if (attempt > 1) {
                 log("[-] M3 incomplete, retrying wps_reg (attempt $attempt/$maxAttempts)...")
-                delay(1000)
+                // Backoff progresivo: reintentar inmediatamente solo sirve para
+                // acumular rechazos y timeouts de escaneo.
+                delay((750L * attempt).coerceAtMost(2_250L))
             }
 
             // Descartar líneas de la ronda anterior (p. ej. un WPS-FAIL que
@@ -433,7 +467,9 @@ internal class PixieDustRunner(
 
             if (!isWpsRegAccepted(regResult)) {
                 log("[-] wps_reg not accepted (exit=${regResult.exitCode}), retrying...")
-                delay(750)
+                // Backoff progresivo también aquí: la interfaz puede no estar
+                // lista todavía y martillearla no acelera nada.
+                delay((750L * attempt).coerceAtMost(2_000L))
                 continue
             }
             anyRegAccepted = true
@@ -446,6 +482,7 @@ internal class PixieDustRunner(
                 lines = handle.lines,
                 timeoutMs = M3_CAPTURE_TIMEOUT_MS,
                 cancelRequested = { !isActive },
+                assocRejectTracker = assocRejectTracker,
                 onLine = { line -> supplicant.recordLine(line, rawOutput, log) },
                 onM5M7 = { d ->
                     log("[*] WPS-M5/M7 captured: M5=${d.m5Enc?.length ?: 0} hex, M7=${d.m7Enc?.length ?: 0} hex")
@@ -456,8 +493,29 @@ internal class PixieDustRunner(
                 is M3Parser.M3Capture.Complete ->
                     return@coroutineScope M3Attempt(capture.data, null, capture.m5m7)
                 is M3Parser.M3Capture.Incomplete -> {
+                    consecutiveSilentAttempts = 0
                     lastIncomplete = capture
-                    log("[-] M3 capture incomplete: ${capture.capturedCount}/6, missing: ${capture.missing.joinToString()}")
+                    if (capture.missing.isEmpty()) {
+                        // Visto en campo: el usuario cancela dentro del dwell de
+                        // 4 s con los 6 campos ya capturados; la cancelación
+                        // devuelve Incomplete(6, []) y hay que dejar constancia
+                        // honesta: no es un fallo de captura.
+                        log("[-] M3 capture interrupted: 6/6 fields captured, but the attack was cancelled before pixiewps")
+                    } else {
+                        log("[-] M3 capture incomplete: ${capture.capturedCount}/6, missing: ${capture.missing.joinToString()}")
+                    }
+                }
+                is M3Parser.M3Capture.NoResponse -> {
+                    consecutiveSilentAttempts++
+                    log("[-] El AP no responde a wps_reg (ni asociación ni M1; ¿señal débil o fuera de alcance?)")
+                    if (consecutiveSilentAttempts >= MAX_SILENT_ATTEMPTS) {
+                        return@coroutineScope M3Attempt(
+                            data = null,
+                            failureReason = strings(R.string.pixie_reason_no_response, emptyArray()),
+                            m5m7 = null,
+                            terminal = true
+                        )
+                    }
                 }
                 is M3Parser.M3Capture.Failed -> {
                     // El AP abortó la sesión (p. ej. WPS bloqueado). Reintentar

@@ -106,6 +106,45 @@ object M3Parser {
     private const val MAX_ASSOC_REJECTS = 3
 
     /**
+     * Líneas que indican progreso real en la sesión WPS (aunque no completen
+     * los seis campos): el AP estuvo visible y hubo actividad. Si ninguna
+     * aparece en toda la ventana, el AP está mudo (señal débil, fuera de
+     * alcance o no responde a sondeos) y esperar más no cambia nada.
+     *
+     * Se excluyen "EAPOL" y "State:": aparecen durante los escaneos normales
+     * sin implicar progreso.
+     */
+    private val PROGRESS_MARKERS = listOf(
+        "Trying to associate",
+        "ASSOC",
+        "AUTH",
+        "Received M",
+        "WPS-FAIL"
+    )
+
+    /**
+     * Rastreador de rechazos de asociación compartido entre las rondas e
+     * intentos de una misma auditoría.
+     *
+     * [parse] por sí solo tolera [MAX_ASSOC_REJECTS] rechazos, pero un AP
+     * que rechaza la asociación en todos los intentos nunca llega a ese
+     * umbral dentro de una sola llamada (en los logs de campo se veían 3-4
+     * `CTRL-EVENT-ASSOC-REJECT` repartidos entre intentos): el ataque se
+     * agotaba en `scan timeout 30 seconds` hasta que el usuario cancelaba.
+     * Con este rastreador, el recuento es global por auditoría.
+     */
+    class AssocRejectTracker(private val limit: Int = MAX_ASSOC_REJECTS) {
+        private var count = 0
+
+        /** Registra un rechazo y devuelve el total acumulado. */
+        fun record(): Int = synchronized(this) { ++count }
+
+        fun exhausted(): Boolean = synchronized(this) { count >= limit }
+
+        fun count(): Int = synchronized(this) { count }
+    }
+
+    /**
      * Resultado del parseo del M3.
      */
     sealed class M3Capture {
@@ -134,6 +173,14 @@ object M3Parser {
         data class Aborted(
             @param:StringRes val reasonRes: Int
         ) : M3Capture()
+
+        /**
+         * La ventana venció sin que apareciera ninguna línea de progreso
+         * ([PROGRESS_MARKERS]): el AP nunca fue visible para este intento
+         * (señal débil, fuera de alcance o no responde a sondeos). Distinto
+         * de [Incomplete], que implica actividad sin campos completos.
+         */
+        object NoResponse : M3Capture()
     }
 
     /**
@@ -183,13 +230,19 @@ object M3Parser {
      * @param cancelRequested Función que retorna true si se debe cancelar.
      * @param onLine Callback opcional con cada línea leída (para logging).
      * @param onM5M7 Callback opcional cuando se capturan M5 y M7.
+     * @param assocRejectTracker Rastreador opcional compartido entre rondas e
+     * intentos. Si es null, los rechazos se cuentan solo dentro de esta
+     * llamada (comportamiento clásico). Si se pasa el mismo rastreador a
+     * varias llamadas, el presupuesto de [MAX_ASSOC_REJECTS] rechazos es
+     * global a toda la auditoría.
      */
     fun parse(
         lines: BlockingQueue<String>,
         timeoutMs: Long = 25_000L,
         cancelRequested: () -> Boolean = { false },
         onLine: ((String) -> Unit)? = null,
-        onM5M7: ((M5M7Capture) -> Unit)? = null
+        onM5M7: ((M5M7Capture) -> Unit)? = null,
+        assocRejectTracker: AssocRejectTracker? = null
     ): M3Capture {
         val fields = arrayOfNulls<String>(6)
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -199,7 +252,9 @@ object M3Parser {
         var bssid = ""
         var m5m7Notified = false
         var completeReturnAt = Long.MAX_VALUE
-        var assocRejects = 0
+        var localAssocRejects = 0
+        var progressSeen = false
+        var eofSeen = false
 
         // Los tres formatos de captura comparten esta comprobación: al sexto
         // campo se marca cuándo devolver el M3 completo.
@@ -218,9 +273,15 @@ object M3Parser {
 
             try {
                 val line = lines.poll(50L, TimeUnit.MILLISECONDS) ?: continue
-                if (line == END_OF_STREAM) break
+                if (line == END_OF_STREAM) {
+                    eofSeen = true
+                    break
+                }
                 if (line.isEmpty()) continue
                 onLine?.invoke(line)
+                if (!progressSeen && PROGRESS_MARKERS.any { line.contains(it) }) {
+                    progressSeen = true
+                }
 
                 // AP que solo acepta WPS por botón físico: no hay PIN que
                 // probar, así que reintentar o esperar los 25 s no aporta nada.
@@ -229,10 +290,11 @@ object M3Parser {
                 }
 
                 // Asociación rechazada una y otra vez: el AP no va a dejarnos
-                // completar el handshake en esta sesión.
+                // completar el handshake en esta sesión. Con rastreador
+                // compartido, el abort es global a toda la auditoría.
                 if (line.contains(ASSOC_REJECT_MARKER)) {
-                    assocRejects++
-                    if (assocRejects >= MAX_ASSOC_REJECTS) {
+                    val total = assocRejectTracker?.record() ?: ++localAssocRejects
+                    if (total >= MAX_ASSOC_REJECTS) {
                         return M3Capture.Aborted(R.string.pixie_reason_assoc_rejected)
                     }
                 }
@@ -308,6 +370,11 @@ object M3Parser {
             }
         }
 
+        // Una ventana entera sin ninguna línea de progreso significa que el AP
+        // nunca estuvo visible para este intento (COPITO 5G en campo: scans
+        // sin match), no que falten campos por capturar. El EOF con cola
+        // drenada es otra cosa (supplicant terminado antes de tiempo) y
+        // conserva el comportamiento clásico Incomplete.
         return if (counted == 6) {
             M3Capture.Complete(
                 data = M3Data(
@@ -320,6 +387,8 @@ object M3Parser {
                 ),
                 m5m7 = if (m5 != null && m7 != null) M5M7Capture(bssid, m5, m7) else null
             )
+        } else if (!progressSeen && !eofSeen) {
+            M3Capture.NoResponse
         } else {
             M3Capture.Incomplete(counted, missingFields(fields))
         }

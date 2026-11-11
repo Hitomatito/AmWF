@@ -176,14 +176,15 @@
     <string name="pixie_not_vulnerable">Target is not vulnerable to Pixie Dust (WPS PIN not found)</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant did not accept wps_reg. Possible causes: interface not ready, WPS disabled or WPS locked.</string>
     <!-- getQuantityString is unavailable in the runner's `strings` gateway (%2$d/6 fields is fixed): analyzed and ignored -->
-    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). Possible causes: weak signal, WPS disabled or WPS locked.</string>
+    <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). The AP did not complete the WPS handshake: weak signal, WPS locked or AP association filter.</string>
     <string name="pixie_reason_capture_failed">Could not capture M3.</string>
     <string name="pixie_reason_invalid_bssid">Invalid BSSID format: %1$s</string>
     <string name="pixie_reason_invalid_interface">Invalid interface name: %1$s</string>
     <string name="pixie_reason_supplicant_socket">wpa_supplicant socket was not created (SELinux may be blocking it)</string>
     <string name="pixie_reason_no_m3_data">Not enough data to run the Pixie Dust attack</string>
     <string name="pixie_reason_pbc_only">This router only supports WPS via the physical button (PBC); it does not accept a PIN, so Pixie Dust cannot work on it.</string>
-    <string name="pixie_reason_assoc_rejected">The AP rejected the association repeatedly. It may be applying a temporary block: wait a few minutes and try again.</string>
+    <string name="pixie_reason_assoc_rejected">The AP repeatedly rejected association (timeout=assoc/auth). Usually a temporary block or a router filter: wait a few minutes and try again.</string>
+    <string name="pixie_reason_no_response">The AP is not responding to wps_reg (no association, no M1): signal is weak or the AP is out of range. Move closer to the router and try again.</string>
     <string name="capability_full">Full monitor</string>
     <string name="capability_injection">Packet injection</string>
     <string name="capability_capture">Full capture</string>
