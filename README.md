@@ -20,7 +20,7 @@ AmWF turns a rooted Qualcomm Snapdragon phone into a WiFi analysis tool. Enable 
 No terminal. No scripts. No accounts.
 
 > [!IMPORTANT]
-> AmWF is a security research tool. Only audit networks you own or have explicit permission to test. See the [legal notice](DISCLAIMER_en.md).
+> AmWF is a security research tool. Only audit networks you own or have explicit permission to test. See the [legal notice](DISCLAIMER_en.md) ([versión en español](DISCLAIMER_es.md)).
 
 <div align="center">
   <img src="docs/screenshots/main-en.png" alt="AmWF main screen showing device compatibility, WiFi mode, and Pixie Dust audit controls" width="380">
@@ -28,6 +28,25 @@ No terminal. No scripts. No accounts.
 
 > [!NOTE]
 > Built for rooted Qualcomm Snapdragon devices running Android 7.0 or newer. Run **Verify compatibility** before enabling monitor mode.
+
+---
+
+## Documentation Index
+
+Explore our comprehensive technical and user documentation:
+
+| Document | Description |
+|---|---|
+| [📖 User Guide](docs/USER_GUIDE.md) | Step-by-step instructions for installation, permissions, monitor mode, Pixie Dust audits, and logs. |
+| [🏗️ Architecture & Design](docs/ARCHITECTURE.md) | Technical deep dive into Qualcomm `con_mode`, custom `wpa_supplicant`, M1–M3 extraction, and software patterns. |
+| [📱 Hardware Compatibility](docs/COMPATIBILITY.md) | Detailed SoC matrix (Snapdragon vs MediaTek/Exynos), Android 7–15 compatibility, and SELinux notes. |
+| [🔧 Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Diagnostic solutions for socket errors, missing binaries, association rejections, and WPS lockouts. |
+| [⚙️ Building & Compiling](docs/BUILDING.md) | Gradle CLI commands, JDK 21 / SDK setup, unit testing, lint, and native NDK rebuilds. |
+| [🤝 Contributing Guidelines](CONTRIBUTING.md) | Code architecture rules, Conventional Commits, testing requirements, and i18n conventions. |
+| [📦 Native Binaries Setup](BINARIES_SETUP.md) | Provenance, patch recipes, and build details for bundled ARM native tools. |
+| [🛡️ Security Policy](SECURITY.md) | Safe harbor, supported versions, and responsible vulnerability reporting. |
+
+---
 
 ## Why AmWF?
 
@@ -37,6 +56,8 @@ A WiFi audit usually means a laptop, a supported adapter, a terminal, and a stac
 - **No guesswork.** The compatibility check tells you what your hardware can do before you change anything.
 - **No leftover state.** WiFi is restored automatically when an audit ends.
 - **No accounts, no cloud.** The app has no Internet permission.
+
+---
 
 ## What you can do
 
@@ -82,35 +103,62 @@ Find out whether your routers' WPS can resist a Pixie Dust attack.
 > [!WARNING]
 > Audit logs may contain the WPS PIN and WPA key in plain text. Do not share them or upload them anywhere.
 
-## Quick start
+---
 
-1. Open AmWF and tap **Verify compatibility**.
+## Download & Installation
+
+1. **Download APK:** Grab the latest release APK from [GitHub Releases](https://github.com/Hitomatito/AmWF/releases/latest).
+2. **Install & Grant Root:** Install the APK on your Qualcomm device and grant Superuser access when prompted (Magisk, KernelSU, or APatch).
+3. **Location Services:** Ensure system Location (GPS) is turned ON and runtime permissions (`Nearby devices` / `Fine Location`) are granted for Wi-Fi scanning.
+
+---
+
+## Quick Start
+
+1. Open AmWF and tap **Verify compatibility** (**Verificar compatibilidad**).
 2. Enable **Monitor Mode** whenever you want to analyze your surroundings.
 3. Open **WPS Pixie Dust Audit**, pick a network, and let AmWF do the rest.
 
-## Built for your device
+---
 
-AmWF is designed for rooted Qualcomm Snapdragon devices running Android 7.0 or newer. It uses the phone's built-in WiFi adapter, so you do not need a dongle. The interface follows Material 3, is available in Spanish and English, and adapts to phone screens.
+## Developer Quick Start
 
-## Common questions
+AmWF is a single-module Gradle project (`:app`).
+
+```bash
+# Run unit tests
+./gradlew :app:testDebugUnitTest
+
+# Run Android Lint
+./gradlew :app:lintDebug
+
+# Assemble Debug APK
+./gradlew :app:assembleDebug
+```
+
+For detailed build instructions, signing options, and native binary compilation, see [docs/BUILDING.md](docs/BUILDING.md).
+
+---
+
+## Common Questions
 
 **Do I need root?**  
-Yes. Monitor mode and low-level WiFi control require root access. The guided check tells you whether your device is ready.
+Yes. Monitor mode and low-level WiFi control require root access (Magisk, KernelSU, or APatch). The guided check tells you whether your device is ready.
 
 **Which devices are supported?**  
-AmWF is built for Qualcomm Snapdragon devices. Run **Verify compatibility** to check capture, injection, and WiFi control on your specific phone.
+AmWF is built for Qualcomm Snapdragon devices. See the full [Hardware Compatibility Matrix](docs/COMPATIBILITY.md) for supported chipsets and technical details.
 
 **Does it need an external WiFi adapter?**  
-No. AmWF uses your phone's built-in WiFi adapter.
+No. AmWF uses your phone's built-in Qualcomm WiFi adapter.
 
 **Does it work on Android 13 and newer?**  
 Yes. Scanning nearby networks requires precise location on every Android version, plus the Nearby Wi-Fi Devices permission on Android 13 and newer.
 
 **Where does my data go?**  
-Nowhere. AmWF has no Internet permission. Diagnostics and audit logs stay on your device.
+Nowhere. AmWF has no Internet permission. Diagnostics and audit logs stay strictly on your device.
 
 **Is it legal to audit any network?**  
-No. Only audit networks you own or have explicit permission to test.
+No. Only audit networks you own or have explicit permission to test. See [DISCLAIMER_en.md](DISCLAIMER_en.md).
 
 ---
 
