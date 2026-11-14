@@ -25,6 +25,7 @@ import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.hitomatito.amwf.ShellExecutor.logE
 import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
@@ -118,8 +119,23 @@ class MainActivity : AppCompatActivity() {
             waitForCompatCheckInProgress()
         } else {
             showCompatNotVerified()
-            // El estado del modo WiFi es de solo lectura: mostrarlo siempre.
-            checkCurrentMode()
+            // Si la verificación anterior murió a mitad (la escritura de
+            // con_mode puede llevarse por delante la app en algunos
+            // dispositivos), aplicar antes la restauración pendiente y
+            // consultar el estado del radio una vez aplicado el resto.
+            lifecycleScope.launch {
+                val restored = withContext(Dispatchers.IO) {
+                    PendingCompatRestore.restoreIfPending(applicationContext)
+                }
+                if (restored) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.compat_restore_toast),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                checkCurrentMode()
+            }
         }
     }
 
@@ -259,6 +275,22 @@ class MainActivity : AppCompatActivity() {
                     }.also { cachedCompatResult = it }
                 }
                 applyCompatResult(result)
+            } catch (e: Exception) {
+                // Un fallo inesperado no debe tumbar la app: el radio ya se
+                // restauró en el finally de checkCompatibility(); aquí solo
+                // se refleja el error en la tarjeta. La verificación queda
+                // sin confirmar y el modo monitor sigue bloqueado.
+                logE(TAG, "Unexpected error during compatibility check", e)
+                setCompatTitleIcon(R.drawable.ic_close_circle, R.color.managed)
+                tvCompatTitle.text = getString(R.string.device_compatibility)
+                tvCompatStatus.text = getString(R.string.compat_check_unexpected_error)
+                tvCompatStatus.setTextColor(getColor(R.color.managed))
+                layoutDeviceInfo.visibility = View.GONE
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.compat_check_unexpected_error),
+                    Toast.LENGTH_LONG
+                ).show()
             } finally {
                 compatCheckInProgress = false
                 setVerifyButtonRunning(false)

@@ -171,6 +171,7 @@ class DiagnosticsCollector {
         prop(sb, "capabilities.canInject", caps.canInject?.toString() ?: "unverified")
         prop(sb, "capabilities.canCapture", caps.canCapture?.toString() ?: "unverified")
         prop(sb, "capabilities.isPassiveOnly", caps.isPassiveOnly.toString())
+        prop(sb, "capabilities.conModeWriteOk", caps.conModeWriteOk?.toString() ?: "unverified")
         if (result.issues.isEmpty()) {
             sb.appendLine("issues: none")
         } else {
