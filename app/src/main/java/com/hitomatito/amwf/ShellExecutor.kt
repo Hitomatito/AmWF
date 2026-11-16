@@ -11,6 +11,7 @@ import android.util.Log
 import com.hitomatito.amwf.diagnostics.AppLogger
 import java.io.BufferedReader
 import java.io.File
+import java.io.IOException
 import java.io.InputStreamReader
 
 /**
@@ -20,6 +21,14 @@ import java.io.InputStreamReader
 object ShellExecutor {
 
     private const val DEFAULT_TIMEOUT = 10000L
+
+    /**
+     * Escribir en con_mode dispara una recarga del driver WiFi que puede tardar
+     * ~10 s antes de devolver el control (visto en el issue #5 en un SM-S938B).
+     * El timeout genérico de 10 s daba lugar a una lectura interrumpida; estas
+     * escrituras necesitan margen.
+     */
+    internal const val CON_MODE_WRITE_TIMEOUT_MS = 30000L
 
     data class Result(val exitCode: Int, val output: String, val error: String)
 
@@ -58,8 +67,11 @@ object ShellExecutor {
             return Result(-1, "", e.message ?: "Unknown error")
         }
 
-        val output = StringBuilder()
-        val error = StringBuilder()
+        // StringBuffer: los hilos lectores pueden seguir activos cuando se
+        // devuelve el resultado si un nieto conservó la pipe (issue #5), así que
+        // el buffer debe ser seguro para append/toString concurrentes.
+        val output = StringBuffer()
+        val error = StringBuffer()
 
         val outputReader = BufferedReader(InputStreamReader(process.inputStream))
         val errorReader = BufferedReader(InputStreamReader(process.errorStream))
@@ -68,12 +80,8 @@ object ShellExecutor {
         // deadlock clásico (una pipe llena) y no pierden salida al terminar el
         // proceso, algo que el muestreo con ready() sí podía cortar. forEachLine
         // cierra el reader al llegar al final (sin fuga de descriptores).
-        val outputThread = Thread {
-            outputReader.forEachLine { output.appendLine(it) }
-        }
-        val errorThread = Thread {
-            errorReader.forEachLine { error.appendLine(it) }
-        }
+        val outputThread = Thread { drainLines(outputReader, output) }
+        val errorThread = Thread { drainLines(errorReader, error) }
         outputThread.isDaemon = true
         errorThread.isDaemon = true
         outputThread.start()
@@ -109,15 +117,50 @@ object ShellExecutor {
             process.destroyForciblyCompat()
         }
 
-        // Deja que los lectores lleguen a EOF (acotado; son daemon threads).
-        outputThread.join(1000)
-        errorThread.join(1000)
-        inputThread?.join(1000)
+        // Da un plazo corto y compartido a los lectores para que drenen lo que
+        // quede tras la salida del proceso. Si un nieto heredó la pipe, pueden
+        // seguir bloqueados en la lectura nativa: ni close() en el
+        // BufferedReader (toma el lock de readLine) ni close() en el stream
+        // crudo (no interrumpe un read() nativo en Linux) despiertan a este
+        // hilo de forma fiable. No se espera más: son daemon threads y los
+        // StringBuffer sincronizados no corrompen el resultado (issue #5).
+        val joinDeadlineNs = System.nanoTime() + 500L * 1_000_000L
+        fun remainingJoinMs(): Long =
+            ((joinDeadlineNs - System.nanoTime()) / 1_000_000L).coerceAtLeast(0L)
+
+        outputThread.joinQuietly(remainingJoinMs())
+        errorThread.joinQuietly(remainingJoinMs())
+        inputThread?.joinQuietly(remainingJoinMs())
 
         return if (timedOut) {
             Result(-1, output.toString().trim(), "Command timeout")
         } else {
             Result(process.exitValue(), output.toString().trim(), error.toString().trim())
+        }
+    }
+
+    /**
+     * Consume un stream hasta EOF. Cuando un comando agota el timeout se mata
+     * el proceso y las pipes se cierran desde otro hilo mientras readLine()
+     * está bloqueado: Android lanza InterruptedIOException. Sin este catch, la
+     * excepción no capturada en el thread daemon terminaba el proceso de la app
+     * (issue #5). Lo ya leído se conserva.
+     */
+    internal fun drainLines(reader: BufferedReader, sink: StringBuffer) {
+        try {
+            reader.forEachLine { sink.appendLine(it) }
+        } catch (_: IOException) {
+            // Cierre concurrente del pipe: salida parcial, sin crashing.
+        }
+    }
+
+    private fun Thread.joinQuietly(millis: Long) {
+        // Thread.join(0) espera indefinidamente, no devuelve enseguida.
+        if (millis <= 0) return
+        try {
+            join(millis)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
         }
     }
 

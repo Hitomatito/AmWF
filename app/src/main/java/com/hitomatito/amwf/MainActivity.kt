@@ -30,10 +30,15 @@ import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
 import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Decisión pura: sin verificación solo se permite desactivar o reintentar. */
+internal fun toggleEnabledForState(isCompatVerified: Boolean, mode: MonitorMode): Boolean =
+    isCompatVerified || mode != MonitorMode.MANAGED
 
 class MainActivity : AppCompatActivity() {
 
@@ -88,6 +93,11 @@ class MainActivity : AppCompatActivity() {
         // de lanzar un segundo test que volvería a cortar la WiFi.
         @Volatile
         private var compatCheckInProgress = false
+        // True mientras se aplica una restauración pendiente del check anterior;
+        // impide que un toque en "Verificar compatibilidad" interleavingue root
+        // commands con la restauración y borre el marcador a mitad.
+        @Volatile
+        private var pendingRestoreInProgress = false
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -110,21 +120,33 @@ class MainActivity : AppCompatActivity() {
         // tras recreate() por cambio de idioma) se reutiliza; si hay un test en
         // vuelo se espera; si no, se muestra el estado "sin verificar".
         val cached = cachedCompatResult
-        if (cached != null) {
-            Log.d(TAG, "Using cached compatibility result")
-            applyCompatResult(cached)
-        } else if (compatCheckInProgress) {
+        if (compatCheckInProgress) {
             // Ya hay una comprobación en vuelo (p. ej. recreate() durante el test):
-            // no relanzar el test, esperar el resultado que se está calculando.
+            // no relanzar el test ni tocar el radio; su finally hará la restauración.
             waitForCompatCheckInProgress()
         } else {
-            showCompatNotVerified()
-            // Si la verificación anterior murió a mitad (la escritura de
-            // con_mode puede llevarse por delante la app en algunos
-            // dispositivos), aplicar antes la restauración pendiente y
-            // consultar el estado del radio una vez aplicado el resto.
-            lifecycleScope.launch {
+            if (cached != null) {
+                Log.d(TAG, "Using cached compatibility result")
+                applyCompatResult(cached)
+            } else {
+                showCompatNotVerified()
+            }
+            // Si una verificación anterior murió a mitad (la escritura de
+            // con_mode puede llevarse por delante la app), aplicar la restauración
+            // pendiente también cuando hay un resultado en caché: el finally pudo
+            // fallar al encender el WiFi y el marcador seguir vivo.
+            applyPendingCompatRestore()
+        }
+    }
+
+    private fun applyPendingCompatRestore() {
+        if (pendingRestoreInProgress || compatCheckInProgress) return
+        pendingRestoreInProgress = true
+        btnVerifyCompatibility.isEnabled = false
+        lifecycleScope.launch {
+            try {
                 val restored = withContext(Dispatchers.IO) {
+                    if (compatCheckInProgress) return@withContext false
                     PendingCompatRestore.restoreIfPending(applicationContext)
                 }
                 if (restored) {
@@ -134,7 +156,10 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_LONG
                     ).show()
                 }
-                checkCurrentMode()
+                if (!compatCheckInProgress) checkCurrentMode()
+            } finally {
+                pendingRestoreInProgress = false
+                btnVerifyCompatibility.isEnabled = !compatCheckInProgress
             }
         }
     }
@@ -186,12 +211,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnVerifyCompatibility.setOnClickListener {
-            if (!compatCheckInProgress) {
+            if (!compatCheckInProgress && !pendingRestoreInProgress) {
                 checkDeviceCompatibility()
             }
         }
 
         btnToggle.setOnClickListener {
+            if (pendingRestoreInProgress) return@setOnClickListener
             when (currentMode) {
                 MonitorMode.MANAGED -> enableMonitorMode()
                 MonitorMode.MONITOR -> disableMonitorMode()
@@ -275,22 +301,25 @@ class MainActivity : AppCompatActivity() {
                     }.also { cachedCompatResult = it }
                 }
                 applyCompatResult(result)
+            } catch (e: CancellationException) {
+                // Un recreate() cancela esta coroutine. El bloque IO pudo escribir
+                // ya el resultado en la caché; borrarla aquí lo perdería y la
+                // nueva Activity repetiría el check (que corta el WiFi).
+                throw e
             } catch (e: Exception) {
                 // Un fallo inesperado no debe tumbar la app: el radio ya se
                 // restauró en el finally de checkCompatibility(); aquí solo
-                // se refleja el error en la tarjeta. La verificación queda
-                // sin confirmar y el modo monitor sigue bloqueado.
+                // se refleja el error en la tarjeta. Se invalida también el
+                // resultado cacheado: un éxito anterior no puede sobrevivir a
+                // una verificación fallida (dejaría el modo monitor abierto).
                 logE(TAG, "Unexpected error during compatibility check", e)
-                setCompatTitleIcon(R.drawable.ic_close_circle, R.color.managed)
+                cachedCompatResult = null
+                isCompatVerified = false
+                isDeviceCompatible = false
                 tvCompatTitle.text = getString(R.string.device_compatibility)
                 tvCompatStatus.text = getString(R.string.compat_check_unexpected_error)
-                tvCompatStatus.setTextColor(getColor(R.color.managed))
                 layoutDeviceInfo.visibility = View.GONE
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.compat_check_unexpected_error),
-                    Toast.LENGTH_LONG
-                ).show()
+                showCompatError(getString(R.string.compat_check_unexpected_error))
             } finally {
                 compatCheckInProgress = false
                 setVerifyButtonRunning(false)
@@ -347,6 +376,15 @@ class MainActivity : AppCompatActivity() {
         tvCompatTitle.setCompoundDrawablesRelative(drawable, null, null, null)
     }
 
+    // Presentación compartida de un fallo de compatibilidad: icono, color,
+    // bloqueo del toggle y aviso al usuario.
+    private fun showCompatError(message: String) {
+        setCompatTitleIcon(R.drawable.ic_close_circle, R.color.managed)
+        tvCompatStatus.setTextColor(getColor(R.color.managed))
+        setToggleEnabled(false)
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
     // Estado inicial cuando el usuario aún no ha solicitado la comprobación: la
     // tarjeta muestra "sin verificar" y el resultado detallado queda oculto.
     private fun showCompatNotVerified() {
@@ -385,7 +423,6 @@ class MainActivity : AppCompatActivity() {
             checkCurrentMode()
         } else {
             tvStatus.text = getString(R.string.device_incompatible)
-            setToggleEnabled(false)
             btnToggle.text = getString(R.string.not_compatible)
             btnToggle.setBackgroundColor(getColor(R.color.unknown))
 
@@ -393,7 +430,7 @@ class MainActivity : AppCompatActivity() {
                 ?.let { it.suggestion.ifBlank { it.message } }
                 ?: getString(R.string.not_compatible)
             tvInfo.text = reason
-            Toast.makeText(this@MainActivity, reason, Toast.LENGTH_LONG).show()
+            showCompatError(reason)
         }
     }
 
@@ -550,6 +587,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Sin verificación previa solo se permite desactivar (recuperación) o
+    // reintentar la detección; activar monitor sigue bloqueado aunque updateUI
+    // o setLoading terminen con el toggle visualmente habilitado.
+    private fun toggleEnabledByState(): Boolean =
+        toggleEnabledForState(isCompatVerified, currentMode)
+
     // Centraliza el estado del boton: ademas de bloquear el click, lo atenua
     // visualmente para que el usuario vea que no esta disponible.
     private fun setToggleEnabled(enabled: Boolean) {
@@ -558,7 +601,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setLoading(loading: Boolean, isActivating: Boolean = true) {
-        setToggleEnabled(!loading)
+        setToggleEnabled(!loading && toggleEnabledByState())
         if (loading) {
             btnToggle.text = if (isActivating) getString(R.string.activating) else getString(R.string.deactivating)
         }
@@ -582,21 +625,21 @@ class MainActivity : AppCompatActivity() {
                 btnToggle.text = getString(R.string.disable_monitor)
                 btnToggle.setBackgroundColor(getColor(R.color.managed))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                setToggleEnabled(true)
+                setToggleEnabled(toggleEnabledByState())
             }
             MonitorMode.MANAGED -> {
                 tvStatus.setTextColor(getColor(R.color.managed))
                 btnToggle.text = getString(R.string.enable_monitor)
                 btnToggle.setBackgroundColor(getColor(R.color.monitor_active))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                setToggleEnabled(true)
+                setToggleEnabled(toggleEnabledByState())
             }
             MonitorMode.UNKNOWN -> {
                 tvStatus.setTextColor(getColor(R.color.unknown))
                 btnToggle.text = getString(R.string.retry)
                 btnToggle.setBackgroundColor(getColor(R.color.unknown))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
-                setToggleEnabled(true)
+                setToggleEnabled(toggleEnabledByState())
             }
         }
     }

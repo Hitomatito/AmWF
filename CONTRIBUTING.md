@@ -71,6 +71,13 @@ When submitting pull requests, you must uphold the following core architectural 
 - Never substitute Android's system `wpa_supplicant`. Its `CONFIG_ANDROID_LOG` truncates M3 Diffie-Hellman keys to 32 bytes, which renders Pixie Dust calculation impossible.
 - `NativeBinaries` is the single source of truth for binary paths and status checks. Always invoke `NativeBinaries.ensure(context)` before checking for missing binaries.
 
+### 3.6 Compatibility Check & Radio Restore
+- `DeviceCompatibilityChecker` disables WiFi before the `con_mode` tests and restores the radio once in `finally`. Perform exactly one `con_mode` test write in `testCapabilities` (plus the restore of the original value); never add a separate write test — its extra driver transition caused the crash in issue #5.
+- `PendingCompatRestore` (`CompatCheckRestore.kt`) stores the marker with synchronous commits, records `radio_touched` before `svc wifi disable`, and saves the original `con_mode`. Validate the stored path/value with `isValidConModeRestoreTarget` before interpolating them into root commands.
+- On the next launch `MainActivity` applies a pending restore even with a cached compatibility result (only skipping while a check is in flight), confirms the WiFi state with `dumpsys` and retries, and keeps the marker on failure. `restoreIfPending` returns success only when the restore actually succeeded. Both the check's write and the pending restore go through `writeConMode`, which parses `echo $?` instead of trusting `su -c`'s exit code.
+- An unverified check keeps MANAGED visually locked (`toggleEnabledForState`); MONITOR (disable) and UNKNOWN (retry) stay actionable.
+- `ShellExecutor` reader threads must swallow `IOException` (killing a timed-out process closes the pipes from another thread). `con_mode` writes use `CON_MODE_WRITE_TIMEOUT_MS` (30 s) because the driver reload can block ~10 s; reader accumulators are synchronized because a descendant may keep the pipe open after `exec` returns.
+
 ---
 
 ## 4. Git & Commit Guidelines

@@ -7,6 +7,7 @@
 
 package com.hitomatito.amwf
 
+import com.hitomatito.amwf.ShellExecutor.CON_MODE_WRITE_TIMEOUT_MS
 import com.hitomatito.amwf.ShellExecutor.execRoot
 import com.hitomatito.amwf.ShellExecutor.logD
 import com.hitomatito.amwf.ShellExecutor.logE
@@ -101,7 +102,10 @@ class MonitorModeManager {
 
             // Step 3: Write con_mode=4 (monitor mode)
             logD(TAG, "Writing con_mode=4 to $conModePath...")
-            val writeResult = execRoot("echo 4 > $conModePath")
+            val writeResult = execRoot(
+                "echo 4 > $conModePath",
+                timeoutMs = CON_MODE_WRITE_TIMEOUT_MS
+            )
             if (writeResult.exitCode != 0 || writeResult.error.contains("denied") || 
                 writeResult.error.contains("readonly") || writeResult.error.contains("Permission") ||
                 writeResult.error.contains("Read-only file system") ||
@@ -186,7 +190,10 @@ class MonitorModeManager {
             val conModePath = resolveConModePath()
             if (conModePath != null) {
                 logD(TAG, "Writing con_mode=0 to $conModePath...")
-                val writeResult = execRoot("echo 0 > $conModePath")
+                val writeResult = execRoot(
+                    "echo 0 > $conModePath",
+                    timeoutMs = CON_MODE_WRITE_TIMEOUT_MS
+                )
                 if (writeResult.exitCode != 0) {
                     logW(TAG, "Warning writing con_mode=0: ${writeResult.error}")
                 }
@@ -239,14 +246,7 @@ class MonitorModeManager {
      * after changing con_mode. This ensures the WiFi radio is properly
      * activated in managed mode.
      */
-    private fun restartWifiService() {
-        // Disable WiFi
-        execRoot("svc wifi disable")
-        Thread.sleep(1000)
-        // Re-enable WiFi
-        execRoot("svc wifi enable")
-        Thread.sleep(1000)
-    }
+    private fun restartWifiService() = restartWifi()
 
     fun getCurrentMode(): MonitorResult {
         logD(TAG, "=== getCurrentMode() ===")

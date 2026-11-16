@@ -9,7 +9,6 @@ package com.hitomatito.amwf
 
 import android.annotation.SuppressLint
 import android.content.Context
-import androidx.core.content.edit
 import com.hitomatito.amwf.ShellExecutor.execNoRoot
 import com.hitomatito.amwf.ShellExecutor.execRoot
 import com.hitomatito.amwf.ShellExecutor.logD
@@ -88,88 +87,6 @@ fun resolveConModePath(): String? {
         }
     }
     return null
-}
-
-/**
- * Valida que una pareja (ruta, valor) de restauración pendiente proviene del
- * propio descubrimiento del proceso: una ruta [con_mode] de sysfs y un valor
- * numérico de modo (0, 4, ...). El marcador se escribe en las SharedPreferences
- * del paquete, pero se valida igualmente antes de interpolarlo en un comando
- * root.
- */
-internal fun isValidConModeRestoreTarget(path: String?, value: String?): Boolean =
-    path != null && value != null &&
-        Regex("^/sys/module/[A-Za-z0-9_.-]+/parameters/con_mode$").matches(path) &&
-        Regex("^[0-9]{1,2}$").matches(value)
-
-/**
- * Extrae el código de salida que imprime el `echo \$?` que sigue a la
- * escritura de con_mode. El exit code de `su -c` es siempre el del último
- * comando, así que el valor útil es el último número de la salida.
- */
-internal fun parseEchoedExitCode(output: String): Int? =
-    output.lineSequence()
-        .map { it.trim() }
-        .lastOrNull { it.toIntOrNull() != null }
-        ?.toIntOrNull()
-
-/**
- * Marca de "verificación interrumpida". El check apaga la WiFi y luego escribe
- * con_mode; en algunos dispositivos la escritura conmuta el driver y la
- * aplicación puede morir antes de que el `finally` de [DeviceCompatibilityChecker.checkCompatibility]
- * restaure el radio. El marcador persiste en SharedPreferences para que el
- * siguiente arranque de la app aplique la restauración pendiente.
- */
-internal object PendingCompatRestore {
-    private const val TAG = "CompatChecker"
-    private const val PREFS_NAME = "compat_check_state"
-    private const val KEY_PENDING = "pending_restore"
-    private const val KEY_CON_MODE_PATH = "con_mode_path"
-    private const val KEY_CON_MODE_VALUE = "con_mode_value"
-
-    fun markPending(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
-            clear()
-            putBoolean(KEY_PENDING, true)
-        }
-    }
-
-    fun recordConMode(context: Context, path: String, originalValue: String) {
-        val value = originalValue.trim()
-        if (!isValidConModeRestoreTarget(path, value)) return
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
-            putString(KEY_CON_MODE_PATH, path)
-            putString(KEY_CON_MODE_VALUE, value)
-        }
-    }
-
-    fun clear(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
-            clear()
-        }
-    }
-
-    /**
-     * Aplica la restauración pendiente: con_mode al valor original (si se
-     * conoce) y radio reiniciado, como hace el `finally` de la verificación.
-     * Devuelve true si había una restauración pendiente que procesar. Debe
-     * llamarse en un hilo IO: ejecuta comandos root.
-     */
-    fun restoreIfPending(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (!prefs.getBoolean(KEY_PENDING, false)) return false
-        val conModePath = prefs.getString(KEY_CON_MODE_PATH, null)
-        val conModeValue = prefs.getString(KEY_CON_MODE_VALUE, null)
-        logD(TAG, "Applying pending compat-check restore")
-        if (isValidConModeRestoreTarget(conModePath, conModeValue)) {
-            execRoot("echo $conModeValue > $conModePath 2>/dev/null")
-        }
-        execRoot("svc wifi disable")
-        Thread.sleep(1000)
-        execRoot("svc wifi enable")
-        clear(context)
-        return true
-    }
 }
 
 data class CompatibilityResult(
@@ -418,9 +335,13 @@ class DeviceCompatibilityChecker(private val context: Context) {
             // Toda salida (éxito, fallo o excepción) debe restaurar el radio:
             // el check lo apaga antes de escribir con_mode. Si el proceso muere
             // antes de este punto, el marcador permite al siguiente arranque
-            // aplicar la restauración.
-            restoreWifiAfterCheck(phase)
-            PendingCompatRestore.clear(context)
+            // aplicar la restauración. Solo se borra el marcador cuando el
+            // radio quedó realmente encendido; si no, se conserva para reintentar.
+            if (restoreWifiAfterCheck(phase)) {
+                PendingCompatRestore.clear(context)
+            } else {
+                logW(TAG, "WiFi restore not confirmed; keeping pending marker for next launch")
+            }
         }
     }
 
@@ -434,6 +355,9 @@ class DeviceCompatibilityChecker(private val context: Context) {
         // realmente compatible como no compatible. El radio se restaura
         // una única vez al final de checkCompatibility().
         phase(5, R.string.phase_wifi_disable)
+        // Marcar antes de tocar el radio: si el proceso muere entre el disable
+        // y el siguiente guardado, el marcador ya debe pedir el reinicio (issue #5).
+        PendingCompatRestore.markRadioTouched(context)
         execRoot("svc wifi disable")
         Thread.sleep(1000)
 
@@ -520,21 +444,14 @@ class DeviceCompatibilityChecker(private val context: Context) {
      * which disrupts WiFi. A single restart here ensures WiFi is
      * properly restored after all tests finish, including exceptional exits.
      */
-    private fun restoreWifiAfterCheck(phase: (Int, Int) -> Unit) {
+    private fun restoreWifiAfterCheck(phase: (Int, Int) -> Unit): Boolean {
         try {
             phase(95, R.string.phase_restore)
         } catch (_: Exception) {
             // El progreso es best-effort; nunca debe impedir la restauración.
         }
         logD(TAG, "Restarting WiFi service to restore managed mode after all tests")
-        try {
-            execRoot("svc wifi disable")
-            Thread.sleep(1000)
-            execRoot("svc wifi enable")
-            Thread.sleep(1000)
-        } catch (e: Exception) {
-            logE(TAG, "Failed to restart WiFi service: ${e.message}", e)
-        }
+        return restartAndEnsureWifiEnabled()
     }
 
     private fun detectRoot(): RootInfo {
@@ -782,18 +699,10 @@ class DeviceCompatibilityChecker(private val context: Context) {
         // Única escritura de con_mode del check: si el proceso muere aquí, el
         // marcador permite restaurar en el siguiente arranque. El código de
         // salida real lo imprime el último `echo`, porque el exit code de
-        // `su -c` es siempre el de ese echo.
-        phase(88, R.string.phase_conmode_write)
-        val writeResult = execRoot("echo 4 > $conModePath 2>/dev/null; echo \$?")
-        val echoedCode = parseEchoedExitCode(writeResult.output)
-        val conModeWriteOk = writeResult.exitCode == 0 && echoedCode == 0
-        if (!conModeWriteOk) {
-            logW(
-                TAG,
-                "con_mode write failed: exit=${writeResult.exitCode}, code=$echoedCode, " +
-                    "error=${writeResult.error}"
-            )
-        }
+        // `su -c` es siempre el de ese echo. El hito va antes de la escritura
+        // y por debajo del 80 (binarios) para que el progreso nunca retroceda.
+        phase(55, R.string.phase_conmode_write)
+        val conModeWriteOk = writeConMode(conModePath, "4")
 
         try {
             Thread.sleep(500)
@@ -824,13 +733,19 @@ class DeviceCompatibilityChecker(private val context: Context) {
                 isPassiveOnly = true, tested = false, conModeWriteOk = conModeWriteOk
             )
         } finally {
-            // CRITICAL: Always restore original mode, even if tests fail
-            logD(TAG, "Restoring con_mode to original value: $originalMode")
-            try {
-                execRoot("echo $originalMode > $conModePath 2>/dev/null")
-                Thread.sleep(300)
-            } catch (e: Exception) {
-                logE(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
+            // CRITICAL: Always restore original mode, even if tests fail. Si la
+            // lectura falló no se escribe nada: `echo > con_mode` dejaría un
+            // valor inválido en sysfs.
+            if (isValidConModeRestoreTarget(conModePath, originalMode)) {
+                logD(TAG, "Restoring con_mode to original value: $originalMode")
+                try {
+                    writeConMode(conModePath, originalMode)
+                    Thread.sleep(300)
+                } catch (e: Exception) {
+                    logE(TAG, "CRITICAL: Failed to restore con_mode: ${e.message}", e)
+                }
+            } else {
+                logW(TAG, "No valid original con_mode value; skipping restore")
             }
             // Note: WiFi service is restarted ONCE at the end of checkCompatibility(),
             // after ALL tests complete, to avoid redundant restarts.
