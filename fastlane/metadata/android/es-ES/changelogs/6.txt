@@ -1,0 +1,1 @@
+v2.0.2: La verificación de compatibilidad ya no se congela cuando con_mode se bloquea; la restauración pendiente sobrevive si se cierra el proceso y confirma que el WiFi vuelve. Las auditorías Pixie Dust descartan puntos de acceso sin respuesta antes y restauran el WiFi; el idioma elegido se aplica en todas las pantallas.

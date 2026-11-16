@@ -1,0 +1,1 @@
+v2.0.2: Compatibility check no longer crashes when con_mode blocks; the pending restore survives a process death and confirms WiFi is back. Pixie Dust audits abort hopeless APs early and restore WiFi reliably; the selected language is applied on every screen.
