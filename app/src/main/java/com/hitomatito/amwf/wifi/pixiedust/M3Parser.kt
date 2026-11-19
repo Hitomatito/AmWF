@@ -32,6 +32,14 @@ import java.util.concurrent.TimeUnit
  */
 object M3Parser {
 
+    /** pixiewps espera 12 hex sin los ':' del BSSID de AmWF. */
+    fun normalizeBssid(bssid: String): String? {
+        val compact = bssid.replace(":", "").uppercase()
+        if (compact.length != 12) return null
+        if (compact.any { it !in '0'..'9' && it !in 'A'..'F' }) return null
+        return compact
+    }
+
     /** Los seis campos del M3, en orden de aparición esperado. */
     private enum class M3Field(val label: String) {
         ENROLLEE_NONCE("Enrollee Nonce"),
@@ -212,7 +220,7 @@ object M3Parser {
 
         fun toPixiewpsMode3Args(m3: M3Data): String =
             "--mode 3 ${m3.toPixiewpsArgs()}" +
-                    (bssid.takeIf { it.isNotBlank() }?.let { " --e-bssid $it" } ?: "") +
+                    (normalizeBssid(bssid)?.let { " --e-bssid $it" } ?: "") +
                     (m5Enc?.let { " -5 $it" } ?: "") +
                     (m7Enc?.let { " -7 $it" } ?: "")
     }

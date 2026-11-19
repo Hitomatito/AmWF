@@ -182,6 +182,8 @@
     <string name="pixie_stop_attack">Stop audit</string>
     <string name="pixie_interface">Interface</string>
     <string name="pixie_not_vulnerable">Target is not vulnerable to Pixie Dust (WPS PIN not found)</string>
+    <string name="pixie_reason_retry_new_data">pixiewps suggested a weakness but could not confirm it after several attempts with fresh data. You can run the audit again later.</string>
+    <string name="pixie_reason_pixiewps_error">pixiewps could not process the capture (unsupported arguments or setup). Run the audit again with a fresh capture.</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant did not accept wps_reg. Possible causes: interface not ready, WPS disabled or WPS locked.</string>
     <!-- getQuantityString is unavailable in the runner's `strings` gateway (%2$d/6 fields is fixed): analyzed and ignored -->
     <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">Could not capture M3 after %1$d attempts (%2$d/6 fields; missing: %3$s). The AP did not complete the WPS handshake: weak signal, WPS locked or AP association filter.</string>

@@ -66,7 +66,8 @@ internal object PixieProcessSupport {
      * La subshell de fondo ejecuta un único comando (`sh -c ...`) a propósito:
      * el `sh` de Android guarda una copia del descriptor de stdout en un fd
      * alto cuando la subshell encadena varios comandos, y esa copia mantiene
-     * el pipe abierto hasta que termina el `sleep` (60 s en pixiewps). Al
+     * el pipe abierto hasta que termina el `sleep` (el timeout configurado
+     * del plan de pixiewps). Al
      * exec'ear un solo comando no queda ningún shell que retenga el pipe, así
      * que el consumidor recibe EOF en cuanto muere el proceso vigilado.
      */

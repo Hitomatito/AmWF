@@ -34,17 +34,14 @@ internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway 
      * Construye el comando de línea para pixiewps a partir de los campos M3 capturados.
      */
     override fun buildCommand(
+        bssid: String,
         m3: M3Parser.M3Data,
         m5m7: M3Parser.M5M7Capture?
-    ): String {
+    ): PixiewpsInvocation {
         val pixiePath = NativeBinaries.resolveBinaryPath(context, NativeBinaries.pixiewpsAssetName())
-        return if (m5m7 != null && m5m7.hasBoth()) {
-            "$pixiePath ${m5m7.toPixiewpsMode3Args(m3)}"
-        } else {
-            // `--force` solo aplica al modo 3 (bruteforce de fechas); en el
-            // modo estándar se pasa únicamente el juego de claves M3.
-            "$pixiePath ${m3.toPixiewpsArgs()}"
-        }
+        val plan = PixieModeSelector.select(m3, m5m7, bssid)
+        val args = if (!plan.isExplicit) m3.toPixiewpsArgs() else plan.args
+        return PixiewpsInvocation("$pixiePath $args", plan)
     }
 
     /**
@@ -52,12 +49,15 @@ internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway 
      * devuelve el PIN encontrado (o null si no hubo o si falló).
      */
     override suspend fun run(
-        command: String,
+        invocation: PixiewpsInvocation,
         rawOutput: StringBuilder,
         log: (String) -> Unit
     ): String? {
         coroutineContext.ensureActive()
-        log("[*] pixiewps started")
+        val command = invocation.command
+        val timeoutSeconds = invocation.plan.timeoutSeconds
+        val timeoutMs = timeoutSeconds * 1000L
+        log("[*] pixiewps started (timeout ${timeoutSeconds}s)")
         val binaryPath = NativeBinaries.resolveBinaryPath(
             context,
             NativeBinaries.pixiewpsAssetName()
@@ -72,14 +72,14 @@ internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway 
             // marcador final garantiza que el bucle termine en cuanto pixiewps
             // muere, aunque el shell retenga el pipe de stdout.
             val watchedCommand =
-                "($command & ${PixieProcessSupport.pidWatchdogTail(TIMEOUT_SECONDS)}; " +
+                "($command & ${PixieProcessSupport.pidWatchdogTail(timeoutSeconds)}; " +
                     "echo ${PixieProcessSupport.PIXIEWPS_DONE_MARKER})"
             val running = Runtime.getRuntime().exec(arrayOf("su", "-c", watchedCommand))
             process = running
             PixieProcessSupport.drainStream(running.inputStream, stdout)
             PixieProcessSupport.drainStream(running.errorStream, stderr)
 
-            val deadline = System.currentTimeMillis() + TIMEOUT_MS
+            val deadline = System.currentTimeMillis() + timeoutMs
             var timedOut = false
             while (true) {
                 coroutineContext.ensureActive()
@@ -102,7 +102,7 @@ internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway 
             }
 
             if (timedOut) {
-                log("[-] pixiewps timed out after ${TIMEOUT_SECONDS}s; killing it")
+                log("[-] pixiewps timed out after ${timeoutSeconds}s; killing it")
                 stop(running, binaryPath)
             } else {
                 val exited = try {
@@ -155,8 +155,6 @@ internal class PixiewpsExecutor(private val context: Context) : PixiewpsGateway 
 
     companion object {
         private const val TAG = "PixiewpsExecutor"
-        private const val TIMEOUT_SECONDS = 60
-        private const val TIMEOUT_MS = TIMEOUT_SECONDS * 1000L
         private const val PROCESS_EXIT_WAIT_MS = 2_000L
     }
 }

