@@ -87,6 +87,17 @@ tcpdump -i wlan0 -s 0 -w /sdcard/capture.pcap
 2. The driver resets `con_mode=0`, restoring normal station (client) operation.
 3. System Wi-Fi is reconnected automatically.
 
+### 3.4 Monitor Channels & External Tools
+A Wi-Fi radio can only listen on **one channel at a time**. When monitor mode turns on, AmWF tunes the radio to your selected channel (the chip selector under the status card, default 2.4 GHz channel 6, persisted across sessions) so the interface actually receives frames: Qualcomm drivers bring up a monitor *detuned*, which would otherwise see zero traffic.
+
+The division of responsibility is deliberate:
+
+- **AmWF owns mode and power** (`con_mode`, interface state) and picks the initial channel.
+- **Your analysis tools own channel policy from then on.** Hopping tools such as `airodump-ng wlan0` re-tune the radio themselves; if they do, the chips in AmWF only show the last channel *AmWF* applied, not the live one — this is expected and not a bug.
+- **Targeted attacks want a fixed channel.** Before `aireplay-ng`, `mdk4` or a handshake capture against a specific AP, select that AP's channel with the chips and leave it alone; a hopping background app would break association tracking and ACK timing.
+
+AmWF intentionally offers **no auto-hopping mode**: two controllers racing to set the channel corrupt each other's captures, and standard tools already do frequency hopping correctly. If you want to sweep every channel, run your own tool's loop (`airodump-ng`, or `iw dev wlan0 set channel N` from a script) — it needs no cooperation from AmWF.
+
 ---
 
 ## 4. WPS Pixie Dust Security Audit

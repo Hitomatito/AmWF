@@ -85,6 +85,12 @@ When submitting pull requests, you must uphold the following core architectural 
 - Keep `PixieDustRunner` free of `Context`: supplicant, pixiewps, PSK extraction, binaries, audit log, shell and WiFi state come from the gateways in `PixieDustGateways.kt`. `cleanup()` is `@Synchronized` and `cleanupDone`-guarded because `cancel()` and `finally` can both call it.
 - Mode selection is a pure function (`PixieModeSelector`): force `--mode` only from captured M5/M7, never from the BSSID OUI — an OUI identifies the router vendor, not the chipset. `PixieDiagnosisParser` converts pixiewps output into an action; a `MIGHT_BE_VULNERABLE` diagnosis drives a retry with fresh data, and `PixiewpsPlan.timeoutSeconds` travels with the command so the watchdog and the deadline cannot diverge. Do not add `--force`: it scans the whole epoch and takes around 30 minutes on real hardware; retry with fresh data instead. Known limitation: the M5/M7 path still passes `-5/-7`, but pixiewps also requires `--r-nonce`, which AmWF does not capture.
 
+### 3.8 Monitor Channel Tuning
+- QCACLD monitors come up **detuned**: `con_mode=4` + `type monitor` leave the PHY on no frequency, so the radio receives 0 frames even surrounded by networks (the historical false "Captura no verificada"). `enableMonitorMode` and `testRealCapture` must `iw dev <iface> set channel N`; the channel policy (`MonitorChannelPolicy`) is pure and unit-tested.
+- Tune verification is the `iw set channel` exit code, not `iw dev info`: many drivers do not echo the channel line while in monitor, so tcpdump/rx counters are the final judge (`isTuneAccepted` accepts a silent report, rejects a mismatch).
+- `testRealCapture` never runs `svc wifi enable`: `ip link up` powers the radio with the framework off, and enabling it mid-test lets the system supplicant claim and reversion the interface. The rotation starts at the persisted channel and absorbs transient `-1`/`EBUSY` from the driver reload after the `con_mode` write.
+- The user's channel is persisted via `MonitorChannelStore` (default 6, synchronous commits) and exposed through the monitor chip selector (`CHANNEL_CHIP_IDS` map, visible only in MONITOR). DFS channels are deliberately excluded: the driver performs no radar detection.
+
 ---
 
 ## 4. Git & Commit Guidelines
