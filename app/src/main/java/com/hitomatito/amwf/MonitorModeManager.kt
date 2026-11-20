@@ -52,7 +52,7 @@ class MonitorModeManager {
         }
     }
 
-    fun enableMonitorMode(): MonitorResult {
+    fun enableMonitorMode(preferredChannel: WifiChannel): MonitorResult {
         logD(TAG, "=== enableMonitorMode() ===")
         
         if (!isRootAvailable()) {
@@ -127,6 +127,11 @@ class MonitorModeManager {
             execRoot("ip link set $interfaceName up")
             Thread.sleep(500)
 
+            // Step 5: Sintonizar la radio. En QCACLD el monitor nace SIN canal
+            // (con_mode=4 solo habilita la entrega de frames crudos); sin esta
+            // sintonía la interfaz "en monitor" no recibe nada.
+            val tune = tuneMonitorRadio(interfaceName, preferredChannel)
+
             val mode = getCurrentState()
 
             when (mode) {
@@ -134,13 +139,17 @@ class MonitorModeManager {
                     type = MonitorMode.MONITOR,
                     statusRes = R.string.monitor_mode_on,
                     infoRes = infoResFor(mode),
-                    infoArg = interfaceName
+                    infoArg = interfaceName,
+                    tunedChannel = tune.tunedChannel,
+                    iwAvailable = tune.iwAvailable
                 )
                 else -> MonitorResult(
                     type = MonitorMode.UNKNOWN,
                     statusRes = R.string.error_unknown,
                     infoRes = infoResFor(mode),
-                    infoArg = interfaceName
+                    infoArg = interfaceName,
+                    tunedChannel = tune.tunedChannel,
+                    iwAvailable = tune.iwAvailable
                 )
             }
         } catch (e: Exception) {
@@ -262,6 +271,12 @@ class MonitorModeManager {
 
         return try {
             val mode = getCurrentState()
+            val iwInfoText = execRoot(MonitorChannelPolicy.infoCommand(interfaceName)).output
+            val tuned = if (mode == MonitorMode.MONITOR) {
+                MonitorChannelPolicy.parseTunedChannel(iwInfoText)
+            } else {
+                null
+            }
 
             val statusRes = when (mode) {
                 MonitorMode.MONITOR -> R.string.monitor_mode_on
@@ -269,11 +284,18 @@ class MonitorModeManager {
                 MonitorMode.UNKNOWN -> R.string.status_unknown
             }
 
+            // "iw dev info" puede devolver vacio transitoriamente (recarga del
+            // driver) aun con iw instalado: la presencia se comprueba con
+            // command -v, no con la salida del comando anterior.
+            val iwAvailable = mode != MonitorMode.MONITOR || hasIwTool()
+
             MonitorResult(
                 type = mode,
                 statusRes = statusRes,
                 infoRes = infoResFor(mode),
-                infoArg = interfaceName
+                infoArg = interfaceName,
+                tunedChannel = tuned,
+                iwAvailable = iwAvailable
             )
         } catch (e: Exception) {
             logE(TAG, "Exception in getCurrentMode: ${e.message}", e)
@@ -284,6 +306,49 @@ class MonitorModeManager {
             )
         }
     }
+
+    /**
+     * Re-sintoniza el canal del monitor sin tocar con_mode (selector de la UI).
+     * Debe llamarse en un hilo IO.
+     */
+    internal fun retuneMonitor(target: WifiChannel): TuneOutcome {
+        logD(TAG, "=== retuneMonitor(ch ${target.number}) ===")
+        interfaceName = findWifiInterface()
+        return tuneMonitorRadio(interfaceName, target)
+    }
+
+    /**
+     * Aplica `iw dev <iface> set type monitor` (si hace falta) y el canal
+     * [target]. Muchos drivers QCACLD no reflejan el canal en `iw dev info`
+     * durante el monitor, asi que la verificacion primaria es el codigo de
+     * salida de `iw set channel`; si el driver si lo reporta, debe coincidir.
+     */
+    private fun tuneMonitorRadio(iface: String, target: WifiChannel): TuneOutcome {
+        val iwInfo = execRoot(MonitorChannelPolicy.infoCommand(iface)).output
+        if (iwInfo.isBlank() && !hasIwTool()) {
+            logW(TAG, "iw not available; monitor radio stays untuned")
+            return TuneOutcome(iwAvailable = false)
+        }
+        if (!MonitorChannelPolicy.reportsMonitorType(iwInfo)) {
+            logD(TAG, "Interface not in monitor type; applying set type monitor")
+            execRoot(MonitorChannelPolicy.setMonitorTypeCommand(iface))
+            Thread.sleep(300)
+        }
+        logD(TAG, "Tuning $iface to channel ${target.number} (${target.frequencyMHz} MHz)")
+        val setResult = execRoot(MonitorChannelPolicy.setChannelCommand(iface, target))
+        val reported = MonitorChannelPolicy.parseTunedChannel(
+            execRoot(MonitorChannelPolicy.infoCommand(iface)).output
+        )
+        return if (MonitorChannelPolicy.isTuneAccepted(setResult.exitCode, reported, target)) {
+            TuneOutcome(iwAvailable = true, tunedChannel = reported ?: target)
+        } else {
+            logW(TAG, "Tune rejected: exit=${setResult.exitCode} iw reports ${reported?.number ?: "nothing"}")
+            TuneOutcome(iwAvailable = true)
+        }
+    }
+
+    private fun hasIwTool(): Boolean =
+        execRoot("command -v iw 2>/dev/null").output.isNotBlank()
 
     /**
      * Verifies that the interface reached the desired state (UP or DOWN).
@@ -348,7 +413,19 @@ data class MonitorResult(
     // Recurso localizado para la linea de informacion. Si es 0 se usa `info`.
     val infoRes: Int = 0,
     // Argumento de formato (%1$s) para infoRes (normalmente el nombre de la interfaz).
-    val infoArg: String = ""
+    val infoArg: String = "",
+    // Canal del monitor que la app pudo aplicar (o null si no hay `iw` o el
+    // driver rechazo la sintonia). Cuando `iw dev info` no refleja el canal,
+    // es el canal intentado, no una lectura verificada.
+    val tunedChannel: WifiChannel? = null,
+    // false => el dispositivo no tiene `iw`: la radio no puede sintonizarse.
+    val iwAvailable: Boolean = true
+)
+
+/** Resultado de intentar sintonizar el monitor. */
+internal data class TuneOutcome(
+    val iwAvailable: Boolean,
+    val tunedChannel: WifiChannel? = null
 )
 
 enum class MonitorMode {

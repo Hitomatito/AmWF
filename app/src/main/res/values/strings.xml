@@ -70,6 +70,11 @@
     <string name="info_mode_monitor">%1$s en modo monitor (802.11 radiotap)</string>
     <string name="info_mode_managed">%1$s en modo gestionado (managed)</string>
     <string name="info_mode_unknown">No se pudo determinar el estado de %1$s</string>
+    <string name="channel_header">Canal de escucha (monitor)</string>
+    <string name="channel_applied">Canal %1$d sintonizado</string>
+    <string name="channel_apply_failed">No se pudo sintonizar el canal %1$d</string>
+    <string name="channel_tune_warn">Monitor activado, pero la radio no se pudo sintonizar: es probable que no vea ningun trafico. Pruebe otro canal en los chips.</string>
+    <string name="channel_untunable">Radio sin sintonizar: sin iw no se puede fijar el canal y la captura no está garantizada</string>
     <string name="error_root_required">Se requiere acceso root</string>
     <string name="error_root_check_failed">Fallo al comprobar el acceso root</string>
     <string name="error_wifi_interface_down">No se pudo desactivar la interfaz WiFi</string>

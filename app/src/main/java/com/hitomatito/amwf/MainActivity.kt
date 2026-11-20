@@ -24,6 +24,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.hitomatito.amwf.ShellExecutor.logE
 import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
@@ -39,6 +41,22 @@ import kotlinx.coroutines.withContext
 /** Decisión pura: sin verificación solo se permite desactivar o reintentar. */
 internal fun toggleEnabledForState(isCompatVerified: Boolean, mode: MonitorMode): Boolean =
     isCompatVerified || mode != MonitorMode.MANAGED
+
+/** Fuente única chip ↔ canal del selector de monitor (espejo del patrón de filtros de Pixie). */
+internal val CHANNEL_CHIP_IDS: Map<Int, Int> = mapOf(
+    1 to R.id.chipChannel1,
+    6 to R.id.chipChannel6,
+    11 to R.id.chipChannel11,
+    36 to R.id.chipChannel36,
+    40 to R.id.chipChannel40,
+    44 to R.id.chipChannel44,
+    48 to R.id.chipChannel48
+)
+
+internal fun chipIdForChannel(number: Int?): Int? = number?.let(CHANNEL_CHIP_IDS::get)
+
+internal fun channelForChipId(chipId: Int?): Int? =
+    CHANNEL_CHIP_IDS.entries.firstOrNull { it.value == chipId }?.key
 
 class MainActivity : AppCompatActivity() {
 
@@ -62,12 +80,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowSysfs: View
     private lateinit var rowCapabilities: View
     private lateinit var rowPixieDustBinaries: View
-
+    private lateinit var tvChannelHeader: TextView
+    private lateinit var chipGroupChannels: ChipGroup
+    private lateinit var tvChannelHint: TextView
+    
     private val monitorManager by lazy { MonitorModeManager() }
     private val compatibilityChecker by lazy { DeviceCompatibilityChecker(applicationContext) }
     private val diagnosticsCollector by lazy { DiagnosticsCollector() }
     
     private var currentMode = MonitorMode.UNKNOWN
+    // Canal verificado en iw dev info durante el monitor; null = sin sintonizar.
+    private var currentTunedChannel: WifiChannel? = null
+    // false solo cuando el dispositivo no tiene `iw`: no hay forma de sintonizar.
+    private var currentIwAvailable = true
+    // Serializa los retunes: dos taps seguidos intercalarían comandos `iw` en
+    // Dispatchers.IO y el radio quedaría en un canal distinto al mostrado.
+    private var retuneInProgress = false
+    // Evita que un check() programático de los chips re-dispare el retune.
+    private var updatingChannelChips = false
     private var isDeviceCompatible = false
     // True solo después de que el usuario haya ejecutado la comprobación en esta
     // sesión de proceso (o haya resultado cacheado). Sin verificar, la activación
@@ -185,6 +215,85 @@ class MainActivity : AppCompatActivity() {
         rowSysfs = findViewById(R.id.rowSysfs)
         rowCapabilities = findViewById(R.id.rowCapabilities)
         rowPixieDustBinaries = findViewById(R.id.rowPixieDustBinaries)
+        tvChannelHeader = findViewById(R.id.tvChannelHeader)
+        chipGroupChannels = findViewById(R.id.chipGroupChannels)
+        tvChannelHint = findViewById(R.id.tvChannelHint)
+        setupChannelChips()
+    }
+
+    private fun setupChannelChips() {
+        // El numero es local-neutro; los 5 GHz se marcan para no confundirlos.
+        for (channel in MonitorChannelPolicy.SELECTABLE) {
+            val chipId = chipIdForChannel(channel.number) ?: continue
+            findViewById<Chip>(chipId).text =
+                if (channel.is5GHz) "${channel.number}\u00B75G" else channel.number.toString()
+        }
+        chipGroupChannels.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (updatingChannelChips) return@setOnCheckedStateChangeListener
+            // Igual que btnToggle/btnVerify: ningun comando root interleavea con
+            // el check de compatibilidad o una restauracion pendiente (el check
+            // rota canales y mide captura sobre esta misma interfaz).
+            if (compatCheckInProgress || pendingRestoreInProgress || retuneInProgress) {
+                renderChannelSelector()
+                return@setOnCheckedStateChangeListener
+            }
+            val number = channelForChipId(checkedIds.firstOrNull()) ?: return@setOnCheckedStateChangeListener
+            val target = MonitorChannelPolicy.findChannel(number) ?: return@setOnCheckedStateChangeListener
+            if (target.number == currentTunedChannel?.number) return@setOnCheckedStateChangeListener
+            applyMonitorChannel(target)
+        }
+    }
+
+    private fun applyMonitorChannel(target: WifiChannel) {
+        retuneInProgress = true
+        lifecycleScope.launch {
+            try {
+                val outcome = withContext(Dispatchers.IO) {
+                    monitorManager.retuneMonitor(target).also {
+                        if (it.tunedChannel != null) {
+                            MonitorChannelStore.save(applicationContext, target)
+                        }
+                    }
+                }
+                if (outcome.tunedChannel != null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.channel_applied, target.number),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.channel_apply_failed, target.number),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                currentTunedChannel = outcome.tunedChannel
+                currentIwAvailable = outcome.iwAvailable
+            } finally {
+                retuneInProgress = false
+                renderChannelSelector()
+            }
+        }
+    }
+
+    private fun renderChannelSelector() {
+        val visible = MonitorChannelPolicy.selectorVisible(currentMode)
+        tvChannelHeader.visibility = if (visible) View.VISIBLE else View.GONE
+        chipGroupChannels.visibility = if (visible) View.VISIBLE else View.GONE
+        // El hint avisa solo cuando el dispositivo no puede sintonizar en
+        // absoluto (sin `iw`); con `iw` el exit code ya se notifico por toast.
+        tvChannelHint.visibility =
+            if (visible && !currentIwAvailable) View.VISIBLE else View.GONE
+        if (!visible) return
+        updatingChannelChips = true
+        val checkedChipId = chipIdForChannel(
+            currentTunedChannel?.number ?: MonitorChannelStore.load(applicationContext).number
+        )
+        if (checkedChipId != null) {
+            chipGroupChannels.check(checkedChipId)
+        }
+        updatingChannelChips = false
     }
 
     private fun setupWindowInsets() {
@@ -554,7 +663,7 @@ class MainActivity : AppCompatActivity() {
             tvInfo.text = ""
 
             val result = withContext(Dispatchers.IO) {
-                monitorManager.enableMonitorMode()
+                monitorManager.enableMonitorMode(MonitorChannelStore.load(applicationContext))
             }
 
             currentMode = result.type
@@ -563,6 +672,15 @@ class MainActivity : AppCompatActivity() {
 
             if (result.type == MonitorMode.UNKNOWN) {
                 Toast.makeText(this@MainActivity, getString(result.statusRes), Toast.LENGTH_LONG).show()
+            }
+            // Monitor activo pero con la sintonia rechazada: la radio escucha en
+            // vacio (0 frames) y las herramientas externas no verian nada.
+            if (result.type == MonitorMode.MONITOR && result.tunedChannel == null) {
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.channel_tune_warn),
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -608,6 +726,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUI(result: MonitorResult) {
+        currentTunedChannel = result.tunedChannel
+        currentIwAvailable = result.iwAvailable
         tvStatus.text = getString(result.statusRes)
         tvInfo.text = if (result.infoRes != 0) {
             if (result.infoArg.isNotEmpty()) {
@@ -642,5 +762,6 @@ class MainActivity : AppCompatActivity() {
                 setToggleEnabled(toggleEnabledByState())
             }
         }
+        renderChannelSelector()
     }
 }

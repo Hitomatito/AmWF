@@ -216,6 +216,11 @@
     <string name="info_mode_monitor">%1$s in monitor mode (802.11 radiotap)</string>
     <string name="info_mode_managed">%1$s in managed mode</string>
     <string name="info_mode_unknown">Could not determine the state of %1$s</string>
+    <string name="channel_header">Listening channel (monitor)</string>
+    <string name="channel_applied">Channel %1$d tuned</string>
+    <string name="channel_apply_failed">Could not tune channel %1$d</string>
+    <string name="channel_tune_warn">Monitor enabled, but the radio could not be tuned: you may see no traffic. Try another channel in the chips.</string>
+    <string name="channel_untunable">Radio untuned: without iw the channel cannot be set and capture is not guaranteed</string>
     <string name="error_root_required">Root access required</string>
     <string name="error_root_check_failed">Failed to check root access</string>
     <string name="error_wifi_interface_down">Could not bring the WiFi interface down</string>

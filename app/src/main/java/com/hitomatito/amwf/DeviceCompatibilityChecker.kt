@@ -610,51 +610,99 @@ class DeviceCompatibilityChecker(private val context: Context) {
         out.contains("can't open") || out.contains("No such device")
 
     /**
-     * Prueba REAL de captura: con con_mode=4 y la interfaz arriba, comprueba que
-     * de verdad llegan frames 802.11 al sistema.
-     * - Con tcpdump: captura frames reales (-c 2) y cuenta el resumen "packets captured".
-     * - Sin tcpdump: usa el contador rx_packets del kernel como prueba de recepción
-     *   de frames (menos informativo que tcpdump pero mide recepción real, no un flag).
+     * Prueba REAL de captura: con con_mode=4, la interfaz arriba y la radio
+     * SINTONIZADA, comprueba que de verdad llegan frames 802.11 al sistema.
+     *
+     * En QCACLD el monitor nace sin canal: sin `iw dev <iface> set channel N`
+     * el PHY no escucha y tcpdump reporta 0 packets incluso rodeado de redes
+     * (falso "Captura no verificada"). Por eso la prueba rota los canales 2.4 GHz
+     * de [MonitorChannelPolicy.CAPTURE_ROTATION], un `timeout` corto por canal.
+     * - Con tcpdump: cuenta el resumen "packets captured" de cada ventana.
+     * - Sin tcpdump: usa el contador rx_packets del kernel sobre un canal
+     *   sintonizado (menos informativo pero mide recepción real, no un flag).
+     *
+     * No enciende el framework de WiFi: `ip link up` alimenta la radio y un
+     * `svc wifi enable` a mitad del test dejaría al supplicant del sistema
+     * reclamar la interfaz y reversionarla a managed.
      */
     private fun testRealCapture(interfaceName: String): Boolean {
-        // El check arranca con el radio apagado (svc wifi disable) para poder escribir
-        // con_mode sin cliente asociado. Para medir captura REAL hay que encender el
-        // radio; se apaga de nuevo al salir para no alterar el resto del check.
-        execRoot("svc wifi enable")
-        Thread.sleep(1000)
-
-        try {
-            // Sube la interfaz; si hay `iw`, la pasa a type monitor (radiotap). Si `iw`
-            // no existe, con con_mode=4 el driver igualmente entrega frames 802.11.
-            execRoot("ip link set $interfaceName up 2>&1")
-            if (toolAvailable("iw")) {
-                execRoot("iw dev $interfaceName set type monitor 2>&1")
-            }
-            Thread.sleep(500)
-
-            if (toolAvailable("tcpdump")) {
-                val out = execRoot("timeout 4 tcpdump -i $interfaceName -c 2 -n 2>&1")
-                logD(TAG, "tcpdump capture: exit=${out.exitCode} out=${out.output.take(200)}")
-                if (outputHasToolError(out.output)) return false
-                val captured = countCapturedPackets(out.output)
-                logD(TAG, if (captured > 0) "Real capture OK: $captured frames"
-                           else "Real capture: 0 frames")
-                return captured > 0
-            }
-
-            // Fallback sin tcpdump: lectura del contador de RX del kernel.
-            val before = execRoot(
-                "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
-            ).output.trim().toLongOrNull() ?: -1L
-            Thread.sleep(3000)
-            val after = execRoot(
-                "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
-            ).output.trim().toLongOrNull() ?: -1L
-            logD(TAG, "rx_packets delta: $before -> $after")
-            return before >= 0 && after > before
-        } finally {
-            execRoot("svc wifi disable")
+        // Sube la interfaz; si hay `iw`, la pasa a type monitor (radiotap). Si `iw`
+        // no existe, con con_mode=4 el driver igualmente entrega frames 802.11,
+        // aunque sin poder garantizar sintonía (una sola ventana sin canal).
+        execRoot("ip link set $interfaceName up 2>&1")
+        val hasIw = toolAvailable("iw")
+        if (hasIw) {
+            execRoot("iw dev $interfaceName set type monitor 2>&1")
         }
+        Thread.sleep(500)
+
+        val rotation =
+            if (hasIw) MonitorChannelPolicy.rotationFor(MonitorChannelStore.load(context))
+            else emptyList()
+
+        if (toolAvailable("tcpdump")) {
+            if (rotation.isEmpty()) {
+                return tcpdumpCaptureProbe(interfaceName, null)
+            }
+            for (channel in rotation) {
+                if (!tuneCaptureChannel(interfaceName, channel)) continue
+                if (tcpdumpCaptureProbe(interfaceName, channel)) return true
+            }
+            logD(TAG, "Real capture: 0 frames in ${rotation.size} channels")
+            return false
+        }
+
+        // Fallback sin tcpdump: el contador RX solo vale si la radio está afinada;
+        // se rota hasta que un canal sea aceptado (los `-1`/EBUSY transitorios
+        // post-escritura de con_mode no deben derivar en un falso negativo).
+        // Sin `iw` no hay forma de sintonizar y la medición no garantiza captura.
+        if (rotation.isNotEmpty() && rotation.none { tuneCaptureChannel(interfaceName, it) }) {
+            logD(TAG, "rx fallback: no channel accepted; measuring an untuned radio")
+        }
+        val before = execRoot(
+            "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
+        ).output.trim().toLongOrNull() ?: -1L
+        Thread.sleep(3000)
+        val after = execRoot(
+            "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
+        ).output.trim().toLongOrNull() ?: -1L
+        logD(TAG, "rx_packets delta: $before -> $after")
+        return before >= 0 && after > before
+    }
+
+    /** Ventana corta de tcpdump en el canal (success = al menos un frame real). */
+    private fun tcpdumpCaptureProbe(
+        interfaceName: String,
+        channel: WifiChannel?
+    ): Boolean {
+        val out = execRoot("timeout 2 tcpdump -i $interfaceName -c 1 -n 2>&1")
+        logD(TAG, "tcpdump capture ch=${channel?.number ?: "-"}: " +
+            "exit=${out.exitCode} out=${out.output.take(200)}")
+        if (outputHasToolError(out.output)) return false
+        val captured = countCapturedPackets(out.output)
+        if (captured > 0) {
+            logD(TAG, "Real capture OK: ch=${channel?.number ?: "-"} $captured frames")
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Sintoniza el canal y lo valida con [MonitorChannelPolicy.isTuneAccepted]:
+     * el exit code de `iw set channel` manda (muchos drivers QCACLD no reflejan
+     * el canal en `iw dev info` durante el monitor; tcpdump es el juez final).
+     */
+    private fun tuneCaptureChannel(interfaceName: String, channel: WifiChannel): Boolean {
+        val setResult = execRoot(MonitorChannelPolicy.setChannelCommand(interfaceName, channel))
+        val reported = MonitorChannelPolicy.parseTunedChannel(
+            execRoot(MonitorChannelPolicy.infoCommand(interfaceName)).output
+        )
+        if (!MonitorChannelPolicy.isTuneAccepted(setResult.exitCode, reported, channel)) {
+            logD(TAG, "Cannot tune channel ${channel.number} " +
+                "(exit=${setResult.exitCode}, iw reports ${reported?.number ?: "nothing"}); skipping")
+            return false
+        }
+        return true
     }
 
     /**
