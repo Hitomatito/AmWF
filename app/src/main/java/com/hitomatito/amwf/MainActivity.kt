@@ -93,9 +93,6 @@ class MainActivity : AppCompatActivity() {
     private var currentTunedChannel: WifiChannel? = null
     // false solo cuando el dispositivo no tiene `iw`: no hay forma de sintonizar.
     private var currentIwAvailable = true
-    // Serializa los retunes: dos taps seguidos intercalarían comandos `iw` en
-    // Dispatchers.IO y el radio quedaría en un canal distinto al mostrado.
-    private var retuneInProgress = false
     // Evita que un check() programático de los chips re-dispare el retune.
     private var updatingChannelChips = false
     private var isDeviceCompatible = false
@@ -128,6 +125,13 @@ class MainActivity : AppCompatActivity() {
         // commands con la restauración y borre el marcador a mitad.
         @Volatile
         private var pendingRestoreInProgress = false
+        // Serializa los retunes de los chips con todo lo demas que toca la radio
+        // (toggle, check de compatibilidad, restauracion pendiente): dos taps
+        // seguidos intercalarían comandos root en Dispatchers.IO y el radio
+        // quedaría en un canal distinto al mostrado. Es static @Volatile como las
+        // otras dos banderas para sobrevivir a un recreate() a mitad del retune.
+        @Volatile
+        private var retuneInProgress = false
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -245,8 +249,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyMonitorChannel(target: WifiChannel) {
-        retuneInProgress = true
         lifecycleScope.launch {
+            // La bandera se levanta DENTRO del cuerpo: si el scope se cancela
+            // entre el click y el primer despacho (destroy/recreate rapidos),
+            // el bloque nunca corre y una bandera statica puesta desde el
+            // listener quedaría trabada hasta matar el proceso. Dos clicks en
+            // el mismo iterador del loop principal no existen (cada tap es su
+            // propio evento), así que el listener sigue serializando.
+            retuneInProgress = true
             try {
                 val outcome = withContext(Dispatchers.IO) {
                     monitorManager.retuneMonitor(target).also {
@@ -320,13 +330,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnVerifyCompatibility.setOnClickListener {
-            if (!compatCheckInProgress && !pendingRestoreInProgress) {
+            if (!compatCheckInProgress && !pendingRestoreInProgress && !retuneInProgress) {
                 checkDeviceCompatibility()
             }
         }
 
         btnToggle.setOnClickListener {
-            if (pendingRestoreInProgress) return@setOnClickListener
+            // Ningun comando root interleavea con un retune en curso, con el
+            // check de compatibilidad o con una restauracion pendiente (las
+            // tres operacciones togglean la misma radio en Dispatchers.IO).
+            if (pendingRestoreInProgress || compatCheckInProgress || retuneInProgress) {
+                return@setOnClickListener
+            }
             when (currentMode) {
                 MonitorMode.MANAGED -> enableMonitorMode()
                 MonitorMode.MONITOR -> disableMonitorMode()
