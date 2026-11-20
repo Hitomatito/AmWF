@@ -73,6 +73,26 @@ class MonitorChannelPolicyTest {
     }
 
     @Test
+    fun `la rotacion de captura jamas empieza ni mide en 5 GHz`() {
+        // Un canal 5 GHz persistido NO debe liderar la rotacion del test de
+        // captura: en una banda 5 GHz vacia la ventana diria "no hay captura"
+        // aunque el radio este sano (el falso negativo detector de radio muda).
+        val rotation = MonitorChannelPolicy.captureRotationFor(MonitorChannelPolicy.findChannel(36))
+        assertEquals(listOf(1, 6, 11), rotation.map { it.number })
+        assertTrue(rotation.none { it.is5GHz })
+    }
+
+    @Test
+    fun `la rotacion de captura respeta un preferido 2_4 y no repite`() {
+        val rotation = MonitorChannelPolicy.captureRotationFor(MonitorChannelPolicy.findChannel(11))
+        assertEquals(listOf(11, 1, 6), rotation.map { it.number })
+        assertEquals(
+            MonitorChannelPolicy.CAPTURE_ROTATION,
+            MonitorChannelPolicy.captureRotationFor(null)
+        )
+    }
+
+    @Test
     fun `los canales elegibles evitan dfs`() {
         val five = MonitorChannelPolicy.SELECTABLE.filter { it.is5GHz }.map { it.number }
         assertEquals(listOf(36, 40, 44, 48), five)

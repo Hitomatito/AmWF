@@ -51,6 +51,16 @@ internal object MonitorChannelPolicy {
     fun rotationFor(preferred: WifiChannel?): List<WifiChannel> =
         (listOfNotNull(preferred) + CAPTURE_ROTATION).distinctBy { it.number }
 
+    /**
+     * Rotacion para el test de captura. El canal preferido solo abre la rotacion
+     * si es 2.4 GHz: ahi los beacon/probe nunca faltan y una ventana sin frames
+     * si prueba algo; en una banda 5 GHz vacia la misma ventana diria "no hay
+     * captura" aunque el radio este sano, que es justo el falso negativo que esta
+     * rotacion existe para evitar.
+     */
+    fun captureRotationFor(preferred: WifiChannel?): List<WifiChannel> =
+        rotationFor(preferred?.takeIf { !it.is5GHz })
+
     fun infoCommand(iface: String): String = "iw dev $iface info 2>/dev/null"
 
     fun setMonitorTypeCommand(iface: String): String = "iw dev $iface set type monitor 2>&1"

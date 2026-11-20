@@ -615,11 +615,17 @@ class DeviceCompatibilityChecker(private val context: Context) {
      *
      * En QCACLD el monitor nace sin canal: sin `iw dev <iface> set channel N`
      * el PHY no escucha y tcpdump reporta 0 packets incluso rodeado de redes
-     * (falso "Captura no verificada"). Por eso la prueba rota los canales 2.4 GHz
-     * de [MonitorChannelPolicy.CAPTURE_ROTATION], un `timeout` corto por canal.
+     * (falso "Captura no verificada"). Por eso la prueba rota canales con una
+     * ventana corta por canal ([MonitorChannelPolicy.captureRotationFor]: el
+     * preferido solo abre la rotacion si es 2.4 GHz; en 5 GHz una ventana sin
+     * frames no probaria nada).
      * - Con tcpdump: cuenta el resumen "packets captured" de cada ventana.
-     * - Sin tcpdump: usa el contador rx_packets del kernel sobre un canal
-     *   sintonizado (menos informativo pero mide recepción real, no un flag).
+     * - Sin tcpdump: mide una ventana de 3 s de rx_packets del kernel en cada
+     *   canal aceptado (menos informativo pero mide recepcion real, no un flag).
+     *   No se mide cuando `iw` existe pero rechaza todos los canales: una radio
+     *   sin sintonizar da 0 por construccion y eso no es un resultado, es un
+     *   fallo del metodo. Sin `iw` no hay rotacion posible: queda la unica
+     *   ventana heuristica sobre la radio tal cual.
      *
      * No enciende el framework de WiFi: `ip link up` alimenta la radio y un
      * `svc wifi enable` a mitad del test dejaría al supplicant del sistema
@@ -637,38 +643,60 @@ class DeviceCompatibilityChecker(private val context: Context) {
         Thread.sleep(500)
 
         val rotation =
-            if (hasIw) MonitorChannelPolicy.rotationFor(MonitorChannelStore.load(context))
+            if (hasIw) MonitorChannelPolicy.captureRotationFor(MonitorChannelStore.load(context))
             else emptyList()
 
         if (toolAvailable("tcpdump")) {
             if (rotation.isEmpty()) {
                 return tcpdumpCaptureProbe(interfaceName, null)
             }
+            var probed = 0
             for (channel in rotation) {
                 if (!tuneCaptureChannel(interfaceName, channel)) continue
+                probed++
                 if (tcpdumpCaptureProbe(interfaceName, channel)) return true
             }
-            logD(TAG, "Real capture: 0 frames in ${rotation.size} channels")
+            logD(
+                TAG,
+                if (probed == 0) {
+                    "Real capture: iw rejected every channel; radio left untuned"
+                } else {
+                    "Real capture: 0 frames in $probed probed channels"
+                }
+            )
             return false
         }
 
-        // Fallback sin tcpdump: el contador RX solo vale si la radio está afinada;
-        // se rota hasta que un canal sea aceptado (los `-1`/EBUSY transitorios
-        // post-escritura de con_mode no deben derivar en un falso negativo).
-        // Sin `iw` no hay forma de sintonizar y la medición no garantiza captura.
-        if (rotation.isNotEmpty() && rotation.none { tuneCaptureChannel(interfaceName, it) }) {
-            logD(TAG, "rx fallback: no channel accepted; measuring an untuned radio")
+        // Fallback sin tcpdump: el contador RX solo vale si la radio esta afinada
+        // y escuchando donde hay trafico (2.4 GHz). Se mide una ventana por canal
+        // aceptado: los `-1`/EBUSY transitorios post-escritura de con_mode no
+        // deben derivar en un falso negativo, y detenerse en el primer canal
+        // aceptado mediria una banda 5 GHz que puede estar simplemente vacia.
+        // Sin `iw` no hay forma de sintonizar: unica ventana sin canal (heuristica).
+        if (!hasIw) {
+            logD(TAG, "rx fallback: no iw; measuring an untuned radio (single window)")
         }
-        val before = execRoot(
-            "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
-        ).output.trim().toLongOrNull() ?: -1L
-        Thread.sleep(3000)
-        val after = execRoot(
-            "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
-        ).output.trim().toLongOrNull() ?: -1L
-        logD(TAG, "rx_packets delta: $before -> $after")
-        return before >= 0 && after > before
+        val windows: List<WifiChannel?> = rotation.map<WifiChannel, WifiChannel?> { it }
+            .ifEmpty { listOf(null) }
+        for (channel in windows) {
+            if (channel != null && !tuneCaptureChannel(interfaceName, channel)) continue
+            val before = readRxPackets(interfaceName)
+            Thread.sleep(3000)
+            val after = readRxPackets(interfaceName)
+            logD(TAG, "rx_packets delta ch=${channel?.number ?: "-"}: $before -> $after")
+            if (before != null && after != null && after > before) {
+                logD(TAG, "Real capture OK (rx): ch=${channel?.number ?: "-"}")
+                return true
+            }
+        }
+        logD(TAG, "rx fallback: no frames in any measured window")
+        return false
     }
+
+    /** Contador rx_packets del kernel para la interfaz, o null si no es legible. */
+    private fun readRxPackets(interfaceName: String): Long? = execRoot(
+        "cat /sys/class/net/$interfaceName/statistics/rx_packets 2>/dev/null"
+    ).output.trim().toLongOrNull()
 
     /** Ventana corta de tcpdump en el canal (success = al menos un frame real). */
     private fun tcpdumpCaptureProbe(

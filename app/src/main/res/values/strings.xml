@@ -73,7 +73,7 @@
     <string name="channel_header">Canal de escucha (monitor)</string>
     <string name="channel_applied">Canal %1$d sintonizado</string>
     <string name="channel_apply_failed">No se pudo sintonizar el canal %1$d</string>
-    <string name="channel_tune_warn">Monitor activado, pero la radio no se pudo sintonizar: es probable que no vea ningun trafico. Pruebe otro canal en los chips.</string>
+    <string name="channel_tune_warn">Monitor activado, pero la radio no se pudo sintonizar: es probable que no vea ningún tráfico. Pruebe otro canal en los chips.</string>
     <string name="channel_untunable">Radio sin sintonizar: sin iw no se puede fijar el canal y la captura no está garantizada</string>
     <string name="error_root_required">Se requiere acceso root</string>
     <string name="error_root_check_failed">Fallo al comprobar el acceso root</string>
