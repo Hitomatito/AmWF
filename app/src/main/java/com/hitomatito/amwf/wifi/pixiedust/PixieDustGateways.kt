@@ -38,9 +38,21 @@ internal interface SupplicantGateway {
     fun cancelWps(iface: String, log: (String) -> Unit)
 }
 
+/** Comando ya armado junto con la decisión que lo produjo, para loguearla sin reevaluar. */
+internal data class PixiewpsInvocation(val command: String, val plan: PixiewpsPlan)
+
 internal interface PixiewpsGateway {
-    fun buildCommand(m3: M3Parser.M3Data, m5m7: M3Parser.M5M7Capture?): String
-    suspend fun run(command: String, rawOutput: StringBuilder, log: (String) -> Unit): String?
+    fun buildCommand(
+        bssid: String,
+        m3: M3Parser.M3Data,
+        m5m7: M3Parser.M5M7Capture?
+    ): PixiewpsInvocation
+
+    suspend fun run(
+        invocation: PixiewpsInvocation,
+        rawOutput: StringBuilder,
+        log: (String) -> Unit
+    ): String?
 }
 
 internal interface PskExtractorGateway {

@@ -212,6 +212,8 @@
     <string name="pixie_wps_required">Esta red no tiene WPS activado o no es auditable</string>
     <string name="pixie_stop_attack">Detener auditoría</string>
     <string name="pixie_not_vulnerable">Objetivo no vulnerable a Pixie Dust (no se encontró el PIN WPS)</string>
+    <string name="pixie_reason_retry_new_data">pixiewps sugirió una vulnerabilidad, pero no la confirmó tras varios intentos con datos nuevos. Puedes repetir la auditoría más tarde.</string>
+    <string name="pixie_reason_pixiewps_error">pixiewps no pudo procesar la captura (argumentos o configuración no compatibles). Repite la auditoría con una captura nueva.</string>
     <string name="pixie_reason_wps_reg_rejected">wpa_supplicant no aceptó wps_reg. Posibles causas: interfaz no lista, WPS desactivado o WPS bloqueado.</string>
     <!-- getQuantityString no está disponible en el gateway `strings` del runner (%2$d/6 campos va fijo): se ignora con análisis -->
     <string name="pixie_reason_capture_incomplete" tools:ignore="PluralsCandidate">No se pudo capturar el M3 tras %1$d intentos (%2$d/6 campos; faltan: %3$s). El AP no completó el handshake WPS: señal débil, WPS bloqueado o filtro de asociación del AP.</string>

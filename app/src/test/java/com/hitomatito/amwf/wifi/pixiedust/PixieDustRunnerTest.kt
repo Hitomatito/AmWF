@@ -7,6 +7,7 @@
 
 package com.hitomatito.amwf.wifi.pixiedust
 
+import com.hitomatito.amwf.R
 import com.hitomatito.amwf.ShellExecutor
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -122,15 +123,34 @@ class PixieDustRunnerTest {
         }
     }
 
-    private class FakePixiewps(private val cannedPin: String? = "12345670") : PixiewpsGateway {
-        override fun buildCommand(m3: M3Parser.M3Data, m5m7: M3Parser.M5M7Capture?): String =
-            "pixiewps-fake"
+    private class FakePixiewps(
+        private val cannedPin: String? = "12345670",
+        private val output: String = "",
+        private val outputs: List<String> = emptyList()
+    ) : PixiewpsGateway {
+        val timeouts = mutableListOf<Int>()
+        private var call = 0
+
+        override fun buildCommand(
+            bssid: String,
+            m3: M3Parser.M3Data,
+            m5m7: M3Parser.M5M7Capture?
+        ): PixiewpsInvocation = PixiewpsInvocation(
+            "pixiewps-fake",
+            PixiewpsPlan("", "fake", PixiewpsPlan.DEFAULT_TIMEOUT_SECONDS)
+        )
 
         override suspend fun run(
-            command: String,
+            invocation: PixiewpsInvocation,
             rawOutput: StringBuilder,
             log: (String) -> Unit
-        ): String? = cannedPin
+        ): String? {
+            timeouts += invocation.plan.timeoutSeconds
+            val current = outputs.getOrNull(call) ?: output
+            call++
+            if (current.isNotEmpty()) rawOutput.appendLine(current)
+            return cannedPin
+        }
     }
 
     private class FakePskExtractor(
@@ -379,6 +399,57 @@ class PixieDustRunnerTest {
         assertTrue(result is PixieDustResult.Failure)
         assertEquals(1, audit.calls.size)
         assertTrue(audit.calls[0].result is PixieDustResult.Failure)
+    }
+
+    @Test
+    fun `un diagnostico accionable cambia el motivo del fallo`() = runTest {
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = FakeSupplicant(fixture = fullM3Lines()),
+            pixiewps = FakePixiewps(
+                cannedPin = null,
+                output = "[!] The AP /might be/ vulnerable. Try again with --force"
+            ),
+            audit = FakeAuditLog()
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            ssid = "Casa"
+        )
+
+        assertTrue(result is PixieDustResult.Failure)
+        val reason = (result as PixieDustResult.Failure).reason
+        assertTrue(reason.contains(R.string.pixie_reason_retry_new_data.toString()))
+        assertFalse(reason.contains(R.string.pixie_not_vulnerable.toString()))
+    }
+
+    @Test
+    fun `el diagnostico provoca una segunda ronda con datos frescos`() = runTest {
+        val pixie = FakePixiewps(
+            cannedPin = null,
+            outputs = listOf(
+                "[!] The AP /might be/ vulnerable. Try again with --force",
+                "[-] WPS pin not found!"
+            )
+        )
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = FakeSupplicant(fixture = fullM3Lines()),
+            pixiewps = pixie,
+            audit = FakeAuditLog()
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            ssid = "Casa"
+        )
+
+        assertTrue(result is PixieDustResult.Failure)
+        assertEquals(
+            listOf(PixiewpsPlan.DEFAULT_TIMEOUT_SECONDS, PixiewpsPlan.DEFAULT_TIMEOUT_SECONDS),
+            pixie.timeouts
+        )
     }
 
     // ---------- Reintentos y abortos ----------

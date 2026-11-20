@@ -139,6 +139,8 @@ AmWF uses a streamlined **one-tap execution** model:
 | **3. Cálculo Pixie Dust** | Feeds captured parameters into `pixiewps`. If the AP's PRNG is flawed, the 8-digit WPS PIN is computed offline in seconds. |
 | **4. Extracción de Clave PSK** | Connects to the AP using the discovered PIN as a WPS registrar (`wps_reg`), obtaining the plaintext WPA/WPA2 passphrase. |
 
+> **Audit duration:** when `pixiewps` reports that an AP *might be* vulnerable, AmWF repeats phases 1–3 with fresh WPS data up to three times, because a new Diffie-Hellman exchange can land on a usable PRNG seed. The whole audit can therefore take a few minutes. WiFi stays disabled during those retries and is restored when the audit ends. Use **Cancelar auditoría** at any time to stop it.
+
 ### 4.4 Interpreting Early Abort Reasons
 If an audit cannot proceed, AmWF detects the underlying reason and stops early to preserve battery and avoid triggering router lockouts:
 - **WPS bloqueado (WPS Lockout):** The AP has locked WPS enrollment due to previous failed attempts.
