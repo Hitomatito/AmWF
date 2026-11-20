@@ -28,4 +28,28 @@ internal object WifiRestore {
             else -> null
         }
     }
+
+    /**
+     * Interpreta `settings get global wifi_on`: 0/2 (apagado/transicion) es
+     * apagado, 1 es encendido y cualquier otra salida es desconocida. En MIUI
+     * el toggle global sigue escribiendose aunque `svc wifi enable` no haya
+     * terminado de levantar el radio, por eso es una fuente secundaria.
+     */
+    fun parseWifiOnSetting(raw: String): Boolean? = when (raw.trim()) {
+        "1" -> true
+        "0", "2" -> false
+        else -> null
+    }
+
+    /**
+     * Confirmacion combinada del estado WiFi para la restauración del ataque:
+     * solo `true` cuando ambas fuentes coinciden en encendido (el estado de
+     * `dumpsys` puede ser instantaneo durante el arranque async de la radio);
+     * cualquiera que reporte apagado lo invalida; el resto es desconocido.
+     */
+    fun combinedEnabled(framework: Boolean?, setting: Boolean?): Boolean? = when {
+        framework == true && setting == true -> true
+        framework == false || setting == false -> false
+        else -> null
+    }
 }

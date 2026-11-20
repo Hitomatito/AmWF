@@ -104,11 +104,11 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
         val conf = NativeBinaries.runtimeConfigPath()
         // El watchdog comprueba el starttime de /proc/<pid>/stat (campo 22)
         // antes de matar. Así no puede terminar un proceso ajeno si el PID se
-        // reutiliza durante los 110 s de espera, ni siquiera otro supplicant
-        // de una ronda posterior que casualmente reciba el mismo PID.
-        // Su stdout/stderr se redirigen a /dev/null: si heredara el pipe del
-        // supplicant, el lector no recibiría EOF hasta 110 s después de que
-        // el proceso terminase.
+        // reutiliza durante la espera, ni siquiera otro supplicant
+        // de una ronda posterior que casualmente reciba el mismo PID. Su
+        // stdout/stderr se redirigen a /dev/null: si heredara el pipe del
+        // supplicant, el lector no recibiría EOF hasta que venciera el
+        // watchdog.
         // 2>&1: si el enlazador dinámico o la inicialización del driver fallan,
         // el motivo llega por stderr. Sin esto, el hilo lector solo ve stdout y
         // el arranque fallido queda invisible en la consola de la app.
@@ -158,11 +158,11 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
             "$wpaCli -p$ctrlDir -s$ctrlDir -i $iface $args"
     }
 
-    /** Ejecuta un comando de wpa_cli con el timeout corto usado por el ataque. */
+    /** Ejecuta un comando de wpa_cli con el timeout corto de la interfaz de control. */
     override fun cli(iface: String, args: String): ShellExecutor.Result =
         PixieProcessSupport.runSuWithTimeout(
             cliCommand(iface, NativeBinaries.ctrlDir(), args),
-            timeoutSeconds = 5
+            timeoutSeconds = PixieTiming.CLI_TIMEOUT_S
         )
 
     override fun sendWpsReg(
@@ -175,7 +175,7 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
         // frecuencia la deduce wpa_supplicant del BSS escaneado.
         val cmd = cliCommand(iface, NativeBinaries.ctrlDir(), "wps_reg $bssid $WPS_REG_PIN_DEFAULT")
         log("[*] wpa_cli (wps_reg): $cmd")
-        return PixieProcessSupport.runSuWithTimeout(cmd, timeoutSeconds = 5)
+        return PixieProcessSupport.runSuWithTimeout(cmd, timeoutSeconds = PixieTiming.WPS_REG_TIMEOUT_S)
     }
 
     /**
@@ -376,9 +376,12 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
         private const val TAG = "SupplicantProcesses"
 
         /** Espera máxima del socket de control y de su primer PONG. */
-        private const val SOCKET_WAIT_MS = 8_000L
+        private const val SOCKET_WAIT_MS = PixieTiming.SOCKET_WAIT_MS
 
-        /** Watchdog del proceso supplicant: si sigue vivo, se mata a los 110 s. */
-        private const val SUPPLICANT_WATCHDOG_SECONDS = 110
+        /**
+         * Watchdog del proceso supplicant, derivado del peor caso legal de una
+         * ronda de captura (ver [PixieTiming.supplicantWatchdogSeconds]).
+         */
+        private val SUPPLICANT_WATCHDOG_SECONDS: Int = PixieTiming.supplicantWatchdogSeconds()
     }
 }

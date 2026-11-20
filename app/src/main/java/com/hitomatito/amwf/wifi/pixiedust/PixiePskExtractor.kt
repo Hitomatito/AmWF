@@ -281,10 +281,15 @@ internal class PixiePskExtractor(
     companion object {
         private const val TAG = "PixiePskExtractor"
 
-        /** Tiempo máximo de toda la fase de extracción de PSK. */
-        private const val PSK_EXTRACT_TIMEOUT_MS = 45_000L
+        /**
+         * Tiempo máximo de toda la fase de extracción. Derivado de las fases
+         * que limita (ver [PixieTiming.pskExtractTimeoutMs]): un 45 s fijo era
+         * más corto que su peor camino (~52 s) y podía cortar después de un
+         * provisioning exitoso, antes de leer el config guardado.
+         */
+        private val PSK_EXTRACT_TIMEOUT_MS = PixieTiming.pskExtractTimeoutMs()
 
         /** Espera del PSK por la interfaz de control tras aceptar el wps_reg. */
-        private const val PSK_WAIT_MS = 25_000L
+        private const val PSK_WAIT_MS = PixieTiming.PSK_WAIT_MS
     }
 }

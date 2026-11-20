@@ -72,13 +72,17 @@ internal class PixieDustRunner(
     // cortan la auditoría: señal débil o fuera de alcance.
     private val MAX_SILENT_ATTEMPTS = 2
 
-    // Límites de tiempo y reintentos.
+    // Límites de tiempo y reintentos: una sola fuente de verdad en
+    // PixieTiming (el watchdog del supplicant se deriva de estos valores).
     private val MAX_ATTACK_ROUNDS = 3
-    private val M3_CAPTURE_TIMEOUT_MS = 25_000L
+    private val M3_CAPTURE_TIMEOUT_MS = PixieTiming.M3_CAPTURE_TIMEOUT_MS
     // `svc wifi enable` puede devolver 0 antes de que el framework encienda el
     // radio; se comprueba el estado real y se reintenta.
     private val WIFI_RESTORE_ATTEMPTS = 3
     private val WIFI_RESTORE_RETRY_MS = 1_000L
+    // Segunda lectura tras la confirmacion inicial: en MIUI el estado puede
+    // revocarse justo despues de reportar "enabled".
+    private val WIFI_RESTORE_SETTLE_MS = 1_500L
 
 
     /**
@@ -327,6 +331,12 @@ internal class PixieDustRunner(
                 val canRetry = diagnosis.action == PixieNextAction.RETRY_WITH_NEW_DATA
                 if (canRetry && round < MAX_ATTACK_ROUNDS) {
                     log("[*] Reintentando con datos frescos según el diagnóstico")
+                    // Candidato al motivo final: si la recaptura de las rondas
+                    // siguientes falla, el usuario debe saber qué vio pixiewps
+                    // sobre el M3 ya analizado, no solo que la última ventana
+                    // quedó vacía.
+                    pixieFailureReason =
+                        strings(R.string.pixie_reason_retry_new_data, emptyArray())
                     continue
                 }
                 pixieFailureReason = when {
@@ -341,10 +351,15 @@ internal class PixieDustRunner(
             }
 
             if (wpsPin == null) {
-                val reason = if (m3Data == null) {
+                // Un diagnóstico real sobre un M3 capturado explica el fallo
+                // mejor que la recaptura fallida posterior: hay análisis, se
+                // cuenta su motivo; si no lo hay, el de captura.
+                val reason = if (pixieFailureReason != null) {
+                    pixieFailureReason
+                } else if (m3Data == null) {
                     captureReason ?: strings(R.string.pixie_reason_no_m3_data, emptyArray())
                 } else {
-                    pixieFailureReason ?: strings(R.string.pixie_not_vulnerable, emptyArray())
+                    strings(R.string.pixie_not_vulnerable, emptyArray())
                 }
                 log("[-] $reason")
                 val failure = PixieDustResult.Failure(
@@ -435,7 +450,7 @@ internal class PixieDustRunner(
         rawOutput: StringBuilder,
         assocRejectTracker: M3Parser.AssocRejectTracker
     ): M3Attempt = coroutineScope {
-        val maxAttempts = 3
+        val maxAttempts = PixieTiming.ATTEMPTS_PER_ROUND
         // El motivo final se muestra solo cuando fallan todas las rondas: el
         // total real de intentos es rondas completadas × intentos por ronda.
         val attemptsSoFar = round * maxAttempts
@@ -462,7 +477,7 @@ internal class PixieDustRunner(
                 log("[-] M3 incomplete, retrying wps_reg (attempt $attempt/$maxAttempts)...")
                 // Backoff progresivo: reintentar inmediatamente solo sirve para
                 // acumular rechazos y timeouts de escaneo.
-                delay((750L * attempt).coerceAtMost(2_250L))
+                delay((750L * attempt).coerceAtMost(PixieTiming.MAX_ATTEMPT_BACKOFF_MS))
             }
 
             // Descartar líneas de la ronda anterior (p. ej. un WPS-FAIL que
@@ -612,8 +627,11 @@ internal class PixieDustRunner(
     /**
      * Restaura el WiFi comprobando el estado real del framework. `svc wifi
      * enable` puede devolver 0 sin que el radio llegue a encenderse (visto al
-     * cancelar), así que se reintenta hasta confirmarlo. Bloquea a propósito:
-     * [cleanup] ya se ejecuta fuera del hilo principal.
+     * cancelar) e incluso reportar "enabled" un instante antes de revocar el
+     * toggle en MIUI (campo: el cleanup salia con exit=0 y wifi_on=0, dejando
+     * el escaneo Pixie sin resultados), así que la confirmacion exige dos
+     * lecturas consecutivas —una tras dejar asentar la radio— y se reintenta.
+     * Bloquea a propósito: [cleanup] ya se ejecuta fuera del hilo principal.
      */
     private fun restoreWifi() {
         var lastKnown: Boolean? = null
@@ -624,7 +642,13 @@ internal class PixieDustRunner(
                     "(intento ${index + 1}/$WIFI_RESTORE_ATTEMPTS)"
             )
             lastKnown = wifiEnabled()
-            if (lastKnown == true) return
+            if (lastKnown == true) {
+                Thread.sleep(WIFI_RESTORE_SETTLE_MS)
+                val settled = wifiEnabled()
+                if (settled == true) return
+                lastKnown = settled
+                log("[!] Cleanup: el WiFi se reporto encendido pero volvio atras; reintentando")
+            }
             if (index < WIFI_RESTORE_ATTEMPTS - 1) Thread.sleep(WIFI_RESTORE_RETRY_MS)
         }
         if (lastKnown == false) {
@@ -634,13 +658,24 @@ internal class PixieDustRunner(
         }
     }
 
-    private fun wifiEnabled(): Boolean? {
-        val status = execSu(
-            "dumpsys wifi 2>/dev/null | grep -m1 -E 'Wi-?Fi is'",
-            timeoutSeconds = 5
+    /**
+     * Estado real del framework para confirmar la restauracion: `dumpsys` y el
+     * toggle global deben coincidir; una sola fuente enganaba al cleanup en
+     * MIUI. El patron de grep es identico al de
+     * [com.hitomatito.amwf.readWifiEnabledState] (`-i` incluido: los ROMs que
+     * imprimen "Wifi is" nunca confirmaban sin el).
+     */
+    private fun wifiEnabled(): Boolean? = WifiRestore.combinedEnabled(
+        framework = WifiRestore.isEnabled(
+            execSu(
+                "dumpsys wifi 2>/dev/null | grep -m1 -i -E 'Wi-?Fi is'",
+                timeoutSeconds = 5
+            ).output
+        ),
+        setting = WifiRestore.parseWifiOnSetting(
+            execSu("settings get global wifi_on", timeoutSeconds = 3).output
         )
-        return WifiRestore.isEnabled(status.output)
-    }
+    )
 
     private fun log(message: String) {
         // No usar ShellExecutor.logD aquí: este log incluye claves M3, PIN/PSK

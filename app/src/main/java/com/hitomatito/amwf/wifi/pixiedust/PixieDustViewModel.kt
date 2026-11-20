@@ -209,8 +209,10 @@ class PixieDustViewModel @JvmOverloads constructor(
                     name.startsWith("wlan") || name == "p2p0" || name.startsWith("swlan")
                 }
                 .orEmpty()
-            // wlan0 primero; después el resto de wlan* y por último las
-            // interfaces auxiliares (p2p0/swlan0), como hacía el sondeo root.
+            // La conectividad manda: si hay red WiFi activa, esa interfaz abre
+            // la lista (en dispositivos multi-radio puede no ser wlan0). Sin
+            // red activa: wlan0 primero, después el resto de wlan* y por último
+            // las auxiliares (p2p0/swlan0).
             names.filter { it == "wlan0" }.forEach(interfaces::add)
             names.filter { it != "wlan0" && it.startsWith("wlan") }
                 .sorted()

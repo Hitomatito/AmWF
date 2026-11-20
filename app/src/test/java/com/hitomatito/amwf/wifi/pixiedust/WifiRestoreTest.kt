@@ -55,4 +55,27 @@ class WifiRestoreTest {
         assertNull(WifiRestore.isEnabled("Wi-Fi is enabling"))
         assertNull(WifiRestore.isEnabled("command not found"))
     }
+
+    @Test
+    fun `parsea el toggle global 1 on 0 y 2 off resto desconocido`() {
+        assertEquals(true, WifiRestore.parseWifiOnSetting("1"))
+        assertEquals(true, WifiRestore.parseWifiOnSetting("1\n"))
+        assertEquals(false, WifiRestore.parseWifiOnSetting("0"))
+        assertEquals(false, WifiRestore.parseWifiOnSetting("2"))
+        assertNull(WifiRestore.parseWifiOnSetting("null"))
+        assertNull(WifiRestore.parseWifiOnSetting(""))
+    }
+
+    @Test
+    fun `la confirmacion combinada exige que ambas fuentes digan enabled`() {
+        assertEquals(true, WifiRestore.combinedEnabled(true, true))
+        // El caso MIUI del campo: dumpsys confirmo "enabled" un instante y el
+        // toggle global seguia apagado.
+        assertEquals(false, WifiRestore.combinedEnabled(true, false))
+        assertEquals(false, WifiRestore.combinedEnabled(false, true))
+        assertEquals(false, WifiRestore.combinedEnabled(false, false))
+        assertNull(WifiRestore.combinedEnabled(true, null))
+        assertNull(WifiRestore.combinedEnabled(null, true))
+        assertNull(WifiRestore.combinedEnabled(null, null))
+    }
 }

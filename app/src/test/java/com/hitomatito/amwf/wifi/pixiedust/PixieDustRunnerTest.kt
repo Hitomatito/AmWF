@@ -60,6 +60,7 @@ class PixieDustRunnerTest {
 
     private class FakeSupplicant(
         private val fixture: List<String> = emptyList(),
+        private val subsequentFixture: List<String>? = null,
         private val wpsRegResult: ShellExecutor.Result = ShellExecutor.Result(0, "OK", ""),
         private val failLaunch: Boolean = false
     ) : SupplicantGateway {
@@ -75,7 +76,9 @@ class PixieDustRunnerTest {
         ): SupplicantProcesses.Handle? {
             launchCount++
             if (failLaunch) return null
-            return SupplicantProcesses.Handle(FakeProcess(), TestQueue(fixture), Thread {})
+            val lines =
+                if (launchCount == 1 || subsequentFixture == null) fixture else subsequentFixture
+            return SupplicantProcesses.Handle(FakeProcess(), TestQueue(lines), Thread {})
         }
 
         override fun stop(process: Process?) {}
@@ -220,15 +223,17 @@ class PixieDustRunnerTest {
         val commands = mutableListOf<String>()
         override fun invoke(command: String, timeoutSeconds: Int): ShellExecutor.Result {
             commands += command
-            return if (command.startsWith("dumpsys wifi")) {
-                ShellExecutor.Result(
+            if (command.startsWith("dumpsys wifi")) {
+                return ShellExecutor.Result(
                     0,
                     if (wifiEnabledState) "Wi-Fi is enabled" else "Wi-Fi is disabled",
                     ""
                 )
-            } else {
-                ShellExecutor.Result(0, "OK", "")
             }
+            if (command.startsWith("settings get global wifi_on")) {
+                return ShellExecutor.Result(0, if (wifiEnabledState) "1" else "0", "")
+            }
+            return ShellExecutor.Result(0, "OK", "")
         }
     }
 
@@ -450,6 +455,36 @@ class PixieDustRunnerTest {
             listOf(PixiewpsPlan.DEFAULT_TIMEOUT_SECONDS, PixiewpsPlan.DEFAULT_TIMEOUT_SECONDS),
             pixie.timeouts
         )
+    }
+
+    @Test
+    fun `el motivo retry-new-data sobrevive al fallo de recaptura de las rondas siguientes`() = runTest {
+        // Ronda 1 captura el M3 completo y pixiewps pide datos frescos; las
+        // rondas 2-3 no vuelven a capturar. El fallo debe seguir explicando lo
+        // que vio pixiewps, no la última ventana vacía: el M3 analizado fue
+        // real y reintentarlo era la vía recomendada.
+        val supplicant = FakeSupplicant(
+            fixture = fullM3Lines(),
+            subsequentFixture = listOf("WPS: Received M1")
+        )
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = supplicant,
+            pixiewps = FakePixiewps(
+                cannedPin = null,
+                output = "[!] The AP /might be/ vulnerable. Try again with --force"
+            )
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            ssid = "Casa"
+        )
+
+        assertTrue(result is PixieDustResult.Failure)
+        val reason = (result as PixieDustResult.Failure).reason
+        assertTrue(reason.contains(R.string.pixie_reason_retry_new_data.toString()))
+        assertFalse(reason.contains(R.string.pixie_reason_capture_incomplete.toString()))
     }
 
     // ---------- Reintentos y abortos ----------
