@@ -239,6 +239,15 @@ internal class PixieDustRunner(
         // aborta antes de agotar rondas en `scan timeout` y timeouts.
         val assocRejectTracker = M3Parser.AssocRejectTracker()
 
+        // Justo antes del try: el par started/finished queda emparejado por
+        // construcción (el finally siempre persiste, y la persistencia es la
+        // que libera el flag), así ninguna excepción puede dejarlo pegado.
+        // Mientras esté tomado, ningún onCreate aplica la restauración
+        // pendiente: tras un recreate (config change) encendería el radio en
+        // mitad de la captura y borraría el marcador del ataque vivo. Las
+        // salidas tempranas de arriba no tocan el radio y no lo marcan; su
+        // persist re-libera un flag que nunca tomaron, lo cual es inocuo.
+        attackRestore.markAttackStarted()
         try {
             stage(PixieDustStage.DISABLING_WIFI)
 
@@ -285,13 +294,16 @@ internal class PixieDustRunner(
             // de una ronda ajusta la siguiente (modo, tiempo y ventana M5/M7).
             for (round in 1..MAX_ATTACK_ROUNDS) {
                 ensureActive()
-                attackRoundsUsed = round
                 if (assocRejectTracker.exhausted()) {
                     log("[-] El AP rechazó la asociación repetidamente; no se inicia una nueva ronda")
                     captureReason = captureReason
                         ?: strings(R.string.pixie_reason_assoc_rejected, emptyArray())
                     break
                 }
+                // La ronda solo cuenta cuando de verdad va a correr: el break
+                // de arriba aborta antes de tocar el radio, y el «Rondas» del
+                // resumen debe reflejar las rondas que se lanzaron.
+                attackRoundsUsed = round
                 if (round > 1) {
                     log("[*] Ronda $round/$MAX_ATTACK_ROUNDS con datos frescos")
                     delay((1_000L * round).coerceAtMost(3_000L))
@@ -814,6 +826,10 @@ internal class PixieDustRunner(
         target: PixieAuditLog.Target,
         rawOutput: StringBuilder
     ) {
+        // Toda salida pasa por aquí, incluidas las tempranas: la auditoría
+        // deja de estar "en vuelo" y los onCreate vuelven a poder aplicar la
+        // restauración pendiente de una auditoría anterior.
+        attackRestore.markAttackFinished()
         try {
             // El hito final se marca aquí: este método es el único punto por
             // el que pasan todas las salidas, incluidas las tempranas.

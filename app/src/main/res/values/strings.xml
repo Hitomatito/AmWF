@@ -260,6 +260,7 @@
     <string name="pixie_console_network_selected">Red seleccionada: %1$s (%2$s)</string>
     <string name="pixie_console_attack_started">Iniciando auditoría Pixie Dust contra %1$s…</string>
     <string name="pixie_console_attack_target">BSSID: %1$s | Interfaz: %2$s</string>
+    <string name="pixie_console_cleanup_busy">La limpieza de la auditoría anterior seguía en curso; podría interferir con esta</string>
     <string name="pixie_console_attack_success">[+] Auditoría exitosa — PIN: %1$s</string>
     <string name="pixie_console_wpa_key">[+] Clave WPA: %1$s</string>
     <string name="pixie_console_attack_failed">[-] Auditoría falló: %1$s</string>

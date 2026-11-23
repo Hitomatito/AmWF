@@ -106,6 +106,20 @@ internal interface AttackRestoreGateway {
 
     /** Limpia el marcador si la restauración se confirmó; si no, se conserva. */
     fun clearWifiDisabledMarker(restored: Boolean)
+
+    /**
+     * Marca que una auditoría corre en este proceso. Mientras esté en vuelo,
+     * ningún `onCreate` debe aplicar la restauración pendiente: tras un
+     * recreate (config change) encendería el radio en mitad de la captura y
+     * borraría el marcador del ataque vivo.
+     */
+    fun markAttackStarted()
+
+    /**
+     * Marca el fin de la auditoría. Lo llama la persistencia del log, el
+     * único punto por el que pasan todas las salidas, incluidas las tempranas.
+     */
+    fun markAttackFinished()
 }
 
 /** Implementación real: delega en [NativeBinaries]. */
@@ -153,5 +167,13 @@ internal class SystemAttackRestore(private val context: Context) : AttackRestore
 
     override fun clearWifiDisabledMarker(restored: Boolean) {
         if (restored) PixieAttackRestore.clear(context)
+    }
+
+    override fun markAttackStarted() {
+        PixieAttackRestore.markAttackStarted()
+    }
+
+    override fun markAttackFinished() {
+        PixieAttackRestore.markAttackFinished()
     }
 }

@@ -57,6 +57,29 @@ internal object PixieAttackRestore {
         prefs(context).getBoolean(KEY_PENDING, false)
 
     /**
+     * true mientras una auditoría corre en este proceso, desde la entrada de
+     * `runAttack` hasta la persistencia de su log (único punto por el que
+     * pasan todas las salidas). [restoreIfPending] no debe encender el radio
+     * en ese caso: el marcador pertenece al ataque vivo y su propio cleanup
+     * se encarga de restaurar.
+     *
+     * Vive en memoria a propósito: tras la muerte del proceso desaparece y la
+     * restauración pendiente (que solo importa entonces) vuelve a aplicarse.
+     */
+    @Volatile
+    private var attackInFlight = false
+
+    /** Marca que una auditoría corre en este proceso (lo llama el runner). */
+    fun markAttackStarted() {
+        attackInFlight = true
+    }
+
+    /** Marca el fin de la auditoría: el marcador vuelve a poder aplicarse. */
+    fun markAttackFinished() {
+        attackInFlight = false
+    }
+
+    /**
      * Aplica la restauración pendiente: enciende el radio si el framework no
      * confirma que ya está encendido. Devuelve true solo si el radio quedó
      * encendido; si falla, el marcador se conserva para el siguiente arranque.
@@ -65,6 +88,15 @@ internal object PixieAttackRestore {
     @WorkerThread
     fun restoreIfPending(context: Context): Boolean {
         if (!isPending(context)) return false
+        if (attackInFlight) {
+            // La Activity se recreó (p. ej. cambio día/noche) con la auditoría
+            // viva: el marcador es de este ataque, no de uno interrumpido.
+            // Encender el radio aquí rompería la captura —el supplicant del
+            // sistema robaría la interfaz— y además borraría el seguro del
+            // ataque en curso. Su cleanup restaurará el radio al terminar.
+            logD(TAG, "An attack is still running in this process; its cleanup owns the restore")
+            return false
+        }
         logD(TAG, "Applying pending Pixie Dust WiFi restore")
         val restored = ensureWifiEnabled()
         if (restored) {

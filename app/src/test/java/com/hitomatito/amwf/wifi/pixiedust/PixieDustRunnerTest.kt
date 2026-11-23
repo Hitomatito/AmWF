@@ -206,6 +206,7 @@ class PixieDustRunnerTest {
     private class FakeAttackRestore : AttackRestoreGateway {
         var markCount = 0
         val clears = mutableListOf<Boolean>()
+        val flightEvents = mutableListOf<String>()
 
         override fun markWifiDisabled() {
             markCount++
@@ -213,6 +214,14 @@ class PixieDustRunnerTest {
 
         override fun clearWifiDisabledMarker(restored: Boolean) {
             clears += restored
+        }
+
+        override fun markAttackStarted() {
+            flightEvents += "started"
+        }
+
+        override fun markAttackFinished() {
+            flightEvents += "finished"
         }
     }
 
@@ -315,6 +324,26 @@ class PixieDustRunnerTest {
         assertEquals(1, audit.calls.size)
     }
 
+    @Test
+    fun `una salida temprana libera el vuelo sin haberlo tomado`() = runTest {
+        val restore = FakeAttackRestore()
+        val audit = FakeAuditLog()
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            audit = audit,
+            restore = restore
+        )
+
+        // La validación falla antes de tocar el radio: el ataque no se marca
+        // en vuelo, pero su persist re-libera el flag (inocuo) para que ningún
+        // onCreate quede esperando a una auditoría que ya no existe.
+        val result = runner.runAttack(bssid = "no-valida")
+
+        assertTrue(result is PixieDustResult.Failure)
+        assertEquals(listOf("finished"), restore.flightEvents)
+        assertEquals(1, audit.calls.size)
+    }
+
     // ---------- Binarios nativos ----------
 
     @Test
@@ -359,12 +388,14 @@ class PixieDustRunnerTest {
     @Test
     fun `una captura M3 completa devuelve exito y persiste el log`() = runTest {
         val audit = FakeAuditLog()
+        val restore = FakeAttackRestore()
         val stages = mutableListOf<PixieDustStage>()
         val supplicant = FakeSupplicant(fixture = fullM3Lines())
         val runner = runnerWith(
             dispatcher = StandardTestDispatcher(testScheduler),
             supplicant = supplicant,
             audit = audit,
+            restore = restore,
             onStage = { stages += it }
         )
 
@@ -383,6 +414,10 @@ class PixieDustRunnerTest {
         assertEquals(PixieDustStage.RESTORING, stages.last())
         assertTrue(stages.contains(PixieDustStage.ANALYZING))
         assertTrue(stages.contains(PixieDustStage.EXTRACTING_PSK))
+        // El ataque que toma el radio se marca en vuelo y lo libera la
+        // persistencia: los onCreate dependen de esa pareja para no encender
+        // el radio sobre una auditoría viva tras un recreate.
+        assertEquals(listOf("started", "finished"), restore.flightEvents)
         assertEquals(1, audit.calls.size)
         assertTrue(audit.calls[0].result is PixieDustResult.Success)
         assertTrue(success.rawOutput.contains("Enrollee Nonce"))

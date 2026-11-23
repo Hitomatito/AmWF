@@ -259,6 +259,7 @@
     <string name="pixie_console_network_selected">Selected network: %1$s (%2$s)</string>
     <string name="pixie_console_attack_started">Starting Pixie Dust audit against %1$s…</string>
     <string name="pixie_console_attack_target">BSSID: %1$s | Interface: %2$s</string>
+    <string name="pixie_console_cleanup_busy">The previous audit\'s cleanup was still running; it may interfere with this one</string>
     <string name="pixie_console_attack_success">[+] Audit successful — PIN: %1$s</string>
     <string name="pixie_console_wpa_key">[+] WPA key: %1$s</string>
     <string name="pixie_console_attack_failed">[-] Audit failed: %1$s</string>

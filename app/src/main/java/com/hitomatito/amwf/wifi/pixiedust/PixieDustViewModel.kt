@@ -411,7 +411,15 @@ class PixieDustViewModel @JvmOverloads constructor(
             context = localeContext,
             ioDispatcher = ioDispatcher,
             onLog = { line ->
-                if (!line.startsWith("[supplicant]")) addConsoleLine(line)
+                // La consola muestra hitos; la salida cruda de los procesos
+                // (supplicant y stderr de pixiewps) se queda en el log de
+                // auditoría, no en la UI. Debe filtrar los mismos prefijos
+                // que excluye persistAuditLog, o la consola se inunda.
+                if (!line.startsWith("[supplicant]") &&
+                    !line.startsWith("[pixiewps-stderr]")
+                ) {
+                    addConsoleLine(line)
+                }
             },
             onStage = { newStage ->
                 if (newStage != PixieDustStage.RESTORING) lastActiveStage = newStage
@@ -438,6 +446,13 @@ class PixieDustViewModel @JvmOverloads constructor(
         _uiState.update { attackStartingState(it, System.currentTimeMillis()) }
 
         attackJob = viewModelScope.launch {
+            // Una limpieza huérfana de una salida anterior (back a mitad de
+            // auditoría y reentrada) puede seguir viva en su hilo: su pkill y
+            // su rm -rf del ctrl dir matarían los procesos de esta auditoría.
+            // Se espera a que termine antes de lanzar nada root.
+            if (!PixieCleanupGate.awaitFree(ORPHAN_CLEANUP_WAIT_MS)) {
+                addConsoleLine(localeContext.getString(R.string.pixie_console_cleanup_busy))
+            }
             // La interfaz se resuelve aquí, con root, solo si la detección sin
             // root no la encontró (NetworkInterface exige INTERNET, que la app
             // no declara; ConnectivityManager solo responde conectado). Así el
@@ -541,7 +556,17 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     private fun cancelRunnerInBackground(target: PixieDustRunner?) {
         if (target == null) return
-        Thread { target.cancel() }.apply {
+        // El gate es visible para el siguiente ViewModel: una auditoría nueva
+        // no debe lanzarse mientras esta limpieza siga matando procesos y
+        // borrando el ctrl dir (startAttack la espera antes de arrancar).
+        PixieCleanupGate.enter()
+        Thread {
+            try {
+                target.cancel()
+            } finally {
+                PixieCleanupGate.exit()
+            }
+        }.apply {
             isDaemon = true
             start()
         }
@@ -587,5 +612,12 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "PixieDustViewModel"
+
+        /**
+         * Techo de espera de una limpieza huérfana antes de lanzar la auditoría
+         * de todos modos: cubre pkill + rm -rf + la restauración del WiFi con
+         * sus reintentos y relecturas de asentamiento.
+         */
+        private const val ORPHAN_CLEANUP_WAIT_MS = 45_000L
     }
 }
