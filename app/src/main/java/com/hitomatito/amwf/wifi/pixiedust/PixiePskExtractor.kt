@@ -237,6 +237,17 @@ internal class PixiePskExtractor(
             }
 
             if (psk != null) log("[+] WPA PSK: $psk") else log("[-] No PSK obtained from WPS exchange")
+
+            if (psk == null && regAccepted) {
+                // Cierra la sesión WPS en el AP antes de que el finally mate
+                // el supplicant: visto en campo, un AP puede dejar de
+                // responder tras nuestro M4; si solo se mata el proceso,
+                // conserva la sesión medio abierta y el reintento (del usuario
+                // o de una auditoría posterior) choca con ella: el AP
+                // retransmite su M1 y el registrador falla con
+                // "Unexpected state". Mismo invariante que la fase de captura.
+                supplicant.cancelWps(iface, log)
+            }
             return@withTimeoutOrNull psk
         } catch (e: CancellationException) {
             throw e
