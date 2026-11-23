@@ -12,6 +12,7 @@ import com.hitomatito.amwf.ShellExecutor.execRoot
 import com.hitomatito.amwf.ShellExecutor.logD
 import com.hitomatito.amwf.ShellExecutor.logE
 import com.hitomatito.amwf.ShellExecutor.logW
+import com.hitomatito.amwf.wifi.pixiedust.interfacesFromSysfsListing
 
 class MonitorModeManager {
 
@@ -23,11 +24,20 @@ class MonitorModeManager {
     companion object {
         private const val TAG = "MonitorMode"
         private const val INTERFACE_DOWN_TIMEOUT = 3000L
+
+        /**
+         * Plazo para que la recarga del driver refleje la escritura de
+         * con_mode: documentada hasta ~10 s (misma latencia que la escritura
+         * en sí, ver el invariante de CON_MODE_WRITE_TIMEOUT_MS).
+         */
+        private const val MONITOR_STATE_TIMEOUT_MS = 10_000L
+        private const val MONITOR_STATE_POLL_MS = 1_000L
     }
 
     /**
-     * Detects the WiFi interface dynamically.
-     * Tries wlan0, wlan1, p2p0, etc. Returns first found or "wlan0" as fallback.
+     * Detects the WiFi interface dynamically. Tries wlan0, wlan1, p2p0, etc.,
+     * falls back to the sysfs listing (same strategy as the compatibility
+     * check) and only then to the "wlan0" placeholder.
      */
     private fun findWifiInterface(): String {
         val candidates = listOf("wlan0", "wlan1", "p2p0", "swlan0")
@@ -37,6 +47,18 @@ class MonitorModeManager {
                 logD(TAG, "Found WiFi interface: $iface")
                 return iface
             }
+        }
+        // Respaldo de sysfs, como el que ya usa el check de compatibilidad:
+        // un dispositivo con la interfaz fuera de la lista de candidatos debe
+        // operar sobre su interfaz real, no caer a un "wlan0" inventado (con él
+        // `ip link set down` fallaría y el enable abortaría sin motivo). Se
+        // reutiliza el parser puro y testeado del lado Pixie.
+        val fromSysfs = interfacesFromSysfsListing(
+            execRoot("ls /sys/class/net 2>/dev/null").output
+        ).firstOrNull()
+        if (fromSysfs != null) {
+            logD(TAG, "Found WiFi interface (sysfs fallback): $fromSysfs")
+            return fromSysfs
         }
         logW(TAG, "No WiFi interface found, using fallback wlan0")
         return "wlan0"
@@ -132,7 +154,16 @@ class MonitorModeManager {
             // sintonía la interfaz "en monitor" no recibe nada.
             val tune = tuneMonitorRadio(interfaceName, preferredChannel)
 
-            val mode = getCurrentState()
+            // Paso 5b: la recarga del driver tras la escritura de con_mode
+            // (documentada: hasta ~10 s) deja a `iw dev info` mostrando
+            // "managed" o vacío un rato aunque la escritura haya surtido
+            // efecto. Leer el estado medio segundo después produce falsos
+            // fallos con con_mode=4 ya escrito y el framework apagado. Todos
+            // los pasos previos verifican con reintentos; el estado final
+            // también los necesita. Si aun así no es MONITOR, se reporta con
+            // el radio tal cual: nunca se enciende el WiFi del framework
+            // sobre una radio posiblemente a medio camino del monitor.
+            val mode = waitForMonitorMode()
 
             when (mode) {
                 MonitorMode.MONITOR -> MonitorResult(
@@ -349,6 +380,27 @@ class MonitorModeManager {
 
     private fun hasIwTool(): Boolean =
         execRoot("command -v iw 2>/dev/null").output.isNotBlank()
+
+    /**
+     * Espera a que el estado del radio refleje la escritura de con_mode.
+     *
+     * La recarga del driver QCACLD (documentada: hasta ~10 s) deja lecturas
+     * transitorias ("type managed", o `iw`/`ip -d link` vacíos durante la
+     * recarga) aunque la escritura haya surtido efecto: sin esta espera, un
+     * driver lento reporta un fallo que no lo es. Devuelve MONITOR en cuanto
+     * se confirma; si vence el plazo, la última lectura (el fallo se reporta
+     * con el radio tal cual — restaurar aquí sería encender el WiFi del
+     * framework sobre una radio a medio camino del monitor).
+     */
+    private fun waitForMonitorMode(): MonitorMode {
+        val deadline = System.currentTimeMillis() + MONITOR_STATE_TIMEOUT_MS
+        var mode = getCurrentState()
+        while (mode != MonitorMode.MONITOR && System.currentTimeMillis() < deadline) {
+            Thread.sleep(MONITOR_STATE_POLL_MS)
+            mode = getCurrentState()
+        }
+        return mode
+    }
 
     /**
      * Verifies that the interface reached the desired state (UP or DOWN).
