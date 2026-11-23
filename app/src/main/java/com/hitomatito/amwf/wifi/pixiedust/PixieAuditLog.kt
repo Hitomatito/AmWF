@@ -12,10 +12,10 @@ import android.os.Build
 import android.os.Environment
 import com.hitomatito.amwf.ShellExecutor
 import java.io.File
+import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 
 /**
  * Persistencia del log de auditoría de Pixie Dust.
@@ -92,11 +92,13 @@ internal object PixieAuditLog {
         summary: Summary,
         log: (String) -> Unit
     ) {
-        // UUID además de milisegundos: dos ataques no deben sobrescribirse
-        // aunque terminen en la misma fracción de segundo.
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
-        val fileName =
-            "pixie_${timestamp}_${auditBssidForFileName(target.bssid)}_${UUID.randomUUID()}.log"
+        // Fecha + SSID + BSSID identifican un log de un vistazo: el nombre de
+        // la red es lo que el usuario recuerda y el BSSID desambigua entre
+        // bandas del mismo router. Sin UUID: dos auditorías del mismo AP no
+        // pueden terminar en el mismo segundo (cada una dura >=10 s), así
+        // que un nombre a resolución de segundos nunca pisa a otro.
+        val timeText = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fileName = buildAuditLogFileName(timeText, target.ssid, target.bssid)
 
         val content = buildString {
             appendLine("=== AmWF Pixie Dust Audit Log ===")
@@ -380,3 +382,34 @@ internal fun buildAuditSummaryLines(summary: PixieAuditLog.Summary): List<String
  */
 internal fun auditBssidForFileName(bssid: String): String =
     bssid.replace(":", "").takeIf { AUDIT_BSSID_REGEX.matches(it) } ?: "invalid"
+
+/** Tope del SSID en el nombre: el listado del directorio debe seguir legible. */
+private const val MAX_SSID_NAME_CHARS = 32
+
+/**
+ * SSID apto para nombre de fichero.
+ *
+ * Los SSID son bytes arbitrarios elegidos por el dueño de cada red: nunca
+ * llegan crudos a un nombre (ni, por el `shellQuote` de la persistencia, a un
+ * comando). Se conserva lo legible: letras y números tras plegar los acentos
+ * (NFD, así «CAFÉ» no se vuelve «CAF_»), más '-' y '_'; cualquier otro byte se
+ * convierte en '_' y las corridas se colapsan. Una red oculta (SSID vacío o
+ * ilegible) usa el marcador fijo «red_oculta»: su log se identifica por fecha
+ * y BSSID.
+ */
+internal fun sanitizeSsidForFileName(ssid: String?): String =
+    Normalizer.normalize(ssid.orEmpty(), Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .replace(Regex("[^A-Za-z0-9_-]"), "_")
+        .replace(Regex("_+"), "_")
+        .trim('_')
+        .take(MAX_SSID_NAME_CHARS)
+        .trim('_')
+        .ifEmpty { "red_oculta" }
+
+/**
+ * Ensambla el nombre del log: fecha, nombre saneado de la red y su MAC.
+ * Puro para poder fijar el formato en tests.
+ */
+internal fun buildAuditLogFileName(timeText: String, ssid: String?, bssid: String): String =
+    "pixie_${timeText}_${sanitizeSsidForFileName(ssid)}_${auditBssidForFileName(bssid)}.log"

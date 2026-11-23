@@ -190,4 +190,35 @@ class PixieAuditLogTest {
             line
         )
     }
+
+    @Test
+    fun `el SSID saneado es legible y nunca escapa del nombre`() {
+        assertEquals("CHASKY", sanitizeSsidForFileName("CHASKY"))
+        // Los espacios se vuelven '_', no desaparecen el nombre.
+        assertEquals("INTERNET_CASA", sanitizeSsidForFileName("INTERNET CASA"))
+        // Los acentos se pliegan (NFD): «CAFÉ NIÑO» no se destruye.
+        assertEquals("CAFE_NINO", sanitizeSsidForFileName("CAFÉ NIÑO"))
+        // Ocultas o ilegibles: marcador fijo, nunca bytes crudos.
+        assertEquals("red_oculta", sanitizeSsidForFileName(null))
+        assertEquals("red_oculta", sanitizeSsidForFileName("   "))
+        assertEquals("red_oculta", sanitizeSsidForFileName("★★★"))
+        // Ni path traversal ni separadores: todo byte raro se colapsa a '_'.
+        assertEquals("etc_passwd", sanitizeSsidForFileName("../etc/passwd"))
+        assertEquals("a_b", sanitizeSsidForFileName("a??b"))
+        // Recorte para que el listado del directorio siga manejable.
+        assertEquals(32, sanitizeSsidForFileName("a".repeat(60)).length)
+    }
+
+    @Test
+    fun `el nombre del log lleva fecha red y BSSID`() {
+        assertEquals(
+            "pixie_20261123_140002_CHASKY_74da8813cea0.log",
+            buildAuditLogFileName("20261123_140002", "CHASKY", "74:da:88:13:ce:a0")
+        )
+        // Red oculta y BSSID inválido conservan sus marcadores fijos.
+        assertEquals(
+            "pixie_20261123_140002_red_oculta_invalid.log",
+            buildAuditLogFileName("20261123_140002", null, "no-mac")
+        )
+    }
 }
