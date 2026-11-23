@@ -250,6 +250,18 @@ internal class PixiePskExtractor(
             }
             return@withTimeoutOrNull psk
         } catch (e: CancellationException) {
+            // Best-effort: cerrar la sesión WPS en el AP antes de relanzar la
+            // cancelación. Sin esto, un Stop durante la extracción deja la
+            // sesión medio abierta y la siguiente auditoría del mismo AP
+            // choca con ella (el AP retransmite M1, "Unexpected state").
+            // `CLI_TIMEOUT_S` acota la espera del Stop; si la interfaz de
+            // control ya no responde, se ignora y no rompe la cancelación.
+            if (handle != null) {
+                try {
+                    supplicant.cancelWps(iface, log)
+                } catch (_: Exception) {
+                }
+            }
             throw e
         } catch (e: Exception) {
             ShellExecutor.logE(TAG, "PSK extraction failed", e)
