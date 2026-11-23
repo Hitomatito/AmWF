@@ -34,6 +34,9 @@ Please include, when relevant:
   The raw section redacts third-party networks that share the channel
   (neighbor BSSIDs reduced to their OUI, SSIDs replaced with `<redacted>`);
   the audited target's own identifiers and credentials remain in plain text.
+  Delete them when you no longer need them — the audit screen's
+  **Delete saved logs** button erases both storage locations after a
+  confirmation dialog.
 - **Diagnostics reports** exported by the app redact MAC addresses (kept only to
   their OUI) and redact SSIDs, including SSIDs discovered from `iw dev`. Even so,
   inspect a report before sharing it.

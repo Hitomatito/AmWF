@@ -114,6 +114,9 @@ data class PixieDustNetwork(
  */
 sealed class PixieDustEvent {
     data class CopyToClipboard(val text: String) : PixieDustEvent()
+
+    /** Los logs de auditoría guardados se borraron; [count] para el toast. */
+    data class AuditLogsDeleted(val count: Int) : PixieDustEvent()
 }
 
 /**
@@ -684,6 +687,17 @@ class PixieDustViewModel @JvmOverloads constructor(
 
     /** Emite un evento transitorio desde fuera de un coroutine (p. ej. desde la UI). */
     fun emitEvent(event: PixieDustEvent) = viewModelScope.launch { _uiEvent.emit(event) }
+
+    /**
+     * Borra los logs de auditoría guardados (ambas ubicaciones). El conteo
+     * llega por evento para el toast; nunca rompe la sesión en curso.
+     */
+    fun deleteAuditLogs() {
+        viewModelScope.launch {
+            val deleted = withContext(ioDispatcher) { PixieAuditLog.deleteAll(appContext) }
+            emitEvent(PixieDustEvent.AuditLogsDeleted(deleted))
+        }
+    }
 
     companion object {
         private const val TAG = "PixieDustViewModel"

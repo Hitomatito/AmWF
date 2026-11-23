@@ -202,6 +202,52 @@ internal object PixieAuditLog {
     }
 
     /**
+     * Borra todos los logs de auditoría guardados y devuelve cuántos eran.
+     *
+     * Dos ubicaciones (las mismas de [persist]): el almacenamiento compartido
+     * (`/sdcard/AmWF/pixie-logs`, con root, porque en Android 11+ la app no
+     * puede escribir ahí directamente) y el fallback privado de la app. El
+     * conteo es orientativo para el toast: `rm -f` es tolerante y un fallo
+     * parcial de `su` deja archivos que el conteo no detecta, pero la
+     * siguiente auditoría los sobrevive sin problema.
+     */
+    fun deleteAll(context: Context): Int {
+        var deleted = 0
+
+        // 1) Directorio privado de la app: sin root.
+        val privateDir = File(context.filesDir, "pixie-logs")
+        val privateLogs = privateDir
+            .listFiles { file -> file.isFile && file.name.endsWith(".log") }
+            .orEmpty()
+        privateLogs.forEach { file -> if (file.delete()) deleted++ }
+        if (privateDir.isDirectory && privateDir.listFiles().isNullOrEmpty()) {
+            privateDir.delete()
+        }
+
+        // 2) Almacenamiento compartido: root. Los nombres provienen del propio
+        // `ls` del directorio y se citan uno a uno por si contienen espacios.
+        @Suppress("DEPRECATION")
+        val sdcardDir = File(Environment.getExternalStorageDirectory(), "AmWF/pixie-logs")
+        val listing = ShellExecutor.execRoot(
+            "ls ${PixieProcessSupport.shellQuote(sdcardDir.absolutePath)} 2>/dev/null"
+        )
+        if (listing.exitCode == 0 && listing.output.isNotBlank()) {
+            val names = listing.output.lineSequence()
+                .map { it.trim() }
+                .filter { it.endsWith(".log") }
+                .toList()
+            if (names.isNotEmpty()) {
+                val targets = names.joinToString(" ") {
+                    PixieProcessSupport.shellQuote("${sdcardDir.absolutePath}/$it")
+                }
+                val removed = ShellExecutor.execRoot("rm -f $targets 2>/dev/null", timeoutMs = 10_000)
+                if (removed.exitCode == 0) deleted += names.size
+            }
+        }
+        return deleted
+    }
+
+    /**
      * Versión de la app tal como la muestra el log («name (code)»). Se lee
      * del PackageManager en lugar de habilitar buildConfig solo para esto;
      * si el paquete no responde, el log queda con un marcador honesto.

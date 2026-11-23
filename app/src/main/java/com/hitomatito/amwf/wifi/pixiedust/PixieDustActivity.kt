@@ -285,6 +285,17 @@ class PixieDustActivity : AppCompatActivity() {
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
+                        is PixieDustEvent.AuditLogsDeleted -> {
+                            Toast.makeText(
+                                this@PixieDustActivity,
+                                resources.getQuantityString(
+                                    R.plurals.pixie_logs_deleted,
+                                    event.count,
+                                    event.count
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
             }
@@ -309,6 +320,12 @@ class PixieDustActivity : AppCompatActivity() {
 
         binding.btnStop.setOnClickListener {
             viewModel.stopAttack()
+        }
+
+        // Higiene de credenciales: siempre visible (no depende de una sesión
+        // en curso) y con confirmación, porque borra archivos con PIN/PSK.
+        binding.btnDeleteLogs.setOnClickListener {
+            confirmDeleteAuditLogs()
         }
 
         // El registro se queda "pegado" al final solo si el usuario no lo ha
@@ -441,6 +458,22 @@ class PixieDustActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton(R.string.pixie_permission_retry) { _, _ ->
                 permissionLauncher.launch(WifiScanPermissions.runtimePermissions())
+            }
+            .setNegativeButton(R.string.pixie_permission_cancel, null)
+            .show()
+    }
+
+    /**
+     * Confirmación antes de borrar los logs guardados: es destructivo y los
+     * archivos contienen credenciales en texto claro — justo lo que se busca
+     * borrar, pero nunca sin pedirlo.
+     */
+    private fun confirmDeleteAuditLogs() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pixie_logs_delete_title)
+            .setMessage(R.string.pixie_logs_delete_message)
+            .setPositiveButton(R.string.pixie_logs_delete_confirm) { _, _ ->
+                viewModel.deleteAuditLogs()
             }
             .setNegativeButton(R.string.pixie_permission_cancel, null)
             .show()

@@ -261,6 +261,10 @@
     <string name="pixie_console_attack_target">BSSID: %1$s | Interface: %2$s</string>
     <string name="pixie_console_cleanup_wait">Waiting for the previous audit\'s cleanup to finish…</string>
     <string name="pixie_console_cleanup_busy">The previous audit\'s cleanup was still running; it may interfere with this one</string>
+    <string name="pixie_delete_logs">Delete saved logs</string>
+    <string name="pixie_logs_delete_title">Delete the saved audit logs?</string>
+    <string name="pixie_logs_delete_message">Every log saved to /sdcard/AmWF/pixie-logs and to internal storage will be permanently deleted. They contain credentials in plain text; this cannot be undone.</string>
+    <string name="pixie_logs_delete_confirm">Delete</string>
     <string name="pixie_console_attack_success">[+] Audit successful — PIN: %1$s</string>
     <string name="pixie_console_wpa_key">[+] WPA key: %1$s</string>
     <string name="pixie_console_attack_failed">[-] Audit failed: %1$s</string>
@@ -294,5 +298,9 @@
     <plurals name="pixie_console_scan_finished">
         <item quantity="one">Scan complete: %1$d network found.</item>
         <item quantity="other">Scan complete: %1$d networks found.</item>
+    </plurals>
+    <plurals name="pixie_logs_deleted">
+        <item quantity="one">Deleted %1$d audit log</item>
+        <item quantity="other">Deleted %1$d audit logs</item>
     </plurals>
 </resources>

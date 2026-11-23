@@ -195,6 +195,22 @@
                         app:iconGravity="textStart"
                         app:iconPadding="8dp" />
 
+                    <!-- Higiene de credenciales: los logs guardados contienen
+                         PIN/PSK en texto claro y deben poder borrarse desde
+                         la propia app (antes solo con un gestor de archivos). -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDeleteLogs"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/pixie_delete_logs"
+                        app:icon="@drawable/ic_delete_forever"
+                        app:iconGravity="textStart"
+                        app:iconSize="18dp"
+                        app:iconTint="@color/md_theme_onSurfaceVariant" />
+
                     <TextView
                         android:id="@+id/tvError"
                         android:layout_width="match_parent"

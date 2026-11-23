@@ -176,6 +176,7 @@ Upon successful audit:
 - The recovered **WPS PIN** (8 digits) and **WPA Key** (passphrase) are presented clearly on screen.
 - Tap the **Copiar clave** (**Copy key**) or **Copiar PIN** button to save credentials to the clipboard.
 - The audit report is saved locally to `/sdcard/AmWF/pixie-logs/`.
+- Use **Borrar registros guardados / Delete saved logs** on the scan card to erase every saved audit log (the shared and the app-private locations) once you no longer need the credentials.
 
 > [!WARNING]
 > **Plaintext Credential Notice:** Audit log files store the discovered WPS PIN and WPA passphrase in plaintext for verification. Store them securely and never post them on public issue trackers.
