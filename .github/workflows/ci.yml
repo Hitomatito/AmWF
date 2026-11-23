@@ -4,9 +4,10 @@
 #   ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 #
 # El APK debug queda como artefacto descargable de la propia run. Los binarios
-# nativos son assets precompilados: no se necesita NDK, solo el SDK de Android
-# (las plataformas/build-tools que falten los descarga AGP con las licencias
-# aceptadas por setup-android).
+# nativos son assets precompilados: no se necesita NDK. Los runners de GitHub
+# traen el SDK de Android preinstalado con las licencias aceptadas
+# (ANDROID_HOME=/usr/local/lib/android/sdk); AGP descarga solo la plataforma
+# (37.1) y build-tools que falten.
 #
 # Nota 16 KB: el chequeo de alineación es AVISOS por ahora (continue-on-error)
 # porque los assets actuales siguen alineados a 4 KB; cuando se recompilen con
@@ -33,21 +34,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # El daemon de Gradle exige Java 21 (gradle/gradle-daemon-jvm.properties).
       - name: JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Android SDK (licencias aceptadas)
-        uses: android-actions/setup-android@v3
-
       - name: Gradle con caché
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
+      # El SDK preinstalado del runner (licencias ya aceptadas) basta: AGP
+      # auto-descarga platform 37.1 y build-tools al primer build.
       - name: Chequeo completo (tests + lint + APK)
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
@@ -73,7 +73,7 @@ jobs:
           fi
 
       - name: Subir APK debug
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
@@ -81,7 +81,7 @@ jobs:
 
       - name: Subir reportes al fallar
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports
           path: |
