@@ -7,7 +7,7 @@ This guide provides complete instructions for setting up the build environment, 
 ## 1. Environment & Toolchain Prerequisites
 
 ### 1.1 Toolchain Specifications
-- **Gradle:** 9.6.0 (via `gradlew` wrapper)
+- **Gradle:** 9.9.2 (via `gradlew` wrapper; Dependabot keeps it current)
 - **Android Gradle Plugin (AGP):** 9.5.2 (AGP 9 compiles Kotlin natively; do not apply `org.jetbrains.kotlin.android`)
 - **JDK:** Java 21 (used by the Gradle daemon via `gradle/gradle-daemon-jvm.properties` and the Foojay toolchain resolver); compiles to Java 11 bytecode.
 - **Android SDK:**
