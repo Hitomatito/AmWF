@@ -485,6 +485,7 @@ class PixieDustActivity : AppCompatActivity() {
         val auditableCount = state.scan.networks.count { it.isAuditable() }
         val bands = bandsBySsid(state.scan.networks)
         val dualBandCount = countDualBandNetworks(bands)
+        updateFilterChipCounts(state.scan.networks, bands)
         if (state.scan.isScanning && activeFilter != NetworkFilter.ALL) {
             activeFilter = NetworkFilter.ALL
             sheetBinding?.chipGroupFilters?.check(R.id.chipAll)
@@ -670,6 +671,29 @@ class PixieDustActivity : AppCompatActivity() {
     private val NetworkFilter.chipId: Int
         get() = CHIP_BY_FILTER.getValue(this)
 
+    /**
+     * Pinta el contador de cada chip con la lista actual del escaneo. La
+     * decisión de qué entra en cada filtro es la función pura
+     * [networksMatchingFilter]; aquí solo se formatea el texto.
+     */
+    private fun updateFilterChipCounts(
+        networks: List<PixieDustNetwork>,
+        bands: Map<String, Set<WifiBand>>
+    ) {
+        val sheet = sheetBinding ?: return
+        fun count(filter: NetworkFilter) = networksMatchingFilter(networks, filter, bands).size
+        sheet.chipAll.text = getString(R.string.pixie_filter_all, count(NetworkFilter.ALL))
+        sheet.chipAuditable.text =
+            getString(R.string.pixie_filter_auditable, count(NetworkFilter.AUDITABLE))
+        sheet.chipGoodSignal.text =
+            getString(R.string.pixie_filter_good_signal, count(NetworkFilter.STRONG_SIGNAL))
+        sheet.chipLocked.text =
+            getString(R.string.pixie_filter_locked, count(NetworkFilter.WPS_LOCKED))
+        sheet.chipBand24.text = getString(R.string.pixie_filter_band24, count(NetworkFilter.BAND_24))
+        sheet.chipBand5.text = getString(R.string.pixie_filter_band5, count(NetworkFilter.BAND_5))
+        sheet.chipDualBand.text = getString(R.string.pixie_filter_dual, count(NetworkFilter.DUAL_BAND))
+    }
+
     /** Traduce el chip marcado (o ninguno) al filtro que aplica la lista. */
     private fun networkFilterForChip(chipId: Int?): NetworkFilter =
         chipId?.let(FILTER_BY_CHIP::get) ?: NetworkFilter.ALL
@@ -682,6 +706,8 @@ class PixieDustActivity : AppCompatActivity() {
         private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
             NetworkFilter.ALL to R.id.chipAll,
             NetworkFilter.AUDITABLE to R.id.chipAuditable,
+            NetworkFilter.STRONG_SIGNAL to R.id.chipGoodSignal,
+            NetworkFilter.WPS_LOCKED to R.id.chipLocked,
             NetworkFilter.BAND_24 to R.id.chipBand24,
             NetworkFilter.BAND_5 to R.id.chipBand5,
             NetworkFilter.DUAL_BAND to R.id.chipDualBand

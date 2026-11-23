@@ -91,9 +91,13 @@
     <string name="pixie_subtitle">Pixie Dust · auditoría WPS de tu red</string>
     <string name="pixie_section_scan">Redes cercanas</string>
     <string name="pixie_search_hint">Buscar por nombre o BSSID</string>
-    <string name="pixie_filter_all">Todas</string>
-    <string name="pixie_filter_auditable">Auditables</string>
-    <string name="pixie_filter_dual">Dual-band</string>
+    <string name="pixie_filter_all">Todas (%1$d)</string>
+    <string name="pixie_filter_auditable">Auditables (%1$d)</string>
+    <string name="pixie_filter_good_signal">Buena señal (%1$d)</string>
+    <string name="pixie_filter_locked">Bloqueadas (%1$d)</string>
+    <string name="pixie_filter_band24">2,4 GHz (%1$d)</string>
+    <string name="pixie_filter_band5">5 GHz (%1$d)</string>
+    <string name="pixie_filter_dual">Dual-band (%1$d)</string>
     <string name="pixie_network_bssid">BSSID %1$s</string>
     <string name="pixie_network_channel_bssid">Canal %1$d · %2$s</string>
     <string name="pixie_signal_dbm">%1$d dBm</string>

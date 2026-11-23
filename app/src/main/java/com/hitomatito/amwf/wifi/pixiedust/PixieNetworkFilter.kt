@@ -19,10 +19,23 @@ import java.util.Locale
 enum class NetworkFilter {
     ALL,
     AUDITABLE,
+    STRONG_SIGNAL,
+    WPS_LOCKED,
     BAND_24,
     BAND_5,
     DUAL_BAND
 }
+
+/**
+ * Umbral de "buena señal" para elegir objetivo.
+ *
+ * No es una medida de calidad de radio, sino un heurístico de campo: todas
+ * las auditorías exitosas registradas ocurrieron entre −61 y −71 dBm, y el
+ * único AP visible que nunca respondió al registro WPS estaba a −77 dBm.
+ * −70 separa ambos grupos con margen; por debajo, el AP puede enmudecer por
+ * alcance aunque aparezca en los escaneos.
+ */
+const val GOOD_SIGNAL_MIN_LEVEL_DBM = -70
 
 /**
  * Bandas detectadas por SSID visible. Se usa para marcar en el listado las
@@ -41,6 +54,27 @@ fun countDualBandNetworks(bandsBySsid: Map<String, Set<WifiBand>>): Int =
     bandsBySsid.count { it.value.size > 1 }
 
 /**
+ * Aplica solo el chip activo, sin la búsqueda de texto. Compartida por el
+ * listado y por los contadores que pinta la pantalla en cada chip (ver
+ * `PixieDustActivity.updateFilterChipCounts`).
+ */
+fun networksMatchingFilter(
+    networks: List<PixieDustNetwork>,
+    filter: NetworkFilter,
+    bands: Map<String, Set<WifiBand>>
+): List<PixieDustNetwork> = when (filter) {
+    NetworkFilter.ALL -> networks
+    NetworkFilter.AUDITABLE -> networks.filter { it.isAuditable() }
+    NetworkFilter.STRONG_SIGNAL -> networks.filter { it.level >= GOOD_SIGNAL_MIN_LEVEL_DBM }
+    NetworkFilter.WPS_LOCKED -> networks.filter { it.wpsLocked }
+    NetworkFilter.BAND_24 -> networks.filter { it.band() == WifiBand.BAND_24_GHZ }
+    NetworkFilter.BAND_5 -> networks.filter { it.band() == WifiBand.BAND_5_GHZ }
+    NetworkFilter.DUAL_BAND -> networks.filter {
+        (bands[it.displayName]?.size ?: 0) > 1
+    }
+}
+
+/**
  * Aplica el chip activo y la búsqueda de texto a la lista de redes.
  *
  * La búsqueda acepta coincidencias parciales por SSID o BSSID, con o sin
@@ -54,15 +88,7 @@ fun filterNetworks(
     query: String,
     bands: Map<String, Set<WifiBand>>
 ): List<PixieDustNetwork> {
-    val byFilter = when (filter) {
-        NetworkFilter.ALL -> networks
-        NetworkFilter.AUDITABLE -> networks.filter { it.isAuditable() }
-        NetworkFilter.BAND_24 -> networks.filter { it.band() == WifiBand.BAND_24_GHZ }
-        NetworkFilter.BAND_5 -> networks.filter { it.band() == WifiBand.BAND_5_GHZ }
-        NetworkFilter.DUAL_BAND -> networks.filter {
-            (bands[it.displayName]?.size ?: 0) > 1
-        }
-    }
+    val byFilter = networksMatchingFilter(networks, filter, bands)
     val trimmed = query.trim()
     if (trimmed.isEmpty()) return byFilter
     return byFilter.filter { it.matchesQuery(trimmed.lowercase(Locale.ROOT)) }

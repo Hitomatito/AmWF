@@ -18,12 +18,13 @@ class PixieNetworkFilterTest {
         bssid: String = "00:11:22:33:44:55",
         frequency: Int = 2437,
         wpsCapable: Boolean = true,
-        wpsLocked: Boolean = false
+        wpsLocked: Boolean = false,
+        level: Int = -50
     ) = PixieDustNetwork(
         ssid = ssid,
         bssid = bssid,
         frequency = frequency,
-        level = -50,
+        level = level,
         wpsCapable = wpsCapable,
         wpsLocked = wpsLocked,
         capabilities = "",
@@ -64,6 +65,51 @@ class PixieNetworkFilterTest {
             listOf("aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"),
             filterNetworks(networks, NetworkFilter.DUAL_BAND, "", bands).map { it.bssid }
         )
+    }
+
+    @Test
+    fun `buena señal respeta el umbral de campo y combina con la busqueda`() {
+        // Umbral documentado en GOOD_SIGNAL_MIN_LEVEL_DBM: los éxitos de campo
+        // ocurrieron entre −61 y −71 dBm y el AP silencioso estaba a −77.
+        val mixed = listOf(
+            network("Fuerte", "aa:bb:cc:dd:ee:21", level = -61),
+            network("Limite", "aa:bb:cc:dd:ee:22", level = -70),
+            network("Debil", "aa:bb:cc:dd:ee:23", level = -71),
+            network("MuyDebil", "aa:bb:cc:dd:ee:24", level = -77)
+        )
+        val mixedBands = bandsBySsid(mixed)
+
+        assertEquals(
+            listOf("Fuerte", "Limite"),
+            filterNetworks(mixed, NetworkFilter.STRONG_SIGNAL, "", mixedBands).map { it.ssid }
+        )
+        // La búsqueda sigue aplicándose sobre el resultado del chip.
+        assertEquals(
+            listOf("Fuerte"),
+            filterNetworks(mixed, NetworkFilter.STRONG_SIGNAL, "fuerte", mixedBands).map { it.ssid }
+        )
+    }
+
+    @Test
+    fun `el filtro de bloqueadas muestra solo el WPS lockeado`() {
+        // Visibilidad de diagnóstico: explica por qué una red con WPS no
+        // aparece en Auditables (caso de campo: AP con Setup Locked).
+        assertEquals(
+            listOf("Invitados"),
+            filterNetworks(networks, NetworkFilter.WPS_LOCKED, "", bands).map { it.ssid }
+        )
+    }
+
+    @Test
+    fun `networksMatchingFilter alimenta los contadores de los chips`() {
+        // Misma decisión que la lista: los contadores no pueden divergir del
+        // filtrado que ve el usuario.
+        for (filter in NetworkFilter.entries) {
+            assertEquals(
+                filterNetworks(networks, filter, "", bands).size,
+                networksMatchingFilter(networks, filter, bands).size
+            )
+        }
     }
 
     @Test

@@ -164,12 +164,30 @@
                     app:checkedIconVisible="false" />
 
                 <com.google.android.material.chip.Chip
+                    android:id="@+id/chipGoodSignal"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_filter_good_signal"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipLocked"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="true"
+                    android:text="@string/pixie_filter_locked"
+                    app:checkedIconVisible="false" />
+
+                <com.google.android.material.chip.Chip
                     android:id="@+id/chipBand24"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checkable="true"
-                    android:text="@string/pixie_band_24ghz"
+                    android:text="@string/pixie_filter_band24"
                     app:checkedIconVisible="false" />
 
                 <com.google.android.material.chip.Chip
@@ -178,7 +196,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checkable="true"
-                    android:text="@string/pixie_band_5ghz"
+                    android:text="@string/pixie_filter_band5"
                     app:checkedIconVisible="false" />
 
                 <com.google.android.material.chip.Chip
