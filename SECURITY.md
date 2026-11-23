@@ -31,6 +31,9 @@ Please include, when relevant:
 - **Audit logs** (in `/sdcard/AmWF/pixie-logs/` or the app's private directory)
   contain the WPS PIN and the WPA key **in plain text**. Never attach them to an
   issue or send them anywhere. Delete them when you no longer need them.
+  The raw section redacts third-party networks that share the channel
+  (neighbor BSSIDs reduced to their OUI, SSIDs replaced with `<redacted>`);
+  the audited target's own identifiers and credentials remain in plain text.
 - **Diagnostics reports** exported by the app redact MAC addresses (kept only to
   their OUI) and redact SSIDs, including SSIDs discovered from `iw dev`. Even so,
   inspect a report before sharing it.

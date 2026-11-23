@@ -128,7 +128,12 @@ internal object PixieAuditLog {
             eventLines.forEach { appendLine(it) }
             appendLine()
             appendLine("=== Salida cruda (wpa_supplicant / wpa_cli / pixiewps) ===")
-            rawLines.forEach { appendLine(it) }
+            // Redacción de vecinos (ver [redactNeighborMentions]): el valor
+            // forense del volcado está en el objetivo y sus campos M3, no en
+            // el inventario de SSIDs/MACs de terceros que comparten canal.
+            rawLines.forEach {
+                appendLine(redactNeighborMentions(it, target.bssid, target.ssid))
+            }
             appendLine()
             appendLine("=== Resumen ===")
             buildAuditSummaryLines(summary).forEach { appendLine(it) }
@@ -215,6 +220,50 @@ internal object PixieAuditLog {
 }
 
 private val AUDIT_BSSID_REGEX = Regex("^[0-9A-Fa-f]{12}$")
+
+/** MAC en formato dos-puntos, tal como la imprime el supplicant. */
+private val RAW_MAC_REGEX = Regex("\\b[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\\b")
+
+/** SSID entrecomillado tras la clave «ssid» (con o sin «=»), en simple o doble comilla. */
+private val RAW_SSID_REGEX = Regex("(?i)(\\bssid\\b\\s*=?\\s*)'([^']*)'")
+private val RAW_DQ_SSID_REGEX = Regex("(?i)(\\bssid\\b\\s*=?\\s*)\"([^\"]*)\"")
+
+/**
+ * Redacta en la sección cruda del log las menciones de redes ajenas al
+ * objetivo: la MAC de cada vecino queda reducida a su OUI y su SSID se
+ * sustituye por `<redacted>`. Las líneas y valores del objetivo (su BSSID, su
+ * SSID, los campos M3 en hex — que usan espacios, no dos-puntos) quedan
+ * intactos: el propósito del log es el objetivo auditado, no el inventario
+ * del canal. Con SSID oculto (objetivo desconocido) se redactan todos los
+ * SSID; la cabecera ya dice «(desconocido)».
+ *
+ * Función pura y unit-testeada. La sección de eventos no pasa por aquí: solo
+ * contiene hitos de la app y datos del propio objetivo.
+ */
+internal fun redactNeighborMentions(line: String, targetBssid: String, targetSsid: String?): String {
+    val targetMac = targetBssid.trim().lowercase()
+    var out = RAW_MAC_REGEX.replace(line) { match ->
+        if (targetMac.isNotEmpty() && match.value.lowercase() == targetMac) {
+            match.value
+        } else {
+            match.value.split(":").take(3).joinToString(":") + ":xx:xx:xx"
+        }
+    }
+    val keepSsid = targetSsid?.trim().takeUnless { it.isNullOrEmpty() }
+    // El reemplazo elimina las dos comillas (no solo la de apertura): dejar
+    // una comilla huérfana tras <redacted> sería ruido visual en el volcado.
+    out = RAW_SSID_REGEX.replace(out) { match ->
+        val value = match.groupValues[2]
+        if (keepSsid != null && value == keepSsid) match.value
+        else "${match.groupValues[1]}<redacted>"
+    }
+    out = RAW_DQ_SSID_REGEX.replace(out) { match ->
+        val value = match.groupValues[2]
+        if (keepSsid != null && value == keepSsid) match.value
+        else "${match.groupValues[1]}<redacted>"
+    }
+    return out
+}
 
 /**
  * Etiquetas de los hitos de tiempo que [PixieDustRunner] registra vía

@@ -129,4 +129,65 @@ class PixieAuditLogTest {
         // Sin pixiewps en el resumen no hay línea de modo.
         assertTrue(lines.none { it.startsWith("Modo pixiewps") })
     }
+
+    @Test
+    fun `la redaccion de vecinos conserva al objetivo y reduce al resto a OUI`() {
+        val target = "74:da:88:13:ce:a0"
+        val ssid = "familiachoque"
+
+        // Línea del vecino con formato real del supplicant (log de campo).
+        val neighbor = redactNeighborMentions(
+            "wlan0: BSS: Add new id 2 BSSID d8:31:39:53:e7:1a SSID 'PARIGUANA' freq 2437",
+            target,
+            ssid
+        )
+        assertEquals(
+            "wlan0: BSS: Add new id 2 BSSID d8:31:39:xx:xx:xx SSID <redacted> freq 2437",
+            neighbor
+        )
+
+        // La línea del objetivo queda intacta: es el propósito del log.
+        val own = "wlan0: BSS: Add new id 7 BSSID 74:da:88:13:ce:a0 SSID 'familiachoque' freq 2417"
+        assertEquals(own, redactNeighborMentions(own, target, ssid))
+    }
+
+    @Test
+    fun `la redaccion cubre la lista de seleccion y no toca los hex M3`() {
+        val target = "74:da:88:13:ce:a0"
+        val ssid = "familiachoque"
+
+        // Formato de la lista de selección: ssid='...' con comillas simples.
+        val selection = redactNeighborMentions(
+            "wlan0: 3: d8:31:39:53:e7:1a ssid='PARIGUANA' wps",
+            target,
+            ssid
+        )
+        assertEquals("wlan0: 3: d8:31:39:xx:xx:xx ssid=<redacted> wps", selection)
+
+        // El objetivo en la misma lista se conserva (comparación de MAC sin
+        // distinguir mayúsculas, como lo imprime el supplicant).
+        val ownSelection = "wlan0: 4: 74:DA:88:13:CE:A0 ssid='familiachoque' wps"
+        assertEquals(ownSelection, redactNeighborMentions(ownSelection, target, ssid))
+
+        // Los campos M3 usan espacios, no dos-puntos: el regex de MAC no puede
+        // tocarlos, y tampoco hay clave «ssid» que redactar.
+        val hexdump = "WPS: AuthKey - hexdump(len=32): 52 cc c8 55 96 9e ab 6b 70 4f a5 ce da 39 e1 86"
+        assertEquals(hexdump, redactNeighborMentions(hexdump, target, ssid))
+    }
+
+    @Test
+    fun `con SSID oculto se redactan todas las menciones de SSID`() {
+        // El objetivo es una red oculta: su propio SSID también se redacta
+        // (la cabecera ya dice «(desconocido)»); el BSSID sí se conserva.
+        val target = "74:da:88:13:ce:a0"
+        val line = redactNeighborMentions(
+            "wlan0: BSS: Add new id 7 BSSID 74:da:88:13:ce:a0 SSID 'cualquiera' freq 2417",
+            target,
+            null
+        )
+        assertEquals(
+            "wlan0: BSS: Add new id 7 BSSID 74:da:88:13:ce:a0 SSID <redacted> freq 2417",
+            line
+        )
+    }
 }
