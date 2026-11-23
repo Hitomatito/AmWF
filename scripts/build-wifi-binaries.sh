@@ -15,6 +15,12 @@
 #   - Fuente de wpa_supplicant 2.11 en ../wpa_supplicant-2.11/ (WPA_DIR)
 #   - Fuente de libnl 3.2.25 en ../libnl-3.2.25/ (LIBNL_DIR)
 #
+# Los ELF de arm64-v8a se alinean a páginas de 16 KB (-Wl,-z,max-page-size=
+# 16384): Android 15+ con páginas de 16 KB no carga LOAD segments alineados a
+# 4 KB, y Google Play rechaza (desde el 2025-11-01) actualizaciones con
+# targetSdk 35+ sin este soporte. armeabi-v7a está exenta (requisito de 64
+# bits). El propio script verifica la alineación al final y aborta si falla.
+#
 # El wpa_supplicant se compila SIN CONFIG_ANDROID_LOG y CON CONFIG_DEBUG_FILE
 # para que los hexdump WPS completos salgan por stdout. El supplicant de
 # Android los trunca a 32 bytes y los manda a logcat, lo que hace imposible
@@ -56,6 +62,13 @@ AR="$TOOLCHAIN/bin/llvm-ar"
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 
+# Alineación de páginas de 16 KB (solo 64 bits; ver cabecera). Vacío para
+# armeabi-v7a, que está exenta del requisito.
+ALIGN_LDFLAGS=""
+if [[ "$ARCH" == "arm64-v8a" ]]; then
+    ALIGN_LDFLAGS="-Wl,-z,max-page-size=16384"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ASSETS_DIR="$PROJECT_DIR/app/src/main/assets/wifi"
@@ -71,7 +84,7 @@ if [[ -d "$PIXIEWPS_DIR" ]]; then
     make -C "$PIXIEWPS_DIR" \
         CC="$CC" \
         CFLAGS="-O3 -DANDROID -fPIE -fPIC -I$SYSROOT/usr/include -I$SYSROOT/usr/include/$TRIPLE" \
-        LDFLAGS="-pie -L$SYSROOT/usr/lib/$TRIPLE/$ANDROID_API" \
+        LDFLAGS="-pie -L$SYSROOT/usr/lib/$TRIPLE/$ANDROID_API $ALIGN_LDFLAGS" \
         LIBS="" \
         OPENSSL=0 \
         -j"$(nproc)"
@@ -126,7 +139,7 @@ if [[ ! -f Makefile ]]; then
         --disable-static --enable-shared \
         CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
         CFLAGS="-O2 -fPIC" \
-        LDFLAGS="-L$LIBNL_DIR/build-stubs -pie -Wl,--undefined-version" \
+        LDFLAGS="-L$LIBNL_DIR/build-stubs -pie -Wl,--undefined-version $ALIGN_LDFLAGS" \
         LIBS="-lpthread"
 fi
 
@@ -215,6 +228,9 @@ cat >> .config <<EOF
 CFLAGS += -I$LIBNL_DIR/build-include -I..
 LDFLAGS += -L$LIBNL_DIR/lib/.libs
 LDFLAGS += -L$LIBNL_DIR/build-stubs
+# Páginas de 16 KB: los LOAD segments de arm64 deben quedar alineados a
+# 16384 o el linker de Android 15+ (16 KB) no carga el binario.
+LDFLAGS += -Wl,-z,max-page-size=16384
 EOF
 
 # wpa_ctrl.c y os_unix.c incluyen <private/android_filesystem_config.h>.
@@ -251,6 +267,41 @@ if [[ -f wpa_cli ]]; then
 else
     echo "[wpa_cli] ERROR: binario no generado"
     exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Verificación de alineación a 16 KB (solo arm64-v8a)
+# ---------------------------------------------------------------------------
+# Play exige soporte de páginas de 16 KB para targetSdk 35+ (desde el
+# 2025-11-01) y los dispositivos 16 KB no cargan ELF con LOAD alineado a 4 KB.
+# Falla el build si algún binario copiado no cumple: nunca publicar un asset
+# mal alineado.
+verify_16k_alignment() {
+    local file="$1"
+    local align
+    align="$("$TOOLCHAIN/bin/llvm-readelf" -lW "$file" 2>/dev/null \
+        | awk '$1 == "LOAD" && $NF != "0x4000" { print $NF; exit }')"
+    if [[ -n "$align" ]]; then
+        echo "[16KB] ERROR: $(basename "$file") tiene un LOAD segment alineado a $align (se exige 0x4000)" >&2
+        echo "[16KB] Revisa que el NDK sea r27+ y que no se pise la flag -Wl,-z,max-page-size=16384" >&2
+        return 1
+    fi
+    echo "[16KB] OK: $(basename "$file") — LOAD segments alineados a 0x4000"
+}
+
+if [[ "$ARCH" == "arm64-v8a" ]]; then
+    echo "[16KB] Verificando alineación de los binarios generados ..."
+    for f in \
+        "$ASSETS_DIR/pixiewps" \
+        "$ASSETS_DIR/libnl-3.so.200" \
+        "$ASSETS_DIR/libnl-genl-3.so.200" \
+        "$ASSETS_DIR/wpa_supplicant" \
+        "$ASSETS_DIR/wpa_cli"
+    do
+        if [[ -f "$f" ]]; then
+            verify_16k_alignment "$f" || exit 1
+        fi
+    done
 fi
 
 echo "=== Hecho para $ARCH ==="

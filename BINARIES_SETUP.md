@@ -162,6 +162,36 @@ Dust Binaries** row) and launch **WPS Pixie Dust Audit**. The app log must show
 `wpa_supplicant ctrl interface ready (PONG)` and, after `wps_reg`, the six complete
 `WPS: ... - hexdump(len=...)` lines.
 
+## 7. 16 KB page-size alignment (Google Play requirement)
+
+Android 15+ supports devices with 16 KB memory pages, and Google Play rejects
+(since **November 1st, 2025**) updates targeting Android 15+ whose 64-bit
+binaries are not 16 KB-aligned. All bundled `arm64-v8a` assets must have their
+ELF `LOAD` segments aligned to `0x4000` (16384): on a 16 KB device the dynamic
+linker refuses to load anything aligned to the old 4 KB (`0x1000`) default, so
+`wpa_supplicant`, `wpa_cli`, `pixiewps` and the libnl libraries would fail to
+exec and the whole Pixie Dust flow would break. `armeabi-v7a` is exempt (the
+requirement only covers 64-bit targets).
+
+The build script handles this end to end:
+
+- It passes `-Wl,-z,max-page-size=16384` in every link (`pixiewps`, `libnl
+  configure`, the `wpa_supplicant` `.config`).
+- After copying the assets it verifies every produced ELF with
+  `llvm-readelf` and **aborts the build** if any `LOAD` segment is not aligned
+  to `0x4000`, so a misaligned binary can never reach the APK silently.
+
+To check the current assets yourself:
+
+```bash
+readelf -lW app/src/main/assets/wifi/wpa_supplicant | grep LOAD
+# LOAD columns must end in 0x4000, not 0x1000
+```
+
+Android Studio flags misaligned binaries in the APK with *"not compatible with
+16 KB devices"*; that warning must be clean before a Play upload. Rebuild with
+`./scripts/build-wifi-binaries.sh arm64-v8a` (NDK r27+) and re-run the check.
+
 ## License of the binaries
 
 | Binary | License | Implication for AmWF (GPL-3.0) |
