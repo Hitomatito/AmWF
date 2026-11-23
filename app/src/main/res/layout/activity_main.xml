@@ -98,6 +98,20 @@
                     android:layout_marginTop="8dp"
                     android:layout_marginStart="40dp"/>
 
+                <!-- Fecha del resultado mostrado: con la restauración en frío
+                     puede ser de hace horas y el usuario debe saberlo. -->
+                <TextView
+                    android:id="@+id/tvLastCheck"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="40dp"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/md_theme_onSurfaceVariant"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    tools:text="Última verificación: 23 nov 2026, 14:02"
+                    tools:visibility="visible" />
+
                 <com.google.android.material.progressindicator.LinearProgressIndicator
                     android:id="@+id/progressCompatibility"
                     android:layout_width="match_parent"

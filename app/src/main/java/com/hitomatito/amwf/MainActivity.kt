@@ -39,6 +39,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /** Decisión pura: sin verificación solo se permite desactivar o reintentar. */
 internal fun toggleEnabledForState(isCompatVerified: Boolean, mode: MonitorMode): Boolean =
@@ -66,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvInfo: TextView
     private lateinit var tvCompatStatus: TextView
     private lateinit var tvCompatTitle: TextView
+    private lateinit var tvLastCheck: TextView
     private lateinit var tvSubtitle: TextView
     private lateinit var btnToggle: MaterialButton
     private lateinit var btnLanguage: MaterialButton
@@ -117,6 +120,11 @@ class MainActivity : AppCompatActivity() {
         // repita el test ni la Activity nueva lo dispare de nuevo.
         @Volatile
         private var cachedCompatResult: CompatibilityResult? = null
+        // Fecha del resultado cacheado (0 = desconocida). Se persiste junto al
+        // resultado: con la restauración en frío, el dato puede ser de hace
+        // horas y la tarjeta debe decir cuándo se tomó.
+        @Volatile
+        private var cachedCompatCheckedAtMs: Long = 0L
         // True mientras hay una comprobación de compatibilidad en vuelo. Permite
         // que un recreate() durante la comprobación espere ese resultado en lugar
         // de lanzar un segundo test que volvería a cortar la WiFi.
@@ -165,7 +173,22 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Using cached compatibility result")
                 applyCompatResult(cached)
             } else {
-                showCompatNotVerified()
+                // Apertura en frío: restaurar la última verificación de esta
+                // misma instalación para VER los datos sin repetir el test
+                // disruptivo. El test sigue siendo exclusivamente manual;
+                // tras una actualización de la app el snapshot se descarta
+                // (binarios y rutas pudieron cambiar).
+                val restored = CompatResultStore.load(applicationContext)
+                if (restored != null &&
+                    restored.appUpdateTimeMs == CompatResultStore.currentAppUpdateTime(applicationContext)
+                ) {
+                    Log.d(TAG, "Restoring persisted compatibility result")
+                    cachedCompatResult = restored.result
+                    cachedCompatCheckedAtMs = restored.checkedAtMs
+                    applyCompatResult(restored.result)
+                } else {
+                    showCompatNotVerified()
+                }
             }
             // Si una verificación anterior murió a mitad (la escritura de
             // con_mode puede llevarse por delante la app), aplicar la restauración
@@ -231,6 +254,7 @@ class MainActivity : AppCompatActivity() {
         tvInfo = findViewById(R.id.tvInfo)
         tvCompatStatus = findViewById(R.id.tvCompatStatus)
         tvCompatTitle = findViewById(R.id.tvCompatTitle)
+        tvLastCheck = findViewById(R.id.tvLastCheck)
         tvSubtitle = findViewById(R.id.tvSubtitle)
         btnToggle = findViewById(R.id.btnToggle)
         btnLanguage = findViewById(R.id.btnLanguage)
@@ -450,7 +474,22 @@ class MainActivity : AppCompatActivity() {
                     // comprobación, la nueva Activity podrá reutilizar el resultado.
                     compatibilityChecker.checkCompatibility { percent, phase ->
                         runOnUiThread { updateCompatProgress(percent, phase) }
-                    }.also { cachedCompatResult = it }
+                    }.also { result ->
+                        cachedCompatResult = result
+                        cachedCompatCheckedAtMs = System.currentTimeMillis()
+                        // Persistir también: la muerte del proceso no debe
+                        // exigir repetir el test disruptivo solo para volver a
+                        // VER los datos. commit=true, mismo patrón que los
+                        // marcadores de restauración.
+                        CompatResultStore.save(
+                            applicationContext,
+                            CompatResultStore.Snapshot(
+                                result = result,
+                                checkedAtMs = cachedCompatCheckedAtMs,
+                                appUpdateTimeMs = CompatResultStore.currentAppUpdateTime(applicationContext)
+                            )
+                        )
+                    }
                 }
                 applyCompatResult(result)
             } catch (e: CancellationException) {
@@ -466,6 +505,11 @@ class MainActivity : AppCompatActivity() {
                 // una verificación fallida (dejaría el modo monitor abierto).
                 logE(TAG, "Unexpected error during compatibility check", e)
                 cachedCompatResult = null
+                cachedCompatCheckedAtMs = 0L
+                // El snapshot persistido tampoco puede sobrevivir a una
+                // verificación fallida: un éxito de la instalación anterior
+                // no puede desbloquear el modo monitor tras el fallo.
+                CompatResultStore.clear(applicationContext)
                 isCompatVerified = false
                 isDeviceCompatible = false
                 tvCompatTitle.text = getString(R.string.device_compatibility)
@@ -542,11 +586,33 @@ class MainActivity : AppCompatActivity() {
     private fun showCompatNotVerified() {
         isCompatVerified = false
         layoutDeviceInfo.visibility = View.GONE
+        tvLastCheck.visibility = View.GONE
         setCompatTitleIcon(R.drawable.ic_info, R.color.md_theme_onSurfaceVariant)
         tvCompatTitle.text = getString(R.string.device_compatibility)
         tvCompatStatus.text = getString(R.string.compat_not_verified)
         tvCompatStatus.setTextColor(getColor(R.color.md_theme_onSurfaceVariant))
         setVerifyButtonRunning(false)
+    }
+
+    /**
+     * Fecha del dato que se está mostrando. Con persistencia, el resultado
+     * puede venir de un check de hace horas: el usuario debe saber qué está
+     * mirando antes de fiarse del estado (y de si merece repetir el test).
+     */
+    private fun updateLastCheckTime() {
+        if (cachedCompatCheckedAtMs <= 0L) {
+            tvLastCheck.visibility = View.GONE
+            return
+        }
+        tvLastCheck.visibility = View.VISIBLE
+        tvLastCheck.text = getString(
+            R.string.compat_last_check,
+            DateFormat.getDateTimeInstance(
+                DateFormat.MEDIUM,
+                DateFormat.SHORT,
+                resources.configuration.locales[0]
+            ).format(Date(cachedCompatCheckedAtMs))
+        )
     }
 
     // Estado del botón "Verificar compatibilidad": mientras hay un test en vuelo el
@@ -570,6 +636,7 @@ class MainActivity : AppCompatActivity() {
         isDeviceCompatible = result.isCompatible
         setVerifyButtonRunning(false)
         updateCompatibilityUI(result)
+        updateLastCheckTime()
 
         if (isDeviceCompatible) {
             checkCurrentMode()

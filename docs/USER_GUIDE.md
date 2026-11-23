@@ -59,7 +59,7 @@ AmWF includes a non-destructive hardware verification suite to test whether your
 
 > [!NOTE]
 > **Temporary Wi-Fi interruption:** During the compatibility test, the Wi-Fi radio is toggled off and on to evaluate hardware state transitions. Wi-Fi is restored to its previous state automatically once the test finishes.
-> Results are cached for the entire session, so you only need to run this test once per app launch.
+> The result persists across app restarts (with its date shown on the card), so you don't need to re-run the disruptive test just to see it again — it is discarded only when the app itself is updated, and the check still runs exclusively when you tap the button.
 
 ---
 

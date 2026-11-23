@@ -15,6 +15,7 @@
     <string name="checking_compatibility">Verificando…</string>
     <string name="verify_compatibility">Verificar compatibilidad</string>
     <string name="compat_not_verified">Aún no has verificado tu dispositivo. La comprobación solo se ejecuta al pulsar «Verificar compatibilidad» y puede interrumpir brevemente el WiFi.</string>
+    <string name="compat_last_check">Última verificación: %1$s</string>
     <string name="compat_check_unexpected_error">Error inesperado durante la verificación. Inténtalo de nuevo.</string>
     <string name="compat_restore_toast">Verificación interrumpida: se restauró el WiFi.</string>
     <string name="phase_wifi_disable">Deshabilitando WiFi…</string>
