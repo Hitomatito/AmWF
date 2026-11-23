@@ -9,10 +9,10 @@
 # (ANDROID_HOME=/usr/local/lib/android/sdk); AGP descarga solo la plataforma
 # (37.1) y build-tools que falten.
 #
-# Nota 16 KB: el chequeo de alineación es AVISOS por ahora (continue-on-error)
-# porque los assets actuales siguen alineados a 4 KB; cuando se recompilen con
-# build-wifi-binaries.sh hay que quitar continue-on-error para que CI bloquee
-# cualquier regresión.
+# Nota 16 KB: el chequeo de alineación es BLOQUEANTE. Los assets arm64 están
+# recompilados con scripts/build-wifi-binaries.sh (NDK r27,
+# -Wl,-z,max-page-size=16384) y cualquier ELF que vuelva a salir alineado a
+# 4 KB debe cortar la run: Play rechazaría el upload.
 
 name: CI
 
@@ -51,10 +51,9 @@ jobs:
       - name: Chequeo completo (tests + lint + APK)
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
-      # Aviso no bloqueante: los ELF arm64 deben alinear sus LOAD a 16 KB
-      # (requisito Play desde 2025-11-01). Véase BINARIES_SETUP.md §7.
+      # Bloqueante: los ELF arm64 deben alinear sus LOAD a 16 KB (requisito
+      # Play desde 2025-11-01). Véase BINARIES_SETUP.md §7.
       - name: Alineación 16 KB de los binarios empaquetados
-        continue-on-error: true
         run: |
           set -u
           fails=0
@@ -62,14 +61,15 @@ jobs:
             align="$(readelf -lW "app/src/main/assets/wifi/$f" \
               | awk '$1 == "LOAD" { print $NF; exit }')"
             if [[ "$align" != "0x4000" ]]; then
-              echo "::warning file=app/src/main/assets/wifi/$f::$f alineado a ${align:-?}; se exige 0x4000 (16 KB)"
+              echo "::error file=app/src/main/assets/wifi/$f::$f alineado a ${align:-?}; se exige 0x4000 (16 KB)"
               fails=1
             else
               echo "[16KB] OK: $f (LOAD align 0x4000)"
             fi
           done
           if [[ "$fails" -ne 0 ]]; then
-            echo "::warning::Assets arm64 sin alinear a 16 KB: Play rechazará el upload (ver BINARIES_SETUP.md §7). Recompilar con scripts/build-wifi-binaries.sh."
+            echo "::error::Assets arm64 sin alinear a 16 KB: Play rechazará el upload (ver BINARIES_SETUP.md §7). Recompilar con scripts/build-wifi-binaries.sh."
+            exit 1
           fi
 
       - name: Subir APK debug

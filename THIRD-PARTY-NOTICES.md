@@ -48,8 +48,10 @@ Provenance and build details:
 
 - **pixiewps** was compiled by this project from upstream source using the
   Android NDK r27 (clang 18) for arm64-v8a and armeabi-v7a. Build recipe:
-  `scripts/build-wifi-binaries.sh`. Source revision: upstream master as of
-  2026-10.
+  `scripts/build-wifi-binaries.sh`. Source revision: upstream master commit
+  `30c22cf` (2026-10-26). The arm64-v8a asset was rebuilt on 2026-11-23 with
+  16 KB-aligned ELF segments (`-Wl,-z,max-page-size=16384`, NDK r27
+  `27.0.12077973`), keeping the same recipe and source.
 - **wpa_supplicant** (arm64-v8a) and **wpa_cli** were compiled by this project
   from the wpa_supplicant 2.11 release with the Android NDK r27 (clang 18),
   API 24. The supplicant is built with `CONFIG_DEBUG_FILE=y`, without
