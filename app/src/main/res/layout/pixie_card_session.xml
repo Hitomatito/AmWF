@@ -338,6 +338,7 @@
                 android:layout_marginTop="12dp"
                 android:drawablePadding="8dp"
                 android:textColor="@color/managed"
+                android:textIsSelectable="true"
                 android:textSize="13sp"
                 android:visibility="gone"
                 app:drawableStartCompat="@drawable/ic_error"
