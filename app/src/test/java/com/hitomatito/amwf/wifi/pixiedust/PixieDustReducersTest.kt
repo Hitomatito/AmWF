@@ -433,4 +433,22 @@ class PixieDustReducersTest {
         // default (wlan0) en lugar de inventar un nombre.
         assertEquals(emptyList<String>(), interfacesFromSysfsListing("lo\ndummy0\nrmnet_data0"))
     }
+
+    @Test
+    fun `la consola recorta solo las lineas gigantes y conserva las cortas`() {
+        // El comando de pixiewps con las claves DH de 384 caracteres no debe
+        // ocupar la pantalla entera envuelto: en la consola se recorta (el
+        // log de auditoría ya guardó la línea completa).
+        val huge = "[*] Pixiewps command: pixiewps --pke " + "a".repeat(400) +
+            " --pkr " + "b".repeat(400)
+        val shown = consoleDisplayLine(huge)
+        assertEquals(201, shown.length)
+        assertTrue(shown.endsWith("…"))
+        assertTrue(shown.startsWith("[*] Pixiewps command: pixiewps --pke aaa"))
+
+        // Las líneas normales pasan intactas, y el límite exacto tampoco recorta.
+        assertEquals("[+] Cleanup done", consoleDisplayLine("[+] Cleanup done"))
+        val exact = "x".repeat(200)
+        assertEquals(exact, consoleDisplayLine(exact))
+    }
 }

@@ -487,11 +487,14 @@ class PixieDustViewModel @JvmOverloads constructor(
                 // La consola muestra hitos; la salida cruda de los procesos
                 // (supplicant y stderr de pixiewps) se queda en el log de
                 // auditoría, no en la UI. Debe filtrar los mismos prefijos
-                // que excluye persistAuditLog, o la consola se inunda.
+                // que excluye persistAuditLog, o la consola se inunda. Las
+                // líneas legítimas pero enormes (comando de pixiewps, campos
+                // M3) se recortan solo para la vista: el log las guarda
+                // completas antes de llegar aquí.
                 if (!line.startsWith("[supplicant]") &&
                     !line.startsWith("[pixiewps-stderr]")
                 ) {
-                    addConsoleLine(line)
+                    addConsoleLine(consoleDisplayLine(line))
                 }
             },
             onStage = { newStage ->

@@ -242,3 +242,16 @@ fun clearResultState(state: PixieDustUiState): PixieDustUiState = state.copy(
     ),
     errorMessage = null
 )
+
+/**
+ * Línea tal como debe verse en la consola de la sesión.
+ *
+ * Las líneas con material crudo (el comando de pixiewps con dos claves DH de
+ * 384 caracteres, los campos M3 en hex) son legales en el log de auditoría
+ * —allí van completas—, pero en pantalla una sola de ellas ocupa todo el
+ * registro envuelta y desplaza los hitos que el usuario sí lee. Se recortan a
+ * [maxChars] con elipsis; todo lo demás pasa intacto. El recorte ocurre solo
+ * en el camino de la consola: `auditEvents` ya guardó la línea completa.
+ */
+fun consoleDisplayLine(line: String, maxChars: Int = 200): String =
+    if (line.length > maxChars) line.take(maxChars) + "…" else line
