@@ -58,6 +58,7 @@ internal class PixieDustRunner(
     private val pskExtractor: PskExtractorGateway,
     private val nativeBinaries: NativeBinariesGateway,
     private val auditLog: AuditLogGateway,
+    private val attackRestore: AttackRestoreGateway,
     private val strings: (Int, Array<out Any>) -> String,
     private val shellExec: (String, Int) -> ShellExecutor.Result,
     private val isWifiEnabled: () -> Boolean?
@@ -219,6 +220,10 @@ internal class PixieDustRunner(
             wifiDisabledByAttack = false
             if (wifiWasEnabled) {
                 log("[*] Disabling system WiFi (svc wifi disable)...")
+                // Antes del disable, no después: si el proceso muere en esa
+                // ventana, el marcador ya está en disco y el siguiente arranque
+                // enciende el radio (mismo patrón que radio_touched del check).
+                attackRestore.markWifiDisabled()
                 val wifiOff = execSu("svc wifi disable", timeoutSeconds = 5)
                 log("[*] svc wifi disable -> exit=${wifiOff.exitCode}")
                 // Se marca aunque el comando falle: si llegó a desactivar la
@@ -640,7 +645,11 @@ internal class PixieDustRunner(
         } catch (_: Exception) {}
         if (wifiDisabledByAttack) {
             wifiDisabledByAttack = false
-            restoreWifi()
+            val restored = restoreWifi()
+            // El marcador de restauración pendiente solo se limpia si el
+            // framework confirmó el encendido; si no, se conserva para que el
+            // siguiente arranque reintente (mismo contrato que el check).
+            attackRestore.clearWifiDisabledMarker(restored == true)
         }
         log("[*] Cleanup done")
         cleanupDone = true
@@ -655,7 +664,7 @@ internal class PixieDustRunner(
      * lecturas consecutivas —una tras dejar asentar la radio— y se reintenta.
      * Bloquea a propósito: [cleanup] ya se ejecuta fuera del hilo principal.
      */
-    private fun restoreWifi() {
+    private fun restoreWifi(): Boolean? {
         var lastKnown: Boolean? = null
         repeat(WIFI_RESTORE_ATTEMPTS) { index ->
             val r = execSu("svc wifi enable 2>/dev/null", timeoutSeconds = 5)
@@ -667,7 +676,7 @@ internal class PixieDustRunner(
             if (lastKnown == true) {
                 Thread.sleep(WIFI_RESTORE_SETTLE_MS)
                 val settled = wifiEnabled()
-                if (settled == true) return
+                if (settled == true) return true
                 lastKnown = settled
                 log("[!] Cleanup: el WiFi se reporto encendido pero volvio atras; reintentando")
             }
@@ -678,6 +687,7 @@ internal class PixieDustRunner(
         } else if (lastKnown == null) {
             log("[!] Cleanup: no se pudo confirmar el estado del WiFi")
         }
+        return lastKnown
     }
 
     /**
@@ -784,6 +794,7 @@ internal class PixieDustRunner(
                 pskExtractor = PixiePskExtractor(appContext, supplicant),
                 nativeBinaries = SystemNativeBinaries(context),
                 auditLog = SystemAuditLog(appContext),
+                attackRestore = SystemAttackRestore(appContext),
                 strings = { id, args -> context.getString(id, *args) },
                 shellExec = { cmd, timeout -> PixieProcessSupport.execSu(cmd, timeout) },
                 isWifiEnabled = {

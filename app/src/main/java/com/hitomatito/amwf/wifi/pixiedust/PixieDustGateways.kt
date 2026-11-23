@@ -93,6 +93,20 @@ internal interface AuditLogGateway {
     )
 }
 
+/**
+ * Marcador persistente del "el ataque apagó el WiFi del usuario": el runner lo
+ * escribe antes del `svc wifi disable` y lo limpia en `cleanup()` solo si el
+ * framework confirmó el encendido. Cubre la muerte del proceso a mitad de
+ * auditoría (misma clase de problema que el marcador del check compat).
+ */
+internal interface AttackRestoreGateway {
+    /** Persiste síncronamente que esta auditoría apagó el WiFi del sistema. */
+    fun markWifiDisabled()
+
+    /** Limpia el marcador si la restauración se confirmó; si no, se conserva. */
+    fun clearWifiDisabledMarker(restored: Boolean)
+}
+
 /** Implementación real: delega en [NativeBinaries]. */
 internal class SystemNativeBinaries(private val context: Context) : NativeBinariesGateway {
     override fun prepare(): List<String> {
@@ -125,5 +139,16 @@ internal class SystemAuditLog(private val context: Context) : AuditLogGateway {
             rawLines = rawLines,
             log = log
         )
+    }
+}
+
+/** Implementación real: delega en [PixieAttackRestore]. */
+internal class SystemAttackRestore(private val context: Context) : AttackRestoreGateway {
+    override fun markWifiDisabled() {
+        PixieAttackRestore.markWifiDisabled(context)
+    }
+
+    override fun clearWifiDisabledMarker(restored: Boolean) {
+        if (restored) PixieAttackRestore.clear(context)
     }
 }

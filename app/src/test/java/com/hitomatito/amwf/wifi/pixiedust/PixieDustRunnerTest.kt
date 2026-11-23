@@ -203,6 +203,19 @@ class PixieDustRunnerTest {
         override fun archSuffix(): String = ""
     }
 
+    private class FakeAttackRestore : AttackRestoreGateway {
+        var markCount = 0
+        val clears = mutableListOf<Boolean>()
+
+        override fun markWifiDisabled() {
+            markCount++
+        }
+
+        override fun clearWifiDisabledMarker(restored: Boolean) {
+            clears += restored
+        }
+    }
+
     private data class PersistedCall(
         val result: PixieDustResult?,
         val target: PixieAuditLog.Target,
@@ -678,6 +691,51 @@ class PixieDustRunnerTest {
     }
 
     @Test
+    fun `con wifi encendido el ataque persiste el marcador y lo limpia al restaurarlo`() = runTest {
+        // Si el proceso muere a mitad de auditoría, el marcador en disco es lo
+        // único que enciende el WiFi del usuario en el siguiente arranque; se
+        // escribe ANTES del svc wifi disable y solo se limpia si el framework
+        // confirmó el encendido.
+        val restore = FakeAttackRestore()
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = FakeSupplicant(fixture = fullM3Lines()),
+            restore = restore,
+            shell = ShellRecorder(wifiEnabledState = true),
+            wifiOn = { true }
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            ssid = "Casa"
+        )
+
+        assertTrue(result is PixieDustResult.Success)
+        assertEquals(1, restore.markCount)
+        assertEquals(listOf(true), restore.clears)
+    }
+
+    @Test
+    fun `con wifi ya apagado el ataque no escribe el marcador de restauracion`() = runTest {
+        // Nunca se debe encender un WiFi que el usuario tenía apagado: sin
+        // marcador, el siguiente arranque no tiene nada que restaurar.
+        val restore = FakeAttackRestore()
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = FakeSupplicant(fixture = fullM3Lines()),
+            restore = restore,
+            wifiOn = { false }
+        )
+
+        runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff"
+        )
+
+        assertEquals(0, restore.markCount)
+        assertEquals(0, restore.clears.size)
+    }
+
+    @Test
     fun `cancel() es idempotente y no repite pkill ni el encendido del WiFi`() = runTest {
         val shell = ShellRecorder(wifiEnabledState = true)
         val runner = runnerWith(
@@ -734,6 +792,7 @@ class PixieDustRunnerTest {
         psk: FakePskExtractor = FakePskExtractor(),
         binaries: FakeNativeBinaries = FakeNativeBinaries(),
         audit: FakeAuditLog = FakeAuditLog(),
+        restore: FakeAttackRestore = FakeAttackRestore(),
         shell: ShellRecorder = ShellRecorder(),
         wifiOn: () -> Boolean? = { false },
         onStage: (PixieDustStage) -> Unit = {}
@@ -744,6 +803,7 @@ class PixieDustRunnerTest {
         pskExtractor = psk,
         nativeBinaries = binaries,
         auditLog = audit,
+        attackRestore = restore,
         strings = { id, args ->
             "res:$id${if (args.isEmpty()) "" else args.joinToString(",", "(", ")")}"
         },

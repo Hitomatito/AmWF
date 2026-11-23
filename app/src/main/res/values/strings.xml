@@ -231,6 +231,7 @@
     <string name="pixie_reason_assoc_rejected">El AP rechazó la asociación repetidamente (timeout=assoc/auth). Suele ser un bloqueo temporal del router: si acabas de auditar este AP, su bloqueo WPS tarda unos minutos en liberarse. Espera y reintenta.</string>
     <string name="pixie_reason_no_response">El AP no responde al wps_reg (sin asociación ni M1): la señal es débil o el AP está fuera de alcance. Acércate al router y reintenta.</string>
     <string name="pixie_reason_no_response_visible">El AP aparece en los escaneos pero no respondió al wps_reg (sin asociación ni M1). Suele ser un bloqueo WPS del router o una sesión anterior atascada, no un problema de señal: espera unos minutos y reintenta.</string>
+    <string name="pixie_restore_toast">Una auditoría interrumpida había dejado el WiFi apagado: se restauró automáticamente.</string>
     <string name="pixie_interface">Interfaz</string>
     <string name="pixie_wifi_disabled">Activa el WiFi para escanear redes</string>
     <string name="pixie_scan_failed">No se pudo iniciar el escaneo WiFi. Inténtalo de nuevo.</string>

@@ -30,6 +30,7 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.hitomatito.amwf.ShellExecutor.logE
 import com.hitomatito.amwf.wifi.pixiedust.NativeBinaries
 import com.hitomatito.amwf.wifi.pixiedust.PixieDustActivity
+import com.hitomatito.amwf.wifi.pixiedust.PixieAttackRestore
 import com.hitomatito.amwf.diagnostics.DiagnosticsCollector
 import com.hitomatito.amwf.diagnostics.DiagnosticsExporter
 import kotlinx.coroutines.CancellationException
@@ -170,6 +171,9 @@ class MainActivity : AppCompatActivity() {
             // pendiente también cuando hay un resultado en caché: el finally pudo
             // fallar al encender el WiFi y el marcador seguir vivo.
             applyPendingCompatRestore()
+            // Lo mismo para una auditoría Pixie Dust interrumpida: su cleanup
+            // nunca corrió y el marcador debe encender el radio de nuevo.
+            applyPendingPixieRestore()
         }
     }
 
@@ -194,6 +198,29 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 pendingRestoreInProgress = false
                 btnVerifyCompatibility.isEnabled = !compatCheckInProgress
+            }
+        }
+    }
+
+    /**
+     * Enciende el WiFi si una auditoría Pixie Dust murió con el radio apagado
+     * (marcador persistente de `PixieAttackRestore`). Es independiente del
+     * marcador de compatibilidad, pero igual que él no se toca el radio
+     * mientras un check esté en vuelo.
+     */
+    private fun applyPendingPixieRestore() {
+        if (compatCheckInProgress) return
+        lifecycleScope.launch {
+            val restored = withContext(Dispatchers.IO) {
+                if (compatCheckInProgress) return@withContext false
+                PixieAttackRestore.restoreIfPending(applicationContext)
+            }
+            if (restored) {
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.pixie_restore_toast),
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }

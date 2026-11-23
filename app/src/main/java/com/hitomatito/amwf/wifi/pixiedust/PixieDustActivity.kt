@@ -34,6 +34,7 @@ import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.databinding.ActivityPixieDustBinding
 import com.hitomatito.amwf.databinding.SheetPixieNetworkPickerBinding
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
@@ -136,6 +137,14 @@ class PixieDustActivity : AppCompatActivity() {
         binding.rootLayout.requestFocus()
 
         viewModel.loadInterfaces()
+
+        // Si una auditoría anterior murió a medias (swipe-away, force-stop o
+        // crash), su marcador pendiente enciende el WiFi aquí. Cubre también
+        // el reingreso directo a esta pantalla desde recents sin pasar por
+        // MainActivity; la restauración es idempotente (marcador a disco).
+        lifecycleScope.launch(Dispatchers.IO) {
+            PixieAttackRestore.restoreIfPending(applicationContext)
+        }
 
         binding.scrollContent.post { binding.scrollContent.scrollTo(0, 0) }
     }
