@@ -69,7 +69,8 @@ internal class PixieDustRunner(
     private val IFACE_REGEX = Regex("^[a-zA-Z0-9]+$")
 
     // Intentos silenciosos (AP mudo, sin asociación ni M1) seguidos que
-    // cortan la auditoría: señal débil o fuera de alcance.
+    // cortan la auditoría: señal débil/fuera de alcance, o un AP visible que
+    // ignora el registro WPS (bloqueo o sesión atascada).
     private val MAX_SILENT_ATTEMPTS = 2
 
     // Límites de tiempo y reintentos: una sola fuente de verdad en
@@ -536,11 +537,28 @@ internal class PixieDustRunner(
                 }
                 is M3Parser.M3Capture.NoResponse -> {
                     consecutiveSilentAttempts++
-                    log("[-] El AP no responde a wps_reg (ni asociación ni M1; ¿señal débil o fuera de alcance?)")
+                    log("[-] El AP no responde a wps_reg (ni asociación ni M1)")
                     if (consecutiveSilentAttempts >= MAX_SILENT_ATTEMPTS) {
+                        // Distingue un AP fuera de alcance de uno visible que
+                        // ignoró el registro WPS (visto en campo a -77 dBm: no
+                        // era la señal). El BSSID solo cuenta si apareció en un
+                        // escaneo o selección de BSS del supplicant, no en el
+                        // eco del propio comando wps_reg, que se imprime
+                        // siempre.
+                        val bssidSeen = M3Parser.bssidVisibleInSupplicantOutput(
+                            rawOutput.toString(), bssid
+                        )
+                        if (bssidSeen) {
+                            log("[-] El AP aparece en los escaneos pero no respondió al registro WPS (posible bloqueo WPS o sesión atascada)")
+                        }
+                        val reasonRes = if (bssidSeen) {
+                            R.string.pixie_reason_no_response_visible
+                        } else {
+                            R.string.pixie_reason_no_response
+                        }
                         return@coroutineScope M3Attempt(
                             data = null,
-                            failureReason = strings(R.string.pixie_reason_no_response, emptyArray()),
+                            failureReason = strings(reasonRes, emptyArray()),
                             m5m7 = null,
                             terminal = true
                         )

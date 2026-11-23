@@ -193,8 +193,9 @@
     <string name="pixie_reason_supplicant_socket">wpa_supplicant socket was not created (SELinux may be blocking it)</string>
     <string name="pixie_reason_no_m3_data">Not enough data to run the Pixie Dust attack</string>
     <string name="pixie_reason_pbc_only">This router only supports WPS via the physical button (PBC); it does not accept a PIN, so Pixie Dust cannot work on it.</string>
-    <string name="pixie_reason_assoc_rejected">The AP repeatedly rejected association (timeout=assoc/auth). Usually a temporary block or a router filter: wait a few minutes and try again.</string>
+    <string name="pixie_reason_assoc_rejected">The AP repeatedly rejected association (timeout=assoc/auth). Usually a temporary router block: if you audited this AP recently, its WPS lockout takes a few minutes to clear. Wait and try again.</string>
     <string name="pixie_reason_no_response">The AP is not responding to wps_reg (no association, no M1): signal is weak or the AP is out of range. Move closer to the router and try again.</string>
+    <string name="pixie_reason_no_response_visible">The AP shows up in scans but did not respond to wps_reg (no association, no M1). Usually a router WPS lockout or a stuck previous session, not a signal problem: wait a few minutes and try again.</string>
     <string name="capability_full">Full monitor</string>
     <string name="capability_injection">Packet injection</string>
     <string name="capability_capture">Full capture</string>

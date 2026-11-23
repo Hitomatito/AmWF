@@ -389,6 +389,46 @@ class M3ParserTest {
         assertTrue(capture is M3Parser.M3Capture.Complete)
     }
 
+    @Test
+    fun `detects target bssid in scan and bss selection lines`() {
+        // Líneas reales de los logs de campo (PUCHIPU, -77 dBm): el AP estaba
+        // en alcance aunque nunca respondió al wps_reg. Cada formato de línea
+        // del supplicant que delata visibilidad debe contar como visto.
+        val raw = buildString {
+            appendLine("wlan0: BSS: Add new id 17 BSSID 5c:a6:e6:cc:eb:82 SSID 'PUCHIPU' freq 2457")
+            appendLine("wlan0: 17: 5c:a6:e6:cc:eb:82 ssid='PUCHIPU' wpa_ie_len=22 rsn_ie_len=20 caps=0x411 level=-77 freq=2457  wps")
+            appendLine("WPS: AP[56] 5c:a6:e6:cc:eb:82 type=1 tries=0 last_attempt=-1 sec ago bssid_ignore=0")
+            appendLine("wlan0: selected BSS 5c:a6:e6:cc:eb:82 ssid='PUCHIPU'")
+        }
+
+        assertTrue(M3Parser.bssidVisibleInSupplicantOutput(raw, "5c:a6:e6:cc:eb:82"))
+    }
+
+    @Test
+    fun `the wps_reg command echo does not count as a visible ap`() {
+        // El supplicant imprime el comando de control siempre, incluso si el AP
+        // jamás apareció en un escaneo: no puede usarse como prueba de alcance.
+        val raw = buildString {
+            appendLine("wlan0: Control interface command 'WPS_REG 5c:a6:e6:cc:eb:82 12345670'")
+            appendLine("wlan0: Starting AP scan for wildcard SSID")
+            appendLine("wlan0: No suitable network found")
+        }
+
+        assertTrue(!M3Parser.bssidVisibleInSupplicantOutput(raw, "5c:a6:e6:cc:eb:82"))
+    }
+
+    @Test
+    fun `no target lines means no visibility`() {
+        // AP realmente fuera de alcance: el escaneo solo vio a otras redes.
+        val raw = buildString {
+            appendLine("wlan0: BSS: Add new id 0 BSSID 44:3b:14:10:e3:c8 SSID 'OTRA' freq 2412")
+            appendLine("wlan0: 0: 44:3b:14:10:e3:c8 ssid='OTRA' level=-61 freq=2412  wps")
+        }
+
+        assertTrue(!M3Parser.bssidVisibleInSupplicantOutput(raw, "5c:a6:e6:cc:eb:82"))
+        assertTrue(M3Parser.bssidVisibleInSupplicantOutput(raw, "44:3b:14:10:e3:c8"))
+    }
+
     private fun parse(text: String): M3Parser.M3Capture {
         val queue = LinkedBlockingQueue<String>()
         text.lineSequence().forEach { queue.offer(it) }

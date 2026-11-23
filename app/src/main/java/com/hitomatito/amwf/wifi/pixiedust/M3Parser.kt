@@ -427,6 +427,33 @@ object M3Parser {
     }
 
     /**
+     * true si el BSSID objetivo aparece en la salida del supplicant como parte
+     * de un resultado de escaneo o de una selección de BSS (y no solo en el eco
+     * de un comando de control como `WPS_REG <bssid>`, que se imprime siempre).
+     *
+     * Separa los dos motivos reales de un AP que nunca responde al wps_reg
+     * (visto en campo): si el BSSID está en los escaneos, el AP está en
+     * alcance pero ignoró el registro WPS (bloqueo o sesión atascada); si no
+     * aparece en ninguno, la señal es demasiado débil o está fuera de alcance.
+     */
+    fun bssidVisibleInSupplicantOutput(raw: String, bssid: String): Boolean {
+        val target = bssid.trim().lowercase()
+        if (target.isEmpty()) return false
+        val selectionLine = Regex(":\\s*$target\\s+ssid=")
+        return raw.lineSequence().any { line ->
+            val l = line.lowercase()
+            // "BSS: Add new id 17 BSSID 5c:a6:... SSID 'X' freq 2457"
+            l.contains("bssid $target") ||
+                // "wlan0: 17: 5c:a6:... ssid='X' ... wps" (lista de selección)
+                selectionLine.containsMatchIn(l) ||
+                // "wlan0: selected BSS 5c:a6:... ssid='X'"
+                l.contains("selected bss $target") ||
+                // "WPS: AP[56] 5c:a6:... type=1 ..." / "WPS: AP 44:... type 1 added"
+                (l.contains("wps: ap") && l.contains(target))
+        }
+    }
+
+    /**
      * Guarda [hexValue] en el campo [label] si es conocido, aún no estaba
      * capturado y tiene la longitud esperada. Devuelve true si capturó algo.
      */
