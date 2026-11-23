@@ -1,0 +1,25 @@
+# Dependencias vigiladas por GitHub Dependabot.
+#
+# Semanal: el repo es pequeño y las subidas de versión se validan con la CI
+# completa (tests + lint + APK + gate 16 KB) antes de mergear. Los PRs de
+# dependabot no tocan los binarios nativos (assets), que se reconstruyen con
+# su propio script y NDK.
+version: 2
+updates:
+  # Catálogo de versiones y plugins de Gradle.
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Los commits siguen Conventional Commits: ayuda a que los títulos de los
+    # PRs encajen con el historial del proyecto.
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Acciones de .github/workflows (checkout, setup-java, upload-artifact...).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
