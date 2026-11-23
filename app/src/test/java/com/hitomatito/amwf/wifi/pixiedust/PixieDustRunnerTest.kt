@@ -68,13 +68,16 @@ class PixieDustRunnerTest {
         var sendWpsRegCount = 0
         var cancelWpsCount = 0
         var stopAndFlushCount = 0
+        var lastFreqMHz: Int? = null
 
         override suspend fun launch(
             iface: String,
+            freqMHz: Int?,
             rawOutput: StringBuilder,
             log: (String) -> Unit
         ): SupplicantProcesses.Handle? {
             launchCount++
+            lastFreqMHz = freqMHz
             if (failLaunch) return null
             val lines =
                 if (launchCount == 1 || subsequentFixture == null) fixture else subsequentFixture
@@ -162,10 +165,12 @@ class PixieDustRunnerTest {
     ) : PskExtractorGateway {
         var extractCount = 0
         var lastPin: String? = null
+        var lastFreqMHz: Int? = null
 
         override suspend fun extract(
             bssid: String,
             iface: String,
+            freqMHz: Int?,
             ssid: String,
             pin: String,
             rawOutput: StringBuilder,
@@ -173,6 +178,7 @@ class PixieDustRunnerTest {
         ): String? {
             extractCount++
             lastPin = pin
+            lastFreqMHz = freqMHz
             if (throwCancellation) throw CancellationException("cancelada por el usuario")
             return cannedPsk
         }
@@ -365,6 +371,29 @@ class PixieDustRunnerTest {
         assertEquals(1, audit.calls.size)
         assertTrue(audit.calls[0].result is PixieDustResult.Success)
         assertTrue(success.rawOutput.contains("Enrollee Nonce"))
+    }
+
+    @Test
+    fun `la frecuencia del objetivo viaja al supplicant y a la extraccion de PSK`() = runTest {
+        // freq_list del config runtime: el runner ya conoce el canal del
+        // objetivo desde el escaneo de la UI y debe repartirlo a ambas fases.
+        val supplicant = FakeSupplicant(fixture = fullM3Lines())
+        val psk = FakePskExtractor()
+        val runner = runnerWith(
+            dispatcher = StandardTestDispatcher(testScheduler),
+            supplicant = supplicant,
+            psk = psk
+        )
+
+        val result = runner.runAttack(
+            bssid = "aa:bb:cc:dd:ee:ff",
+            ssid = "Casa",
+            freqMHz = 5180
+        )
+
+        assertTrue(result is PixieDustResult.Success)
+        assertEquals(5180, supplicant.lastFreqMHz)
+        assertEquals(5180, psk.lastFreqMHz)
     }
 
     @Test

@@ -146,6 +146,7 @@ internal class PixiePskExtractor(
     override suspend fun extract(
         bssid: String,
         iface: String,
+        freqMHz: Int?,
         ssid: String,
         pin: String,
         rawOutput: StringBuilder,
@@ -161,7 +162,7 @@ internal class PixiePskExtractor(
             // Mismo arranque que el ataque (ctrl dir, config, socket y PONG):
             // la fase sigue siendo EXTRACTING_PSK, así que launch no toca el
             // tracker.
-            handle = supplicant.launch(iface = iface, rawOutput = rawOutput, log = log)
+            handle = supplicant.launch(iface = iface, freqMHz = freqMHz, rawOutput = rawOutput, log = log)
             if (handle == null) {
                 log("[-] PSK stage: no se pudo arrancar wpa_supplicant para WPS")
                 return@withTimeoutOrNull null

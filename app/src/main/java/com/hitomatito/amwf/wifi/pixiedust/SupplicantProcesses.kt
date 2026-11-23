@@ -23,6 +23,45 @@ internal const val WPS_REG_PIN_DEFAULT = "12345670"
 internal fun isWpsRegAccepted(result: ShellExecutor.Result): Boolean =
     result.exitCode == 0 && result.output.lines().any { it.trim() == "OK" }
 
+/** Rango de frecuencias plausibles para un objetivo Wi-Fi (2.4/5/6 GHz). */
+private val SCAN_FREQ_RANGE_MHZ = 2400..7200
+
+/**
+ * Contenido del config runtime del supplicant: la interfaz de control en
+ * [ctrlDir], las opciones del asset (sin las directivas `ctrl_interface`, que
+ * se reemplazan por la ruta runtime) y, si se conoce la frecuencia del
+ * objetivo, un `freq_list` global que limita el escaneo a su canal.
+ *
+ * Sin `freq_list`, cada `wps_reg` dispara un escaneo full-band de 2.4+5 GHz
+ * (~2-4 s por intento) y el log de auditoría se inunda con los SSIDs y MACs de
+ * redes ajenas al objetivo. El wpa_supplicant 2.11 empaquetado acepta
+ * `freq_list` como parámetro global y su scan.c la aplica ("Optimize scan
+ * based on conf->freq_list", verificado contra el binario). Con una
+ * frecuencia nula o fuera de rango se omite la línea y el escaneo vuelve a
+ * ser full-band (comportamiento histórico, nunca peor que antes).
+ */
+internal fun buildRuntimeConfigContent(
+    assetLines: List<String>,
+    ctrlDir: String,
+    freqMHz: Int?
+): String {
+    // Conservar otras opciones del asset, pero descartar las variantes de
+    // ctrl_interface para no duplicar directivas con la ruta runtime.
+    val extraOptions = assetLines
+        .map { it.trim() }
+        .filter {
+            it.isNotEmpty() &&
+                !it.startsWith("ctrl_interface=") &&
+                !it.startsWith("ctrl_interface_group=")
+        }
+    val scanFreq = freqMHz?.takeIf { it in SCAN_FREQ_RANGE_MHZ }
+    return buildString {
+        appendLine("ctrl_interface=DIR=$ctrlDir GROUP=wifi")
+        extraOptions.forEach(::appendLine)
+        if (scanFreq != null) appendLine("freq_list=$scanFreq")
+    }
+}
+
 /**
  * Ciclo de vida del `wpa_supplicant` empaquetado y de su interfaz de control.
  *
@@ -49,6 +88,7 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
      */
     override suspend fun launch(
         iface: String,
+        freqMHz: Int?,
         rawOutput: StringBuilder,
         log: (String) -> Unit
     ): Handle? {
@@ -58,7 +98,7 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
         PixieProcessSupport.execSu("mkdir -p $ctrlDir 2>/dev/null", timeoutSeconds = 3)
         PixieProcessSupport.execSu("chmod 777 $ctrlDir 2>/dev/null", timeoutSeconds = 3)
 
-        if (!stageConfig(ctrlDir, log)) {
+        if (!stageConfig(ctrlDir, freqMHz, log)) {
             log("[-] No se pudo preparar el config del supplicant en $ctrlDir")
             return null
         }
@@ -235,7 +275,7 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
      * El fichero se envía por stdin porque el dominio SELinux de `su` no
      * puede leer filesDir.
      */
-    private fun stageConfig(ctrlDir: String, log: (String) -> Unit): Boolean {
+    private fun stageConfig(ctrlDir: String, freqMHz: Int?, log: (String) -> Unit): Boolean {
         val source = File(
             NativeBinaries.binaryDir(context),
             NativeBinaries.WPA_SUPPLICANT_CONF
@@ -245,18 +285,9 @@ internal class SupplicantProcesses(private val context: Context) : SupplicantGat
             return false
         }
 
-        // Conservar otras opciones del asset, pero descartar las variantes de
-        // ctrl_interface para no duplicar directivas con la ruta runtime.
-        val extraOptions = source.readLines()
-            .map { it.trim() }
-            .filter {
-                it.isNotEmpty() &&
-                    !it.startsWith("ctrl_interface=") &&
-                    !it.startsWith("ctrl_interface_group=")
-            }
-        val content = buildString {
-            appendLine("ctrl_interface=DIR=$ctrlDir GROUP=wifi")
-            extraOptions.forEach { appendLine(it) }
+        val content = buildRuntimeConfigContent(source.readLines(), ctrlDir, freqMHz)
+        if (freqMHz?.takeIf { it in SCAN_FREQ_RANGE_MHZ } != null) {
+            log("[*] Escaneo limitado al canal del objetivo (freq_list=${freqMHz} MHz)")
         }
 
         val target = NativeBinaries.runtimeConfigPath()

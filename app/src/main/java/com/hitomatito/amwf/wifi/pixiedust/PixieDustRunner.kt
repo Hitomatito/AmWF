@@ -117,7 +117,9 @@ internal class PixieDustRunner(
      * @param bssid Dirección MAC del objetivo (validada estrictamente).
      * @param interfaceName Nombre de la interfaz WiFi (por defecto "wlan0").
      * @param ssid SSID de la red (opcional, necesario para extraer el PSK).
-     * @param freqMHz Frecuencia en MHz (opcional).
+     * @param freqMHz Frecuencia del objetivo en MHz (opcional): limita el
+     * escaneo del supplicant a su canal y afina el motivo de fallo si el AP
+     * no responde.
      * @return [PixieDustResult] con el resultado de la auditoría.
      */
     suspend fun runAttack(
@@ -258,6 +260,7 @@ internal class PixieDustRunner(
                 stage(PixieDustStage.STARTING_SUPPLICANT)
                 val handle = supplicant.launch(
                     iface = interfaceName,
+                    freqMHz = freqMHz,
                     rawOutput = rawOutput,
                     log = ::log
                 ) ?: run {
@@ -379,6 +382,7 @@ internal class PixieDustRunner(
                 wpaPsk = pskExtractor.extract(
                     bssid = bssid,
                     iface = interfaceName,
+                    freqMHz = freqMHz,
                     ssid = targetSsid,
                     pin = wpsPin,
                     rawOutput = rawOutput,

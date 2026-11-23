@@ -17,8 +17,14 @@ import java.util.concurrent.BlockingQueue
  * Las implementaciones reales son los propios colaboradores y las clases System*.
  */
 internal interface SupplicantGateway {
+    /**
+     * Arranca el supplicant con el config runtime. [freqMHz], si se conoce,
+     * limita el escaneo al canal del objetivo (`freq_list` global); con null
+     * el supplicant barre toda la banda (comportamiento histórico).
+     */
     suspend fun launch(
         iface: String,
+        freqMHz: Int?,
         rawOutput: StringBuilder,
         log: (String) -> Unit
     ): SupplicantProcesses.Handle?
@@ -56,9 +62,11 @@ internal interface PixiewpsGateway {
 }
 
 internal interface PskExtractorGateway {
+    /** [freqMHz] limita el escaneo del supplicant de la extracción al canal del objetivo. */
     suspend fun extract(
         bssid: String,
         iface: String,
+        freqMHz: Int?,
         ssid: String,
         pin: String,
         rawOutput: StringBuilder,
