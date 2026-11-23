@@ -25,6 +25,7 @@ class PixieCleanupGateTest {
     @Test
     fun `awaitFree espera a que la limpieza huerfana termine`() = runBlocking {
         PixieCleanupGate.enter()
+        assertTrue(PixieCleanupGate.isOccupied())
         val finished = CompletableDeferred<Unit>()
         launch {
             PixieCleanupGate.awaitFree(timeoutMs = 5_000L, pollMs = 10L)
@@ -39,6 +40,7 @@ class PixieCleanupGateTest {
         }
         // El gate queda libre y la espera completa.
         finished.await()
+        assertFalse(PixieCleanupGate.isOccupied())
     }
 
     @Test

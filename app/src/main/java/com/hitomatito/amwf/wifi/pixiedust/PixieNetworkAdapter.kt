@@ -84,8 +84,13 @@ class PixieNetworkAdapter(
                 ContextCompat.getColor(
                     context,
                     when {
+                        // Misma frontera que el chip «Buena señal»: lo que ese
+                        // filtro cuenta como buena señal (>= GOOD_SIGNAL_MIN_
+                        // LEVEL_DBM) nunca se pinta por debajo de la banda
+                        // media, y bajo el umbral se lee débil. Umbrales
+                        // divergentes harían el chip y la fila irreconciliables.
                         network.level >= -60 -> R.color.monitor_active
-                        network.level >= -75 -> R.color.md_theme_onSurface
+                        network.level >= GOOD_SIGNAL_MIN_LEVEL_DBM -> R.color.md_theme_onSurface
                         else -> R.color.managed
                     }
                 )

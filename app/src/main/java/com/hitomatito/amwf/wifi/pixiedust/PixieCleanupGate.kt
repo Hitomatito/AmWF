@@ -37,6 +37,9 @@ internal object PixieCleanupGate {
         active.decrementAndGet()
     }
 
+    /** true si hay limpiezas huérfanas en curso (para avisar en la consola). */
+    fun isOccupied(): Boolean = active.get() > 0
+
     /**
      * Espera a que no queden limpiezas huérfanas. Devuelve false si vence
      * [timeoutMs]: la auditoría se lanza igualmente, pero la consola deja

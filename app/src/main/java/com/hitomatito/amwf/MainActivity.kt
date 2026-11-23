@@ -9,6 +9,7 @@ package com.hitomatito.amwf
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -575,7 +576,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = getString(R.string.device_incompatible)
             btnToggle.text = getString(R.string.not_compatible)
-            btnToggle.setBackgroundColor(getColor(R.color.unknown))
+            btnToggle.backgroundTintList = ColorStateList.valueOf(getColor(R.color.unknown))
 
             val reason = result.issues.find { it.severity == Severity.CRITICAL }
                 ?.let { it.suggestion.ifBlank { it.message } }
@@ -785,21 +786,21 @@ class MainActivity : AppCompatActivity() {
             MonitorMode.MONITOR -> {
                 tvStatus.setTextColor(getColor(R.color.monitor_active))
                 btnToggle.text = getString(R.string.disable_monitor)
-                btnToggle.setBackgroundColor(getColor(R.color.managed))
+                btnToggle.backgroundTintList = ColorStateList.valueOf(getColor(R.color.managed))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
                 setToggleEnabled(toggleEnabledByState())
             }
             MonitorMode.MANAGED -> {
                 tvStatus.setTextColor(getColor(R.color.managed))
                 btnToggle.text = getString(R.string.enable_monitor)
-                btnToggle.setBackgroundColor(getColor(R.color.monitor_active))
+                btnToggle.backgroundTintList = ColorStateList.valueOf(getColor(R.color.monitor_active))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
                 setToggleEnabled(toggleEnabledByState())
             }
             MonitorMode.UNKNOWN -> {
                 tvStatus.setTextColor(getColor(R.color.unknown))
                 btnToggle.text = getString(R.string.retry)
-                btnToggle.setBackgroundColor(getColor(R.color.unknown))
+                btnToggle.backgroundTintList = ColorStateList.valueOf(getColor(R.color.unknown))
                 btnToggle.setTextColor(android.graphics.Color.WHITE)
                 setToggleEnabled(toggleEnabledByState())
             }

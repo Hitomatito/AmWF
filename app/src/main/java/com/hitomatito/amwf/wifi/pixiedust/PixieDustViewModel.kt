@@ -9,19 +9,25 @@ package com.hitomatito.amwf.wifi.pixiedust
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
+import android.os.Handler
+import android.os.Looper
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +42,7 @@ import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.coroutines.resume
 /**
  * Estado de la pantalla de auditoría Pixie Dust.
  *
@@ -355,10 +362,73 @@ class PixieDustViewModel @JvmOverloads constructor(
             }
             return@withContext cached.map { it.toPixieDustNetwork() }
         }
-        delay(3000) // Esperar resultados
+        // En vez de un delay fijo: esperar el broadcast de resultados con un
+        // plazo amplio. Un escaneo rápido devuelve antes de 3 s y uno lento
+        // (firmware pausado, canales DFS) ya no reporta una lista vacía.
+        if (!awaitScanResults(SCAN_RESULTS_TIMEOUT_MS)) {
+            // El plazo venció o el sistema limitó el escaneo: se muestran los
+            // resultados que haya (pueden ser parciales) o el error honesto.
+            val partial = wifiManager.scanResults
+            if (partial.isEmpty()) {
+                throw IllegalStateException(
+                    localeContext.getString(R.string.pixie_scan_failed)
+                )
+            }
+            return@withContext partial.map { it.toPixieDustNetwork() }
+        }
         val results = wifiManager.scanResults
         results.map { it.toPixieDustNetwork() }
     }
+
+    /**
+     * Espera el broadcast de resultados de escaneo con un plazo máximo.
+     *
+     * Antes esto era un `delay(3000)` fijo: un escaneo rápido perdía tiempo y
+     * uno lento devolvía una lista vacía o rancia. Con el broadcast la espera
+     * es exacta; el plazo cubre un broadcast que nunca llega (limitación
+     * agresiva del sistema).
+     *
+     * Devuelve false si vence el plazo. El receiver se registra NOT_EXPORTED
+     * (solo interesa el broadcast del sistema, que sigue llegando con ese
+     * flag) y se da de baja en los tres caminos: broadcast recibido, plazo
+     * vencido y cancelación de la corrutina.
+     */
+    private suspend fun awaitScanResults(timeoutMs: Long): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            val handler = Handler(Looper.getMainLooper())
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (intent.action != WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) return
+                    runCatching { appContext.unregisterReceiver(this) }
+                    // Pre-API 28 el broadcast no trae el extra y solo llegaba
+                    // con resultados: su ausencia se lee como éxito, que es
+                    // como siempre se comportaron esos dispositivos.
+                    val updated = intent.getBooleanExtra(
+                        WifiManager.EXTRA_RESULTS_UPDATED,
+                        true
+                    )
+                    if (continuation.isActive) continuation.resume(updated)
+                }
+            }
+            continuation.invokeOnCancellation {
+                runCatching { appContext.unregisterReceiver(receiver) }
+            }
+            ContextCompat.registerReceiver(
+                appContext,
+                receiver,
+                IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            handler.postDelayed(
+                {
+                    // Puede llegar tarde (el broadcast ya se recibió): el
+                    // unregister falla controlado y el resume es no-op.
+                    runCatching { appContext.unregisterReceiver(receiver) }
+                    if (continuation.isActive) continuation.resume(false)
+                },
+                timeoutMs
+            )
+        }
 
     private fun ScanResult.toPixieDustNetwork(): PixieDustNetwork {
         val caps = capabilities
@@ -450,8 +520,13 @@ class PixieDustViewModel @JvmOverloads constructor(
             // auditoría y reentrada) puede seguir viva en su hilo: su pkill y
             // su rm -rf del ctrl dir matarían los procesos de esta auditoría.
             // Se espera a que termine antes de lanzar nada root.
-            if (!PixieCleanupGate.awaitFree(ORPHAN_CLEANUP_WAIT_MS)) {
-                addConsoleLine(localeContext.getString(R.string.pixie_console_cleanup_busy))
+            if (PixieCleanupGate.isOccupied()) {
+                // La espera es rara pero puede durar: que la consola lo diga
+                // desde el principio, no solo si vence el plazo.
+                addConsoleLine(localeContext.getString(R.string.pixie_console_cleanup_wait))
+                if (!PixieCleanupGate.awaitFree(ORPHAN_CLEANUP_WAIT_MS)) {
+                    addConsoleLine(localeContext.getString(R.string.pixie_console_cleanup_busy))
+                }
             }
             // La interfaz se resuelve aquí, con root, solo si la detección sin
             // root no la encontró (NetworkInterface exige INTERNET, que la app
@@ -619,5 +694,12 @@ class PixieDustViewModel @JvmOverloads constructor(
          * sus reintentos y relecturas de asentamiento.
          */
         private const val ORPHAN_CLEANUP_WAIT_MS = 45_000L
+
+        /**
+         * Plazo de espera del broadcast de resultados de escaneo: cubre un
+         * escaneo lento del firmware sin dejar al usuario esperando para
+         * siempre si el broadcast nunca llega.
+         */
+        private const val SCAN_RESULTS_TIMEOUT_MS = 10_000L
     }
 }
