@@ -174,7 +174,15 @@ class PixieDustViewModel @JvmOverloads constructor(
                 val ifaces = availableWifiInterfaces()
                 val binariesError = nativeBinariesError()
                 _uiState.value = interfacesLoadedState(_uiState.value, ifaces, binariesError)
-                addConsoleLine(localeContext.getString(R.string.pixie_console_interfaces_available, ifaces.joinToString(", ")))
+                // Sin INTERNET (por diseño) NetworkInterface no enumera nada y
+                // ConnectivityManager solo responde con WiFi conectado: una
+                // lista vacía no es un error; la interfaz real se resuelve con
+                // root al iniciar la auditoría.
+                if (ifaces.isEmpty()) {
+                    addConsoleLine(localeContext.getString(R.string.pixie_console_interfaces_none))
+                } else {
+                    addConsoleLine(localeContext.getString(R.string.pixie_console_interfaces_available, ifaces.joinToString(", ")))
+                }
             } catch (e: Exception) {
                 ShellExecutor.logE(TAG, "Failed to load interfaces", e)
                 _uiState.update { it.copy(errorMessage = e.message) }
@@ -225,6 +233,30 @@ class PixieDustViewModel @JvmOverloads constructor(
             // lo detectado vía ConnectivityManager.
         }
         interfaces.toList()
+    }
+
+    /**
+     * Resuelve con root la interfaz real cuando la detección sin root no
+     * encontró nada: `ls /sys/class/net` no depende del permiso INTERNET ni de
+     * una conexión activa. Se llama al iniciar la auditoría, no al abrir la
+     * pantalla, para que el prompt de su aparezca cuando el usuario ya espera
+     * actividad root. Devuelve la interfaz resuelta (y la aplica al estado,
+     * incluido `interfacesAvailable`, para que la fila de la UI deje de
+     * mostrar «No se encontró interfaz») o null si no hubo cambio.
+     */
+    private suspend fun resolveInterfaceWithRoot(): String? = withContext(ioDispatcher) {
+        if (_uiState.value.interfacesAvailable) return@withContext null
+        val result = PixieProcessSupport.execSu("ls /sys/class/net", timeoutSeconds = 3)
+        if (result.exitCode != 0) return@withContext null
+        val resolved = interfacesFromSysfsListing(result.output).firstOrNull()
+            ?: return@withContext null
+        if (resolved != _uiState.value.selectedInterface) {
+            addConsoleLine(localeContext.getString(R.string.pixie_console_interface_resolved, resolved))
+        }
+        _uiState.update {
+            it.copy(interfacesAvailable = true, selectedInterface = resolved)
+        }
+        resolved
     }
 
     /**
@@ -406,6 +438,12 @@ class PixieDustViewModel @JvmOverloads constructor(
         _uiState.update { attackStartingState(it, System.currentTimeMillis()) }
 
         attackJob = viewModelScope.launch {
+            // La interfaz se resuelve aquí, con root, solo si la detección sin
+            // root no la encontró (NetworkInterface exige INTERNET, que la app
+            // no declara; ConnectivityManager solo responde conectado). Así el
+            // prompt de su aparece cuando el usuario ya espera actividad root
+            // y la consola registra la interfaz real antes de lanzar.
+            resolveInterfaceWithRoot()
             addConsoleLine(localeContext.getString(R.string.pixie_console_attack_started, selectedNetwork.displayName))
             addConsoleLine(localeContext.getString(R.string.pixie_console_attack_target, selectedNetwork.bssid, _uiState.value.selectedInterface))
 

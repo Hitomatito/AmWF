@@ -249,6 +249,8 @@
     <string name="diagnostics_exporting">Generating diagnostics…</string>
     <string name="diagnostics_error">Could not generate diagnostics</string>
     <string name="pixie_console_interfaces_available">Available interfaces: %1$s</string>
+    <string name="pixie_console_interfaces_none">No interfaces detected without root; the interface will be resolved with root when the audit starts.</string>
+    <string name="pixie_console_interface_resolved">Interface resolved with root: %1$s</string>
     <string name="pixie_console_scan_started">Starting WiFi network scan…</string>
     <string name="pixie_console_network_selected">Selected network: %1$s (%2$s)</string>
     <string name="pixie_console_attack_started">Starting Pixie Dust audit against %1$s…</string>

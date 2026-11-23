@@ -393,4 +393,44 @@ class PixieDustReducersTest {
         // La consola no se toca.
         assertEquals(dirty.consoleLines, state.consoleLines)
     }
+
+    // ---------- Resolución de interfaz con root ----------
+
+    @Test
+    fun `interfacesFromSysfsListing keeps wifi names ordered and drops the rest`() {
+        // Salida real de `ls /sys/class/net` en un teléfono: interfaces de
+        // datos, p2p y modem mezcladas; solo cuentan wlan*/swlan*/p2p0, con
+        // wlan0 abriendo la lista.
+        val output = listOf(
+            "lo",
+            "dummy0",
+            "wlan0",
+            "p2p0",
+            "rmnet_data0"
+        ).joinToString("\n")
+
+        assertEquals(listOf("wlan0", "p2p0"), interfacesFromSysfsListing(output))
+    }
+
+    @Test
+    fun `interfacesFromSysfsListing covers multi-radio devices`() {
+        // Radio doble: wlan0 primero, el resto de wlan* ordenadas y las
+        // auxiliares al final, aunque la salida venga desordenada o repetida.
+        val output = listOf(
+            "swlan0",
+            "wlan1",
+            "wlan0",
+            "wlan1",
+            "lo"
+        ).joinToString("\n")
+
+        assertEquals(listOf("wlan0", "wlan1", "swlan0"), interfacesFromSysfsListing(output))
+    }
+
+    @Test
+    fun `interfacesFromSysfsListing returns empty without wifi interfaces`() {
+        // Un equipo sin interfaz wifi reconocible: la auditoría conservará su
+        // default (wlan0) en lugar de inventar un nombre.
+        assertEquals(emptyList<String>(), interfacesFromSysfsListing("lo\ndummy0\nrmnet_data0"))
+    }
 }

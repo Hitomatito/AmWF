@@ -209,6 +209,28 @@ fun interfacesLoadedState(
     nativeError = binariesError
 )
 
+/**
+ * Interfaces WiFi candidatas a partir de la salida de `ls /sys/class/net`.
+ *
+ * Respaldo con root para cuando la detección sin root no encuentra nada:
+ * `NetworkInterface` exige el permiso `INTERNET` (que la app no declara por
+ * diseño, así que su enumeración siempre sale vacía) y `ConnectivityManager`
+ * solo responde con una red WiFi ya conectada. Misma prioridad que la
+ * detección sin root: wlan0 primero, después el resto de wlan* ordenadas y
+ * por último las auxiliares (p2p0 y swlan).
+ */
+fun interfacesFromSysfsListing(output: String): List<String> {
+    val names = output.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .filter { name -> name.startsWith("wlan") || name == "p2p0" || name.startsWith("swlan") }
+        .distinct()
+        .toList()
+    return names.filter { it == "wlan0" } +
+        names.filter { it != "wlan0" && it.startsWith("wlan") }.sorted() +
+        names.filter { !it.startsWith("wlan") }.sorted()
+}
+
 /** Estado tras «Limpiar resultado»: borra el marcador de auditoría visible. */
 fun clearResultState(state: PixieDustUiState): PixieDustUiState = state.copy(
     session = state.session.copy(

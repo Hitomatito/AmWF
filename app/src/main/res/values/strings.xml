@@ -250,6 +250,8 @@
     <string name="diagnostics_exporting">Generando diagnóstico…</string>
     <string name="diagnostics_error">No se pudo generar el diagnóstico</string>
     <string name="pixie_console_interfaces_available">Interfaces disponibles: %1$s</string>
+    <string name="pixie_console_interfaces_none">Sin interfaces detectadas sin root; se resolverá con root al iniciar la auditoría.</string>
+    <string name="pixie_console_interface_resolved">Interfaz resuelta con root: %1$s</string>
     <string name="pixie_console_scan_started">Iniciando escaneo de redes WiFi…</string>
     <string name="pixie_console_network_selected">Red seleccionada: %1$s (%2$s)</string>
     <string name="pixie_console_attack_started">Iniciando auditoría Pixie Dust contra %1$s…</string>
