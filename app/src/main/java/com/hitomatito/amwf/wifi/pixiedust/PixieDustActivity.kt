@@ -183,6 +183,9 @@ class PixieDustActivity : AppCompatActivity() {
                 // la auditoría. No hay botón «ejecutar» aparte; el ataque root y
                 // el corte temporal de WiFi son intencionales al elegir la red.
                 sessionRenderer.consoleExpanded = true
+                // Sin esto, si el usuario dejó el registro scrolleado arriba en
+                // la sesión anterior, la nueva no seguiría el final.
+                sessionRenderer.consoleAtBottom = true
                 viewModel.startAttack()
             } else {
                 Toast.makeText(
