@@ -164,11 +164,6 @@
     <string name="pixie_stage_failed_detail">No se recuperaron credenciales; revisa el registro</string>
     <string name="pixie_stage_cancelled">Auditoría detenida</string>
     <string name="pixie_stage_cancelled_detail">Puedes revisar el registro o iniciar otra auditoría</string>
-    <string name="pixie_phase_prepare">Preparar</string>
-    <string name="pixie_phase_connect">Conectar</string>
-    <string name="pixie_phase_capture">Handshake</string>
-    <string name="pixie_phase_analyze">Analizar</string>
-    <string name="pixie_phase_credentials">Clave</string>
     <string name="pixie_success_title">¡Credenciales recuperadas!</string>
     <string name="pixie_success_subtitle">PIN WPS y clave WPA listos para copiar.</string>
     <string name="pixie_success_subtitle_pin_only">PIN WPS recuperado. No se pudo obtener la clave WPA.</string>

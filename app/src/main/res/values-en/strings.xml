@@ -128,11 +128,6 @@
     <string name="pixie_stage_failed_detail">No credentials were recovered; check the log</string>
     <string name="pixie_stage_cancelled">Audit stopped</string>
     <string name="pixie_stage_cancelled_detail">You can review the log or start another audit</string>
-    <string name="pixie_phase_prepare">Prepare</string>
-    <string name="pixie_phase_connect">Connect</string>
-    <string name="pixie_phase_capture">Handshake</string>
-    <string name="pixie_phase_analyze">Analyze</string>
-    <string name="pixie_phase_credentials">Key</string>
     <string name="pixie_success_title">Credentials recovered!</string>
     <string name="pixie_success_subtitle">WPS PIN and WPA key ready to copy.</string>
     <string name="pixie_success_subtitle_pin_only">WPS PIN recovered. The WPA key could not be obtained.</string>

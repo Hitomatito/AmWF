@@ -90,7 +90,7 @@ Find out whether your routers' WPS can resist a Pixie Dust attack.
 
 ### The whole process, in plain sight
 
-- Phase-by-phase progress, percentage, and session timer.
+- Live progress percentage and session timer.
 - Collapsible console with the details of every step.
 - Stop the audit whenever you want.
 

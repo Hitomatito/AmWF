@@ -79,7 +79,6 @@ class PixieSessionRenderer(
             state.session.finishedAt,
             outcome == SessionOutcome.RUNNING
         )
-        bindPhases(state, outcome)
         bindResult(state, outcome)
         bindConsole(state)
     }
@@ -241,59 +240,6 @@ class PixieSessionRenderer(
         if (!chronometerRunning) return
         binding.cardSession.chronSession.stop()
         chronometerRunning = false
-    }
-
-    private fun bindPhases(state: PixieDustUiState, outcome: SessionOutcome) {
-        val current = if (outcome == SessionOutcome.SUCCESS) {
-            PixieDustPhase.CREDENTIALS
-        } else {
-            state.session.stage?.phase ?: PixieDustPhase.PREPARE
-        }
-        val bars = listOf(
-            binding.cardSession.phase1Bar,
-            binding.cardSession.phase2Bar,
-            binding.cardSession.phase3Bar,
-            binding.cardSession.phase4Bar,
-            binding.cardSession.phase5Bar
-        )
-        val labels = listOf(
-            binding.cardSession.phase1Label,
-            binding.cardSession.phase2Label,
-            binding.cardSession.phase3Label,
-            binding.cardSession.phase4Label,
-            binding.cardSession.phase5Label
-        )
-        val doneColor = ContextCompat.getColor(context, R.color.md_theme_primaryContainer)
-        val activeColor = ContextCompat.getColor(context, R.color.md_theme_primary)
-        val failedColor = ContextCompat.getColor(context, R.color.managed)
-        val stoppedColor = ContextCompat.getColor(context, R.color.warning)
-        val pendingColor = ContextCompat.getColor(context, R.color.md_theme_outlineVariant)
-        val reached = current.ordinal
-        val currentColor = when (outcome) {
-            SessionOutcome.RUNNING -> activeColor
-            SessionOutcome.SUCCESS -> doneColor
-            SessionOutcome.CANCELLED -> stoppedColor
-            SessionOutcome.FAILURE -> failedColor
-        }
-
-        bars.forEachIndexed { index, bar ->
-            bar.setBackgroundColor(
-                when {
-                    index < reached -> doneColor
-                    index == reached -> currentColor
-                    else -> pendingColor
-                }
-            )
-        }
-        labels.forEachIndexed { index, label ->
-            label.setTextColor(
-                ContextCompat.getColor(
-                    context,
-                    if (index <= reached) R.color.md_theme_onSurface
-                    else R.color.md_theme_onSurfaceVariant
-                )
-            )
-        }
     }
 
     /** Colores e icono del banner de resultado. */
