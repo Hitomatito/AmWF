@@ -42,6 +42,8 @@ AmWF bundles native ARM ELF binaries compiled with the Android NDK r27:
 
 > [!NOTE]
 > On 32-bit ARM devices, `NativeBinaries.missingCriticalBinaries()` will flag that `wpa_supplicant_32` is absent, preventing invalid or truncated captures.
+>
+> All bundled `arm64-v8a` binaries are built with 16 KB ELF alignment (`LOAD` segments at `0x4000`), so the Pixie Dust module also runs on Android 15+ devices with 16 KB memory pages. `armeabi-v7a` is exempt from the 16 KB requirement.
 
 ---
 
@@ -52,7 +54,7 @@ AmWF bundles native ARM ELF binaries compiled with the Android NDK r27:
 | **Android 7.0 – 7.1** (Nougat) | 24 – 25 | ✅ Supported | `minSdk 24`. Uses legacy socket directory `/data/misc/wifi/amwf`. Process control handled by `ProcessCompat`. |
 | **Android 8.0 – 8.1** (Oreo) | 26 – 27 | ✅ Supported | Uses `/data/misc/wifi/amwf`. Native API 26 `Process` methods available. |
 | **Android 9.0 – 12L** (Pie, 10, 11, 12) | 28 – 32 | ✅ Supported | Uses vendor socket directory `/data/vendor/wifi/amwf`. |
-| **Android 13 – 15+** | 33 – 35+ | ✅ Supported | `targetSdk 37`. Requires runtime `NEARBY_WIFI_DEVICES` permission in addition to precise location. |
+| **Android 13+** | 33+ | ✅ Supported | `targetSdk 37`. Requires runtime `NEARBY_WIFI_DEVICES` permission in addition to precise location. |
 
 ### Supplicant Control Directory Selection
 Android Treble (introduced in Android 9 / API 28) segregated system and vendor directories. AmWF handles this automatically via `NativeBinaries.ctrlDir()`:

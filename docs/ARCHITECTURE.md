@@ -6,7 +6,7 @@ This document details the internal architecture, hardware interfaces, cryptograp
 
 ## 1. High-Level System Architecture
 
-AmWF is designed as a single-module Android application (`:app`) built in Kotlin, targeting rooted Qualcomm Snapdragon devices running Android 7.0 (API 24) through Android 15+ (API 35+).
+AmWF is designed as a single-module Android application (`:app`) built in Kotlin, targeting rooted Qualcomm Snapdragon devices running Android 7.0 (API 24) through the latest Android releases (compileSdk 37 / targetSdk 37).
 
 The following diagram illustrates how the presentation layer, domain reducers, native process gateways, and hardware interfaces interact:
 
@@ -20,7 +20,7 @@ flowchart TD
 
     subgraph Domain ["Pure Domain Reducers & Filters (Testable)"]
         PDR["PixieDustReducers\n(UI State Transitions)"]
-        PNF["PixieNetworkFilter\n(Search, Dual-Band, Audit Filters)"]
+        PNF["PixieNetworkFilter\n(Search, Signal/Band/WPS Filters)"]
         M3P["M3Parser\n(Hexdump & Cryptographic Token Parser)"]
     end
 
@@ -144,6 +144,7 @@ AmWF ships prebuilt ARM binaries in `app/src/main/assets/wifi/`:
 - **Stdout Flush Patch:** `scripts/patches/wpa_supplicant-2.11-stdout-flush.patch` injects `fflush(stdout)` after debug line emission so `M3Parser` reads fields immediately via pipe streams instead of waiting for process exit.
 - **`-K` Flag:** Preserves key material (including `AuthKey`) in stdout rather than printing `[REMOVED]`.
 - **`pixiewps` (arm64-v8a & armeabi-v7a):** Compiled with Android NDK r27, supporting full offline attack modes.
+- **16 KB Page Alignment:** every `arm64-v8a` ELF is linked with `-Wl,-z,max-page-size=16384` and its `LOAD` segments verified at `0x4000`, so the binaries load on Android 15+ devices with 16 KB memory pages (a Google Play requirement for updates targeting Android 15+ since November 2025). `armeabi-v7a` is exempt.
 
 ### 3.3 Session Cleanup & "Unexpected State (15)" Mitigation
 A critical operational bug in naive WPS audit tools occurs when killing the supplicant immediately upon capturing M3. If killed abruptly:
@@ -153,6 +154,13 @@ A critical operational bug in naive WPS audit tools occurs when killing the supp
 
 **Solution implemented in AmWF:** Immediately after M3 extraction succeeds, AmWF sends `wps_cancel` through `wpa_cli` to formally tear down the enrollment handshake before initiating the PSK retrieval session.
 
+### 3.4 Targeted Scanning, Interface Resolution & Crash-Safe Restore
+Three robustness mechanisms round out the pipeline:
+
+- **Directed scans (`freq_list`):** the runtime supplicant config is staged with a global `freq_list=<target frequency>` so every `wps_reg` scan stays on the target's channel instead of sweeping the whole 2.4 + 5 GHz band. An unknown or out-of-range frequency omits the line (graceful full-band fallback), and a restricted round that never sees the target BSSID spends a single full-band retry (`shouldFallbackToFullBandScan`) before declaring the AP out of range — covering an AP that changed channel after the UI scan.
+- **Root interface resolution at attack start:** the Wi-Fi interface name is resolved with root (`ls /sys/class/net`, parsed by the pure `interfacesFromSysfsListing`) when the non-root detection finds nothing, so `wlan0` is a fallback rather than a guess — and the Superuser prompt appears where root work is expected.
+- **Crash-safe Wi-Fi restore (`PixieAttackRestore`):** before the attack disables framework Wi-Fi, a persistent marker is written. Cleanup clears it only after the framework confirms the radio is back on (dual-source: `dumpsys` plus `settings get global wifi_on`, via `WifiRestore.combinedEnabled`); if the process dies mid-audit, the next launch applies the pending restore automatically.
+
 ---
 
 ## 4. Software Architecture & Design Patterns
@@ -161,7 +169,7 @@ A critical operational bug in naive WPS audit tools occurs when killing the supp
 To ensure rock-solid stability and comprehensive JVM unit-testability:
 - **No Android `Context` in Business Logic:** `PixieDustRunner`, `M3Parser`, `PixieProcessSupport`, and reducers operate strictly on pure inputs, streams, or gateway interfaces.
 - **`PixieDustReducers.kt`:** Pure functions computing UI state changes, retry progression, and error categorizations.
-- **`PixieNetworkFilter.kt`:** Pure filter pipeline for SSID search, auditable WPS detection, and dual-band classification.
+- **`PixieNetworkFilter.kt`:** Pure filter pipeline for SSID/BSSID search, auditable WPS detection, dual-band classification, a field-derived strong-signal filter (−70 dBm), and WPS-locked visibility — one shared decision (`networksMatchingFilter`) feeds both the list and the chips' live counts.
 
 ### 4.2 Legacy Android Compatibility (`ProcessCompat.kt`)
 Because AmWF supports devices starting at Android 7.0 (API 24, minSdk 24), Java 9 / Android API 26 process management methods (`Process.isAlive()`, `Process.destroyForcibly()`, `Process.waitFor(timeout, unit)`) are unavailable natively on API 24–25.

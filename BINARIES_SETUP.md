@@ -139,6 +139,16 @@ The config is sent through `su`'s stdin because the `su` SELinux domain cannot
 read `filesDir`. `update_config=1` lets `save_config` persist the PSK after WPS
 provisioning.
 
+When the target's frequency is known, the runtime config also stages a global
+`freq_list=<frequency>` line: the bundled wpa_supplicant 2.11 accepts it as a
+global parameter and its scan.c optimizes every `wps_reg` scan to that single
+channel ("Optimize scan based on conf->freq_list"). Without it, each attempt
+sweeps the whole 2.4 + 5 GHz band (~2-4 s) and floods the audit log with
+third-party SSIDs. An unknown or out-of-range frequency omits the line and the
+scan stays full-band, so the app is never worse than the historical behavior;
+if the target never appears in a restricted round, the attack retries once with
+a full-band scan before declaring the AP out of range.
+
 ## 5. Permissions and SELinux
 
 - The app runs the binaries via `su`. The device must be rooted.

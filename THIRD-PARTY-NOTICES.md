@@ -14,14 +14,14 @@ the APK:
 
 | Component | Version | License | Copyright |
 |-----------|---------|---------|-----------|
-| AndroidX Core KTX (`androidx.core:core-ktx`) | 1.18.0 | Apache-2.0 | The Android Open Source Project |
-| AndroidX AppCompat (`androidx.appcompat:appcompat`) | 1.7.1 | Apache-2.0 | The Android Open Source Project |
-| AndroidX ConstraintLayout (`androidx.constraintlayout:constraintlayout`) | 2.1.4 | Apache-2.0 | The Android Open Source Project |
+| AndroidX Core KTX (`androidx.core:core-ktx`) | 1.19.1 | Apache-2.0 | The Android Open Source Project |
+| AndroidX AppCompat (`androidx.appcompat:appcompat`) | 1.8.0 | Apache-2.0 | The Android Open Source Project |
+| AndroidX ConstraintLayout (`androidx.constraintlayout:constraintlayout`) | 2.2.2 | Apache-2.0 | The Android Open Source Project |
 | AndroidX CardView (`androidx.cardview:cardview`) | 1.0.0 | Apache-2.0 | The Android Open Source Project |
-| AndroidX RecyclerView (`androidx.recyclerview:recyclerview`) | 1.3.2 | Apache-2.0 | The Android Open Source Project |
-| AndroidX Lifecycle ViewModel KTX and Runtime KTX (`androidx.lifecycle:lifecycle-viewmodel-ktx`, `androidx.lifecycle:lifecycle-runtime-ktx`) | 2.8.2 | Apache-2.0 | The Android Open Source Project |
-| Material Components for Android (`com.google.android.material:material`) | 1.13.0 | Apache-2.0 | The Android Open Source Project |
-| Kotlin standard library & coroutines (`org.jetbrains.kotlinx:kotlinx-coroutines-android`) | 1.8.0 (coroutines) | Apache-2.0 | JetBrains s.r.o. |
+| AndroidX RecyclerView (`androidx.recyclerview:recyclerview`) | 1.4.0 | Apache-2.0 | The Android Open Source Project |
+| AndroidX Lifecycle ViewModel KTX and Runtime KTX (`androidx.lifecycle:lifecycle-viewmodel-ktx`, `androidx.lifecycle:lifecycle-runtime-ktx`) | 2.11.0 | Apache-2.0 | The Android Open Source Project |
+| Material Components for Android (`com.google.android.material:material`) | 1.14.0 | Apache-2.0 | The Android Open Source Project |
+| Kotlin standard library & coroutines (`org.jetbrains.kotlinx:kotlinx-coroutines-android`) | 1.11.0 (coroutines) | Apache-2.0 | JetBrains s.r.o. |
 
 View Binding is a build-time code generator provided by the Android Gradle Plugin;
 no separate library is bundled for it. Unit- and instrumented-test dependencies

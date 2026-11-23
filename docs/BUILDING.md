@@ -8,7 +8,7 @@ This guide provides complete instructions for setting up the build environment, 
 
 ### 1.1 Toolchain Specifications
 - **Gradle:** 9.6.0 (via `gradlew` wrapper)
-- **Android Gradle Plugin (AGP):** 9.5.1 (AGP 9 compiles Kotlin natively; do not apply `org.jetbrains.kotlin.android`)
+- **Android Gradle Plugin (AGP):** 9.5.2 (AGP 9 compiles Kotlin natively; do not apply `org.jetbrains.kotlin.android`)
 - **JDK:** Java 21 (used by the Gradle daemon via `gradle/gradle-daemon-jvm.properties` and the Foojay toolchain resolver); compiles to Java 11 bytecode.
 - **Android SDK:**
   - `compileSdk`: 37 (minor API level 1 / 37.1)
@@ -132,3 +132,9 @@ The build script automatically applies AmWF's custom patches located in `scripts
 - `wpa_supplicant-2.11-stdout-flush.patch`: Adds `fflush(stdout)` after each debug emission to stream M3 hexdump frames in real time.
 
 See [BINARIES_SETUP.md](../BINARIES_SETUP.md) for deeper details on the native binary compilation pipeline.
+
+### 4.4 16 KB Alignment Enforcement
+The build script links every `arm64-v8a` ELF with `-Wl,-z,max-page-size=16384` and **aborts the build** if any `LOAD` segment is not aligned to `0x4000`: Android 15+ devices with 16 KB memory pages refuse to load 4 KB-aligned binaries, and Google Play has rejected updates targeting Android 15+ without this alignment since November 2025. `armeabi-v7a` is exempt.
+
+### 4.5 Continuous Integration
+GitHub Actions (`.github/workflows/ci.yml`) runs the full check (`:app:testDebugUnitTest :app:lintDebug :app:assembleDebug`) on pushes to `main`, pull requests and manual dispatch. The run uploads the debug APK as an artifact and re-verifies the committed arm64 assets with a **blocking** 16 KB alignment gate, so a 4 KB regression cannot reach `main`.

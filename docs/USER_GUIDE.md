@@ -11,7 +11,7 @@ Welcome to the **AmWF User Guide**. This document walks you through setting up, 
 - Built-in Wi-Fi adapter (no USB OTG Wi-Fi dongle required).
 
 ### 1.2 Software & Root Requirements
-- **Android Version:** Android 7.0 (Nougat / API 24) through Android 15 (API 35+).
+- **Android Version:** Android 7.0 (Nougat / API 24) through the latest releases (targetSdk 37).
 - **Root Solution:** Any standard modern root solution:
   - **Magisk** (v24+)
   - **KernelSU** (v0.6+)
@@ -109,8 +109,13 @@ The Pixie Dust module allows network owners and penetration testers to audit whe
 2. The network picker automatically scans the surrounding airspace and populates the list.
 3. **Filter and Search:**
    - **Search Bar:** Type an SSID name or BSSID (MAC address).
-   - **Auditables / Auditable:** Filters the list to display only routers broadcasting WPS enabled.
-   - **5 GHz / 2.4 GHz:** Filters networks by frequency band.
+   - **Filter chips:** every chip shows its live count, so you can read the whole scan at a glance:
+     - **Todas / All** — every network found.
+     - **Auditables / Auditable** — only routers broadcasting WPS enabled.
+     - **Buena señal / Strong signal** — networks at −70 dBm or better, the range where real-world audits succeed (weaker targets tend to go silent mid-handshake).
+     - **Bloqueadas / Locked** — WPS-locked networks; this explains why a WPS router is missing from *Auditables*.
+     - **2,4 GHz / 5 GHz** — filters by frequency band.
+     - **Dual-band** — networks whose SSID appears in more than one band.
 4. Each network card displays:
    - **SSID** (Network Name)
    - **BSSID** (Router MAC address)
@@ -121,6 +126,10 @@ The Pixie Dust module allows network owners and penetration testers to audit whe
 AmWF uses a streamlined **one-tap execution** model:
 - Simply tap the target network card.
 - The audit begins immediately; system Wi-Fi is turned off to dedicate the radio to the custom supplicant.
+- If no interface was detected when the screen opened, AmWF resolves the real interface with root right at attack start — the Superuser prompt appears where root work is expected, and `wlan0` remains a fallback, never a guess.
+
+> [!NOTE]
+> **Interrupted audits:** if AmWF is killed mid-audit (low memory, a swipe-away, a reboot), framework Wi-Fi is restored automatically the next time you open the app. A persistent marker records that the audit turned the radio off, and it is only cleared once Android confirms the radio is back on.
 
 ```
 +-----------------------------------------------------------+
@@ -142,8 +151,10 @@ AmWF uses a streamlined **one-tap execution** model:
 +-----------------------------------------------------------+
 ```
 
-### 4.3 Audit Phases Explained
-| Phase | Action Performed |
+### 4.3 What Happens During an Audit
+The console narrates each step; the stage title and progress percentage at the top carry the current state.
+
+| Step | Action Performed |
 |---|---|
 | **1. Asociación / Association** | Establishes 802.11 open authentication and association with the AP using AmWF's custom `wpa_supplicant`. |
 | **2. Captura M1–M3** | Initiates EAP-WPS exchange, capturing the Enrollee Nonce, Diffie-Hellman public keys, and authenticator hashes. |
@@ -155,8 +166,10 @@ AmWF uses a streamlined **one-tap execution** model:
 ### 4.4 Interpreting Early Abort Reasons
 If an audit cannot proceed, AmWF detects the underlying reason and stops early to preserve battery and avoid triggering router lockouts:
 - **WPS bloqueado (WPS Lockout):** The AP has locked WPS enrollment due to previous failed attempts.
-- **Rechazo de asociación (Association Reject):** The AP is overloaded, requires 802.11w PMF, or enforces MAC filtering.
-- **Sin respuesta M3 (No M3 response):** The AP accepted association but failed to reply with WPS handshake messages within the timeout window.
+- **Rechazo de asociación (Association Reject):** The AP is overloaded, requires 802.11w PMF, or enforces MAC filtering. If you audited this same AP minutes ago, the rejection is usually the router's own temporary post-audit lockout — wait and retry.
+- **Sin respuesta (No response):** the AP never answered the registration request. AmWF tells the two cases apart:
+  - *The BSSID still shows up in scans but the AP stays silent* — usually a router-side WPS block or a stuck session, not a signal problem; wait a few minutes and retry.
+  - *The BSSID never appears in scans* — the signal is weak or the AP is out of range; move closer.
 
 ### 4.5 Viewing & Copying Results
 Upon successful audit:

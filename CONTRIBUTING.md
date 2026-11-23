@@ -65,7 +65,7 @@ When submitting pull requests, you must uphold the following core architectural 
 
 ### 3.4 Android & Process Compatibility (minSdk 24)
 - AmWF supports Android 7.0 (API 24). API 26+ process methods (`Process.isAlive()`, `Process.destroyForcibly()`, `Process.waitFor(timeout, unit)`) must go through `ProcessCompat.kt`.
-- Cleanup operations must only terminate (`pkill`) binaries starting with the app's bundled binary directory; never terminate the system supplicant.
+- Cleanup operations must only terminate (`pkill`) binaries starting with the app's bundled binary directory; never terminate the system supplicant. After `svc wifi enable`, cleanup must confirm the radio with dual sources (`WifiRestore.combinedEnabled`: `dumpsys` plus `settings get global wifi_on`, with a settle re-read — MIUI can report "enabled" for an instant and then revoke it) before clearing the restore marker.
 
 ### 3.5 Native Binary Integrity
 - Never substitute Android's system `wpa_supplicant`. Its `CONFIG_ANDROID_LOG` truncates M3 Diffie-Hellman keys to 32 bytes, which renders Pixie Dust calculation impossible.
@@ -83,6 +83,12 @@ When submitting pull requests, you must uphold the following core architectural 
 - `M3Parser` treats a `config_error=18` NACK after all six M3 fields as a complete capture, and validates exact hex lengths (32/384/64 chars) to reject Android's truncated 32-byte dumps.
 - Watchdogs in `PixieProcessSupport` check `/proc/<pid>/stat` starttime (field 22) before killing, so a reused PID cannot kill an unrelated root process. Any new watchdog must preserve this.
 - Keep `PixieDustRunner` free of `Context`: supplicant, pixiewps, PSK extraction, binaries, audit log, shell and WiFi state come from the gateways in `PixieDustGateways.kt`. `cleanup()` is `@Synchronized` and `cleanupDone`-guarded because `cancel()` and `finally` can both call it.
+- `runAttack` must persist the audit log on every exit path (validation, missing binaries, capture failure, success, cancellation) and flush the supplicant queue before cleanup, or the final M3 lines are lost. The attack's `svc wifi disable` is covered by the `PixieAttackRestore` marker (same pattern as `PendingCompatRestore`): marked **before** the disable, cleared by `cleanup()` only when the framework confirms the radio is back on; both `MainActivity.onCreate` and `PixieDustActivity.onCreate` apply a pending restore on the next launch.
+- After a successful M3 capture, close the WPS session (`wps_cancel`) before killing the attack supplicant. `PixiePskExtractor` likewise cancels when provisioning ends without a PSK, and best-effort on the user-cancellation path.
+- Hopeless APs abort early instead of burning rounds: association rejects go through the attack-wide `M3Parser.AssocRejectTracker` budget; silent M3 windows end as `M3Capture.NoResponse` with a localized reason split by `M3Parser.bssidVisibleInSupplicantOutput` (visible-but-WPS-stuck vs true out-of-range); `wps_reg` retries use progressive backoff.
+- The runtime supplicant config stages a global `freq_list=<target freq>` to keep every `wps_reg` scan on the target's channel. An unknown or out-of-range frequency omits the line (full-band fallback); a restricted round that never sees the target BSSID spends a single full-band retry (`shouldFallbackToFullBandScan`) before declaring out-of-range. Keep the graceful path in `buildRuntimeConfigContent`.
+- Pixie Dust UX is intentional: tapping an auditable network starts the audit immediately (no Run button, no confirmation dialog). The phase strip was removed entirely — `PixieDustStage` carries only `progress` and the stage title + percentage carry all the state; do not reintroduce it.
+- `PixieDustViewModel.availableWifiInterfaces()` is non-root and best-effort by design. When it finds nothing, `startAttack` resolves the real interface with root (`ls /sys/class/net`, parsed by the pure `interfacesFromSysfsListing`) before launching — keep that resolution at attack start, not screen open.
 - Mode selection is a pure function (`PixieModeSelector`): force `--mode` only from captured M5/M7, never from the BSSID OUI — an OUI identifies the router vendor, not the chipset. `PixieDiagnosisParser` converts pixiewps output into an action; a `MIGHT_BE_VULNERABLE` diagnosis drives a retry with fresh data, and `PixiewpsPlan.timeoutSeconds` travels with the command so the watchdog and the deadline cannot diverge. Do not add `--force`: it scans the whole epoch and takes around 30 minutes on real hardware; retry with fresh data instead. Known limitation: the M5/M7 path still passes `-5/-7`, but pixiewps also requires `--r-nonce`, which AmWF does not capture.
 
 ### 3.8 Monitor Channel Tuning
@@ -90,6 +96,12 @@ When submitting pull requests, you must uphold the following core architectural 
 - Tune verification is the `iw set channel` exit code, not `iw dev info`: many drivers do not echo the channel line while in monitor, so tcpdump/rx counters are the final judge (`isTuneAccepted` accepts a silent report, rejects a mismatch).
 - `testRealCapture` never runs `svc wifi enable`: `ip link up` powers the radio with the framework off, and enabling it mid-test lets the system supplicant claim and reversion the interface. The rotation starts at the persisted channel and absorbs transient `-1`/`EBUSY` from the driver reload after the `con_mode` write.
 - The user's channel is persisted via `MonitorChannelStore` (default 6, synchronous commits) and exposed through the monitor chip selector (`CHANNEL_CHIP_IDS` map, visible only in MONITOR). DFS channels are deliberately excluded: the driver performs no radar detection.
+
+### 3.9 Native Binary Invariants
+- Rebuild with `./scripts/build-wifi-binaries.sh <abi>`. All `arm64-v8a` ELF `LOAD` segments must be **16 KB-aligned** (`-Wl,-z,max-page-size=16384`, enforced and verified by the script and re-verified by CI as a blocking step): Android 15+ on 16 KB-page devices won't load 4 KB-aligned binaries, and Play has rejected targetSdk 35+ updates without it since 2025-11-01. `armeabi-v7a` is exempt.
+- arm64-v8a builds `pixiewps`, `wpa_supplicant`, `wpa_cli` and libnl. armeabi-v7a builds only `pixiewps_32`; `wpa_supplicant_32` is intentionally absent and `wpa_cli_32` is a preserved prebuilt asset.
+- `wpa_cli` and `pixiewps` may fall back to system paths (`/system/bin`, `/vendor/bin`, `/vendor/bin/hw`, `/system/xbin`, `/odm/bin`) when the bundled asset is missing; `wpa_supplicant` must never fall back.
+- The supplicant control dir comes from `NativeBinaries.ctrlDir()` (`/data/vendor/wifi/amwf` on API 28+, `/data/misc/wifi/amwf` below). The runtime config must be staged through `su` stdin (`execRootWithInput`) with `update_config=1`, so `save_config` can persist the PSK after WPS provisioning.
 
 ---
 

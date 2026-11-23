@@ -8,6 +8,7 @@
   Monitor mode and WPS Pixie Dust auditing from your Android phone, without a terminal or commands.
 
   [![Release](https://img.shields.io/github/v/release/Hitomatito/AmWF?style=flat-square&label=release&color=0891b2)](https://github.com/Hitomatito/AmWF/releases)
+  [![CI](https://github.com/Hitomatito/AmWF/actions/workflows/ci.yml/badge.svg)](https://github.com/Hitomatito/AmWF/actions/workflows/ci.yml)
   [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://developer.android.com)
   [![Root required](https://img.shields.io/badge/Root-required-orange?style=flat-square)](#common-questions)
   [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
@@ -39,7 +40,7 @@ Explore our comprehensive technical and user documentation:
 |---|---|
 | [📖 User Guide](docs/USER_GUIDE.md) | Step-by-step instructions for installation, permissions, monitor mode, Pixie Dust audits, and logs. |
 | [🏗️ Architecture & Design](docs/ARCHITECTURE.md) | Technical deep dive into Qualcomm `con_mode`, custom `wpa_supplicant`, M1–M3 extraction, and software patterns. |
-| [📱 Hardware Compatibility](docs/COMPATIBILITY.md) | Detailed SoC matrix (Snapdragon vs MediaTek/Exynos), Android 7–15 compatibility, and SELinux notes. |
+| [📱 Hardware Compatibility](docs/COMPATIBILITY.md) | Detailed SoC matrix (Snapdragon vs MediaTek/Exynos), Android 7+ compatibility, and SELinux notes. |
 | [🔧 Troubleshooting Guide](docs/TROUBLESHOOTING.md) | Diagnostic solutions for socket errors, missing binaries, association rejections, and WPS lockouts. |
 | [⚙️ Building & Compiling](docs/BUILDING.md) | Gradle CLI commands, JDK 21 / SDK setup, unit testing, lint, and native NDK rebuilds. |
 | [🤝 Contributing Guidelines](CONTRIBUTING.md) | Code architecture rules, Conventional Commits, testing requirements, and i18n conventions. |
@@ -83,10 +84,11 @@ Before changing anything, AmWF can make sure your device is ready.
 Find out whether your routers' WPS can resist a Pixie Dust attack.
 
 - Scan nearby networks and see which ones have WPS available.
-- Search by name or BSSID, and filter by auditable or dual-band networks.
+- Search by name or BSSID, and filter with live counts: auditable, strong signal (−70 dBm or better), WPS-locked, 2.4/5 GHz, or dual-band.
 - Tap a network and the audit starts immediately, with no extra forms or buttons.
 - Recover the WPS PIN and, when possible, the WPA key.
 - Copy the credentials to your clipboard with one tap.
+- If the app is interrupted mid-audit, WiFi comes back automatically on the next launch.
 
 ### The whole process, in plain sight
 

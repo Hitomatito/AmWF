@@ -72,10 +72,12 @@ Before troubleshooting individual error messages, verify the following baseline 
 **Symptom:** During an audit, the console logs multiple association rejections before aborting.
 
 **Possible Causes & Fixes:**
-1. **Protected Management Frames (802.11w / PMF):** Modern WPA3 or transition-mode routers require PMF, which blocks unauthorized unencrypted WPS association.
-2. **MAC Filtering or Blacklisting:** The target AP restricts connections to whitelisted hardware addresses.
-3. **Signal Degradation:** The signal may be too weak for stable 802.11 management frames.
-   - *Fix:* Move closer to the access point (aim for signal levels stronger than -70 dBm).
+1. **Post-Audit Lockout:** if you audited this same AP in the last minutes, the rejection is usually the router's own temporary WPS lockout, not a configuration problem.
+   - *Fix:* Wait a few minutes and retry.
+2. **Protected Management Frames (802.11w / PMF):** Modern WPA3 or transition-mode routers require PMF, which blocks unauthorized unencrypted WPS association.
+3. **MAC Filtering or Blacklisting:** The target AP restricts connections to whitelisted hardware addresses.
+4. **Signal Degradation:** The signal may be too weak for stable 802.11 management frames.
+   - *Fix:* Move closer to the access point — the **Buena señal / Strong signal** filter chip (−70 dBm or better) marks the range where real audits succeed.
    - *Design Behavior:* AmWF uses an `AssocRejectTracker` budget to abort early rather than flooding the air with futile association requests.
 
 ---
@@ -89,20 +91,24 @@ Before troubleshooting individual error messages, verify the following baseline 
 
 ---
 
-### 2.6 "Sin respuesta M3 del AP" (No Response to M1/M2)
-**Symptom:** Association succeeds and EAPOL-Start is sent, but M3 is never received, eventually timing out.
+### 2.6 "Sin respuesta del AP" (No Response to the WPS Registration)
+**Symptom:** The audit sends the registration request, but the AP never answers (no association, no M1) and the attempt times out.
 
 **Possible Causes & Fixes:**
-- The AP implements a silent-drop defense against WPS attacks.
-- High wireless channel interference caused M2 or M3 frame corruption.
-- *Fix:* AmWF records this as `M3Capture.NoResponse` with a localized reason instead of burning unnecessary rounds. Try switching to a cleaner channel or repositioning the phone.
+The audit stops as `M3Capture.NoResponse`, and the localized reason tells the two cases apart:
+- **The AP still shows up in the supplicant's scans but never answers:** a router-side WPS block or a session stuck half-open — not a signal problem.
+  - *Fix:* Wait a few minutes and retry.
+- **The AP never appears in scans:** the signal is weak, or interference corrupted the exchange.
+  - *Fix:* Move closer to the access point. AmWF also spends one full-band retry round before declaring an AP out of range, which covers an AP that changed channel after the UI scan.
 
 ---
 
 ### 2.7 Wi-Fi Radio Fails to Reconnect After an Audit
 **Symptom:** Normal Wi-Fi stays off after an audit is canceled or completed.
 
-**Design Safeguard:** AmWF checks framework Wi-Fi status using `WifiRestore.isEnabled` after issuing `svc wifi enable`, retrying if Android's framework command returned code 0 without actually powering on the radio.
+**Design Safeguards:**
+- After issuing `svc wifi enable`, AmWF confirms the radio with two independent sources — the `dumpsys` framework state and `settings get global wifi_on` (via `WifiRestore.combinedEnabled`) — and retries up to three times, because the command can return code 0 without actually powering the radio on, and some OEM ROMs (MIUI) briefly report "enabled" before revoking the toggle.
+- **Crash-safe markers:** both the compatibility check and the Pixie Dust audit persist a marker before touching the radio and clear it only once the framework confirms the radio is back on. If AmWF is killed mid-check or mid-audit, simply **reopen the app**: the pending restore is applied automatically on the next launch.
 - *Quick Fix:* Toggle **Airplane Mode** on and off in Android quick settings, or run via root terminal:
   ```bash
   su
