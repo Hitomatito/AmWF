@@ -114,6 +114,17 @@ object M3Parser {
     private const val MAX_ASSOC_REJECTS = 3
 
     /**
+     * Etiqueta del hexdump con NUESTRO nonce de registrador (mensaje M2).
+     * No es uno de los seis campos M3: solo el modo 3 de pixiewps (RTL819x)
+     * lo exige (`--r-nonce`), así que se captura como dato opcional. Verificado
+     * en logs de campo: el supplicant con `-K` lo imprime completo (16 bytes).
+     */
+    private const val REGISTRAR_NONCE_LABEL = "Registrar Nonce"
+
+    /** Un nonce WPS son 16 bytes = 32 caracteres hex; otra longitud es ruido. */
+    private const val WPS_NONCE_HEX_LEN = 32
+
+    /**
      * Líneas que indican progreso real en la sesión WPS (aunque no completen
      * los seis campos): el AP estuvo visible y hubo actividad. Si ninguna
      * aparece en toda la ventana, el AP está mudo (señal débil, fuera de
@@ -200,7 +211,14 @@ object M3Parser {
         val peerPublicKey: String,
         val authKey: String,
         val eHash1: String,
-        val eHash2: String
+        val eHash2: String,
+        /**
+         * Nuestro nonce de registrador (M2), en hex. Opcional: solo el modo 3
+         * de pixiewps (RTL819x) lo exige como `--r-nonce`. No cuenta para los
+         * seis campos: una captura sin él sigue siendo completa en el modo
+         * estándar, y el modo 3 simplemente no puede correr sin él.
+         */
+        val registrarNonce: String? = null
     ) {
         /** Argumentos de línea de comandos para pixiewps (modo estándar). */
         fun toPixiewpsArgs(): String =
@@ -209,7 +227,8 @@ object M3Parser {
     }
 
     /**
-     * Datos opcionales M5/M7 para el modo 3 de pixiewps (chips RTL819x).
+     * Datos opcionales M5/M7 para el modo 3 de pixiewps (chips RTL819x). El
+     * `--r-nonce` que ese modo también exige viaja en [M3Data.registrarNonce].
      */
     data class M5M7Capture(
         val bssid: String = "",
@@ -221,6 +240,7 @@ object M3Parser {
         fun toPixiewpsMode3Args(m3: M3Data): String =
             "--mode 3 ${m3.toPixiewpsArgs()}" +
                     (normalizeBssid(bssid)?.let { " --e-bssid $it" } ?: "") +
+                    (m3.registrarNonce?.let { " --r-nonce $it" } ?: "") +
                     (m5Enc?.let { " -5 $it" } ?: "") +
                     (m7Enc?.let { " -7 $it" } ?: "")
     }
@@ -258,6 +278,7 @@ object M3Parser {
         var m5: String? = null
         var m7: String? = null
         var bssid = ""
+        var registrarNonce: String? = null
         var m5m7Notified = false
         var completeReturnAt = Long.MAX_VALUE
         var localAssocRejects = 0
@@ -345,6 +366,14 @@ object M3Parser {
                     if (captureField(hexdumpMatch.groupValues[1].trim(), hexValue, fields)) {
                         counted++
                         markCompleteIfFull()
+                    } else if (
+                        hexdumpMatch.groupValues[1].trim() == REGISTRAR_NONCE_LABEL &&
+                        hexValue.length == WPS_NONCE_HEX_LEN
+                    ) {
+                        // Nuestro nonce de registrador (M2), no un campo M3:
+                        // no incrementa `counted`. Se reescribe si el supplicant
+                        // lo repite (retransmisiones): es estable en la sesión.
+                        registrarNonce = hexValue
                     }
                     continue
                 }
@@ -391,7 +420,8 @@ object M3Parser {
                     peerPublicKey = fields[2]!!,
                     authKey = fields[3]!!,
                     eHash1 = fields[4]!!,
-                    eHash2 = fields[5]!!
+                    eHash2 = fields[5]!!,
+                    registrarNonce = registrarNonce
                 ),
                 m5m7 = if (m5 != null && m7 != null) M5M7Capture(bssid, m5, m7) else null
             )

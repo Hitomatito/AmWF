@@ -10,6 +10,8 @@ package com.hitomatito.amwf.wifi.pixiedust
 import com.hitomatito.amwf.R
 import java.util.concurrent.LinkedBlockingQueue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -427,6 +429,92 @@ class M3ParserTest {
 
         assertTrue(!M3Parser.bssidVisibleInSupplicantOutput(raw, "5c:a6:e6:cc:eb:82"))
         assertTrue(M3Parser.bssidVisibleInSupplicantOutput(raw, "44:3b:14:10:e3:c8"))
+    }
+
+    @Test
+    fun `captures registrar nonce as optional mode-3 data`() {
+        val text = buildString {
+            // El M2 (nuestro nonce de registrador) precede al M3 en el flujo real.
+            appendLine("WPS: Registrar Nonce - hexdump(len=16): ${hex(16, 9)}")
+            appendLine("WPS: Enrollee Nonce - hexdump(len=16): ${hex(16, 1)}")
+            appendLine("WPS: DH own Public Key - hexdump(len=192): ${hex(192, 2)}")
+            appendLine("WPS: DH peer Public Key - hexdump(len=192): ${hex(192, 3)}")
+            appendLine("WPS: AuthKey - hexdump(len=32): ${hex(32, 4)}")
+            appendLine("WPS: E-Hash1 - hexdump(len=32): ${hex(32, 5)}")
+            appendLine("WPS: E-Hash2 - hexdump(len=32): ${hex(32, 6)}")
+        }
+
+        val capture = parse(text)
+
+        assertTrue(capture is M3Parser.M3Capture.Complete)
+        val data = (capture as M3Parser.M3Capture.Complete).data
+        assertEquals(hex(16, 9).replace(" ", ""), data.registrarNonce)
+    }
+
+    @Test
+    fun `registrar nonce never counts toward the six M3 fields`() {
+        val text = buildString {
+            appendLine("WPS: Registrar Nonce - hexdump(len=16): ${hex(16, 9)}")
+            appendLine("WPS: Enrollee Nonce - hexdump(len=16): ${hex(16, 1)}")
+            appendLine("WPS: DH own Public Key - hexdump(len=192): ${hex(192, 2)}")
+            appendLine("WPS: DH peer Public Key - hexdump(len=192): ${hex(192, 3)}")
+            appendLine("WPS: AuthKey - hexdump(len=32): ${hex(32, 4)}")
+            appendLine("WPS: E-Hash1 - hexdump(len=32): ${hex(32, 5)}")
+        }
+
+        // Sin E-Hash2 la captura sigue incompleta: el nonce no infla `counted`,
+        // una captura "completa" por su cuenta sería un M3 roto.
+        val capture = parse(text)
+        val incomplete = capture as M3Parser.M3Capture.Incomplete
+        assertEquals(5, incomplete.capturedCount)
+    }
+
+    @Test
+    fun `ignores a truncated registrar nonce dump`() {
+        val truncated = hex(8, 9)
+        val text = buildString {
+            appendLine("WPS: Registrar Nonce - hexdump(len=16): $truncated ...")
+            appendLine("WPS: Enrollee Nonce - hexdump(len=16): ${hex(16, 1)}")
+            appendLine("WPS: DH own Public Key - hexdump(len=192): ${hex(192, 2)}")
+            appendLine("WPS: DH peer Public Key - hexdump(len=192): ${hex(192, 3)}")
+            appendLine("WPS: AuthKey - hexdump(len=32): ${hex(32, 4)}")
+            appendLine("WPS: E-Hash1 - hexdump(len=32): ${hex(32, 5)}")
+            appendLine("WPS: E-Hash2 - hexdump(len=32): ${hex(32, 6)}")
+        }
+
+        // Un dump truncado (len=16 declarado, 8 bytes impresos) no puede llegar
+        // a pixiewps: envenenaría el cálculo offline del modo 3.
+        val capture = parse(text)
+        val data = (capture as M3Parser.M3Capture.Complete).data
+        assertNull(data.registrarNonce)
+    }
+
+    @Test
+    fun `mode-3 args include the captured registrar nonce`() {
+        val m3 = M3Parser.M3Data(
+            enrolleeNonce = "aa",
+            ownPublicKey = "bb",
+            peerPublicKey = "cc",
+            authKey = "dd",
+            eHash1 = "ee",
+            eHash2 = "ff",
+            registrarNonce = "11223344556677889900aabbccddeeff"
+        )
+        val m5m7 = M3Parser.M5M7Capture(bssid = "00:e0:4c:12:34:56", m5Enc = "m5", m7Enc = "m7")
+
+        // Con el nonce capturado, el modo 3 queda completo para pixiewps
+        // (exige --pke/--pkr/--e-nonce/--r-nonce/--bssid/--mode 3 con M7).
+        assertTrue(
+            m5m7.toPixiewpsMode3Args(m3)
+                .contains("--r-nonce 11223344556677889900aabbccddeeff")
+        )
+
+        // Sin nonce capturado el argumento se omite: pixiewps dará su error
+        // de uso, exactamente como hasta ahora (sin regresión).
+        assertFalse(
+            m5m7.toPixiewpsMode3Args(m3.copy(registrarNonce = null))
+                .contains("--r-nonce")
+        )
     }
 
     private fun parse(text: String): M3Parser.M3Capture {
