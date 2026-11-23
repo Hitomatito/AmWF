@@ -452,7 +452,8 @@ class PixieDustViewModel @JvmOverloads constructor(
                     bssid = selectedNetwork.bssid,
                     interfaceName = _uiState.value.selectedInterface,
                     ssid = selectedNetwork.ssid.takeIf { it.isNotBlank() },
-                    freqMHz = selectedNetwork.frequency
+                    freqMHz = selectedNetwork.frequency,
+                    levelDbm = selectedNetwork.level
                 )
 
                 val finishedAt = System.currentTimeMillis()

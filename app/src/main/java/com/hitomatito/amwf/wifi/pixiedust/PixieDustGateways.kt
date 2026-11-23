@@ -89,6 +89,7 @@ internal interface AuditLogGateway {
         target: PixieAuditLog.Target,
         eventLines: List<String>,
         rawLines: List<String>,
+        summary: PixieAuditLog.Summary,
         log: (String) -> Unit
     )
 }
@@ -129,6 +130,7 @@ internal class SystemAuditLog(private val context: Context) : AuditLogGateway {
         target: PixieAuditLog.Target,
         eventLines: List<String>,
         rawLines: List<String>,
+        summary: PixieAuditLog.Summary,
         log: (String) -> Unit
     ) {
         PixieAuditLog.persist(
@@ -137,6 +139,7 @@ internal class SystemAuditLog(private val context: Context) : AuditLogGateway {
             target = target,
             eventLines = eventLines,
             rawLines = rawLines,
+            summary = summary,
             log = log
         )
     }

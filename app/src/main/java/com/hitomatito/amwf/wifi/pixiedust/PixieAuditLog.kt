@@ -32,7 +32,34 @@ internal object PixieAuditLog {
         val bssid: String,
         val ssid: String?,
         val freqMHz: Int?,
-        val interfaceName: String
+        val interfaceName: String,
+        /** Señal (RSSI) del objetivo al seleccionarlo, en dBm. */
+        val levelDbm: Int? = null
+    )
+
+    /**
+     * Un hito de tiempo del ataque (nanosegundos monotónicos de
+     * `System.nanoTime`). El resumen del log deriva duraciones entre hitos;
+     * si una etiqueta se repite entre rondas, gana la última ocurrencia.
+     */
+    data class AuditTiming(val label: String, val elapsedNs: Long)
+
+    /**
+     * Datos estructurados del ataque que de otro modo quedan dispersos en
+     * los eventos: rondas usadas, tipo de escaneo y modo de pixiewps. Los
+     * pinta [buildAuditSummaryLines] en la sección «Resumen» para que el
+     * análisis cruzado de muchos logs sea un simple grep.
+     */
+    data class Summary(
+        val timings: List<AuditTiming>,
+        val roundsUsed: Int,
+        val maxRounds: Int,
+        /** true si el objetivo traía frecuencia (escaneo dirigido `freq_list`). */
+        val directedScan: Boolean,
+        /** true si se consumió la ronda de rescate full-band. */
+        val fullBandFallbackUsed: Boolean,
+        /** Modo de pixiewps de la última ronda que llegó a ejecutarse. */
+        val pixiewpsMode: Int?
     )
 
     private const val TAG = "PixieAuditLog"
@@ -49,10 +76,12 @@ internal object PixieAuditLog {
      *
      * El fichero contiene:
      *   - Marca de tiempo formateada
-     *   - BSSID, SSID, frecuencia e interfaz del objetivo
+     *   - BSSID, SSID, frecuencia, señal e interfaz del objetivo
+     *   - Versión de la app y Android/dispositivo (correlaciona logs con código)
      *   - Resultado (éxito/falla) y razón
      *   - PIN WPS y PSK WPA si se obtuvieron
      *   - Eventos de la app y salida cruda de wpa_supplicant/wpa_cli/pixiewps
+     *   - Resumen final con duraciones por fase, rondas y modo de pixiewps
      */
     fun persist(
         context: Context,
@@ -60,6 +89,7 @@ internal object PixieAuditLog {
         target: Target,
         eventLines: List<String>,
         rawLines: List<String>,
+        summary: Summary,
         log: (String) -> Unit
     ) {
         // UUID además de milisegundos: dos ataques no deben sobrescribirse
@@ -75,8 +105,12 @@ internal object PixieAuditLog {
             appendLine("BSSID: ${target.bssid}")
             appendLine("SSID: ${target.ssid?.takeIf { it.isNotBlank() } ?: "(desconocido)"}")
             appendLine("Frecuencia: ${target.freqMHz?.let { "$it MHz" } ?: "(desconocida)"}")
+            appendLine("Señal: ${target.levelDbm?.let { "$it dBm" } ?: "(desconocida)"}")
             appendLine("Interfaz: ${target.interfaceName}")
             appendLine("Arquitectura: ${Build.SUPPORTED_ABIS.firstOrNull() ?: "desconocida"}")
+            appendLine("Versión: ${appVersionLabel(context)}")
+            appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            appendLine("Dispositivo: ${Build.MODEL}")
             when (result) {
                 is PixieDustResult.Success -> {
                     appendLine("Resultado: ÉXITO")
@@ -95,6 +129,9 @@ internal object PixieAuditLog {
             appendLine()
             appendLine("=== Salida cruda (wpa_supplicant / wpa_cli / pixiewps) ===")
             rawLines.forEach { appendLine(it) }
+            appendLine()
+            appendLine("=== Resumen ===")
+            buildAuditSummaryLines(summary).forEach { appendLine(it) }
             appendLine()
             appendLine("=== Fin del log ===")
         }
@@ -158,9 +195,85 @@ internal object PixieAuditLog {
             ShellExecutor.logE(TAG, "Fallo también el guardado en directorio privado", e)
         }
     }
+
+    /**
+     * Versión de la app tal como la muestra el log («name (code)»). Se lee
+     * del PackageManager en lugar de habilitar buildConfig solo para esto;
+     * si el paquete no responde, el log queda con un marcador honesto.
+     */
+    private fun appVersionLabel(context: Context): String = try {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION") info.versionCode.toLong()
+        }
+        "${info.versionName} ($code)"
+    } catch (_: Exception) {
+        "desconocida"
+    }
 }
 
 private val AUDIT_BSSID_REGEX = Regex("^[0-9A-Fa-f]{12}$")
+
+/**
+ * Etiquetas de los hitos de tiempo que [PixieDustRunner] registra vía
+ * [PixieAuditLog.AuditTiming]. Viven aquí para que el runner y
+ * [buildAuditSummaryLines] no puedan divergir.
+ */
+internal object AuditTimingLabels {
+    const val START = "start"
+    const val BINARIES_READY = "binaries_ready"
+    const val M3_CAPTURED = "m3_captured"
+    const val PIXIEWPS_START = "pixiewps_start"
+    const val PIXIEWPS_DONE = "pixiewps_done"
+    const val PSK_START = "psk_start"
+    const val PSK_DONE = "psk_done"
+    const val CLEANUP_START = "cleanup_start"
+    const val CLEANUP_DONE = "cleanup_done"
+    const val END = "end"
+}
+
+/**
+ * Líneas de la sección «Resumen» del log de auditoría.
+ *
+ * Función pura: solo decide qué duraciones pueden calcularse con los hitos
+ * presentes (un fallo temprano no tiene M3 ni pixiewps, y sus líneas simplemente
+ * no aparecen) y las formatea con punto decimal para que `grep` no dependa del
+ * idioma. Si una etiqueta se repitió entre rondas, gana la última ocurrencia.
+ */
+internal fun buildAuditSummaryLines(summary: PixieAuditLog.Summary): List<String> {
+    val ns = summary.timings.associate { it.label to it.elapsedNs }
+    fun durationSec(from: String, to: String): String? {
+        val start = ns[from] ?: return null
+        val end = ns[to] ?: return null
+        return String.format(Locale.US, "%.1f", (end - start) / 1_000_000_000.0)
+    }
+    return buildList {
+        durationSec(AuditTimingLabels.START, AuditTimingLabels.END)
+            ?.let { add("Duración total: $it s") }
+        durationSec(AuditTimingLabels.START, AuditTimingLabels.BINARIES_READY)
+            ?.let { add("Preparación: $it s") }
+        durationSec(AuditTimingLabels.START, AuditTimingLabels.M3_CAPTURED)
+            ?.let { add("Hasta M3: $it s") }
+        durationSec(AuditTimingLabels.PIXIEWPS_START, AuditTimingLabels.PIXIEWPS_DONE)
+            ?.let { add("Pixiewps: $it s") }
+        durationSec(AuditTimingLabels.PSK_START, AuditTimingLabels.PSK_DONE)
+            ?.let { add("Extracción PSK: $it s") }
+        durationSec(AuditTimingLabels.CLEANUP_START, AuditTimingLabels.CLEANUP_DONE)
+            ?.let { add("Cleanup: $it s") }
+        add("Rondas: ${summary.roundsUsed}/${summary.maxRounds}")
+        add(
+            "Escaneo: " + when {
+                summary.directedScan && summary.fullBandFallbackUsed ->
+                    "dirigido (freq_list) con fallback a banda completa"
+                summary.directedScan -> "dirigido (freq_list)"
+                else -> "banda completa"
+            }
+        )
+        summary.pixiewpsMode?.let { add("Modo pixiewps: $it") }
+    }
+}
 
 /**
  * Componente de nombre de fichero derivado del BSSID.

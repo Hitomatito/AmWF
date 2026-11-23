@@ -114,6 +114,27 @@ internal class PixieDustRunner(
     private var cleanupDone = false
 
     /**
+     * Hitos de tiempo del ataque en curso (nanosegundos de `System.nanoTime`),
+     * para la sección «Resumen» del log. `synchronizedList` porque [cleanup]
+     * puede marcarlos desde el hilo de cancelación mientras el `finally`
+     * persiste.
+     */
+    private val auditTimings =
+        Collections.synchronizedList(mutableListOf<PixieAuditLog.AuditTiming>())
+
+    /** Rondas consumidas por el ataque en curso (para el resumen del log). */
+    @Volatile
+    private var attackRoundsUsed = 0
+
+    /** Modo de pixiewps detectado en la última ronda analizada. */
+    @Volatile
+    private var attackPixiewpsMode: Int? = null
+
+    /** true si el ataque consumió su ronda de rescate full-band. */
+    @Volatile
+    private var attackFullBandFallback = false
+
+    /**
      * Ejecuta una auditoría Pixie Dust contra el BSSID dado.
      *
      * @param bssid Dirección MAC del objetivo (validada estrictamente).
@@ -122,24 +143,33 @@ internal class PixieDustRunner(
      * @param freqMHz Frecuencia del objetivo en MHz (opcional): limita el
      * escaneo del supplicant a su canal y afina el motivo de fallo si el AP
      * no responde.
+     * @param levelDbm Señal (RSSI) del objetivo al seleccionarlo (opcional):
+     * queda registrada en la cabecera del log para correlacionar resultados
+     * con la calidad del enlace.
      * @return [PixieDustResult] con el resultado de la auditoría.
      */
     suspend fun runAttack(
         bssid: String,
         interfaceName: String = "wlan0",
         ssid: String? = null,
-        freqMHz: Int? = null
+        freqMHz: Int? = null,
+        levelDbm: Int? = null
     ): PixieDustResult = withContext(ioDispatcher) {
         ensureActive()
         auditEvents.clear()
+        auditTimings.clear()
         cleanupDone = false
+        attackRoundsUsed = 0
+        attackPixiewpsMode = null
+        attackFullBandFallback = false
         stage(PixieDustStage.PREPARING)
+        markTiming(AuditTimingLabels.START)
 
         log("[*] ===== PIXIE DUST ATTACK START =====")
         log("[*] BSSID: $bssid | Interface: $interfaceName | SSID: $ssid | freq: ${freqMHz ?: "unknown"}")
         log("[*] Arch suffix: ${nativeBinaries.archSuffix().ifEmpty { "(none)" }}")
 
-        val target = PixieAuditLog.Target(bssid, ssid, freqMHz, interfaceName)
+        val target = PixieAuditLog.Target(bssid, ssid, freqMHz, interfaceName, levelDbm)
         val rawOutput = StringBuilder()
         // Resultado final para el log de auditoría: `finally` no puede leer
         // las variables locales de cada `return`, así que se conserva aquí.
@@ -199,6 +229,7 @@ internal class PixieDustRunner(
             return@withContext failure
         }
         log("[+] Native binaries ready")
+        markTiming(AuditTimingLabels.BINARIES_READY)
 
         var currentSupplicant: SupplicantProcesses.Handle? = null
 
@@ -246,13 +277,15 @@ internal class PixieDustRunner(
             var wpsPin: String? = null
             var pixieFailureReason: String? = null
             // Ronda de rescate full-band: se consume una sola vez si el escaneo
-            // restringido al canal del objetivo nunca llegó a ver al AP.
-            var fullBandFallbackDone = false
+            // restringido al canal del objetivo nunca llegó a ver al AP. Se
+            // lleva en un campo (no en una local) para que llegue al resumen.
+            attackFullBandFallback = false
 
             // Cada ronda captura claves DH frescas. El diagnóstico de pixiewps
             // de una ronda ajusta la siguiente (modo, tiempo y ventana M5/M7).
             for (round in 1..MAX_ATTACK_ROUNDS) {
                 ensureActive()
+                attackRoundsUsed = round
                 if (assocRejectTracker.exhausted()) {
                     log("[-] El AP rechazó la asociación repetidamente; no se inicia una nueva ronda")
                     captureReason = captureReason
@@ -269,7 +302,7 @@ internal class PixieDustRunner(
                 stage(PixieDustStage.STARTING_SUPPLICANT)
                 // Tras el fallback full-band ya no se restringe: el objetivo no
                 // estaba en el canal que dijo el escaneo de la UI.
-                val roundFreqMHz = if (fullBandFallbackDone) null else freqMHz
+                val roundFreqMHz = if (attackFullBandFallback) null else freqMHz
                 val handle = supplicant.launch(
                     iface = interfaceName,
                     freqMHz = roundFreqMHz,
@@ -289,7 +322,7 @@ internal class PixieDustRunner(
                     log = ::log,
                     rawOutput = rawOutput,
                     assocRejectTracker = assocRejectTracker,
-                    fullBandFallbackAvailable = freqMHz != null && !fullBandFallbackDone
+                    fullBandFallbackAvailable = freqMHz != null && !attackFullBandFallback
                 )
                 m3Data = attempt.data
                 m5m7 = attempt.m5m7
@@ -297,7 +330,7 @@ internal class PixieDustRunner(
                 if (attempt.fullBandFallback) {
                     // La siguiente ronda escanea full-band: el objetivo no
                     // estaba en el canal que reportó el escaneo de la UI.
-                    fullBandFallbackDone = true
+                    attackFullBandFallback = true
                 }
 
                 if (m3Data == null) {
@@ -312,6 +345,7 @@ internal class PixieDustRunner(
                 }
 
                 log("[+] M3 captured (round $round/$MAX_ATTACK_ROUNDS)")
+                markTiming(AuditTimingLabels.M3_CAPTURED)
                 // Cierra la sesión WPS en el AP antes de matar el supplicant:
                 // si solo se mata, el AP mantiene la sesión abierta y la
                 // extracción de PSK choca con ella.
@@ -337,10 +371,15 @@ internal class PixieDustRunner(
                 log("[*] Pixiewps mode: ${invocation.plan.reason}")
                 log("[*] Pixiewps command: ${invocation.command}")
                 val outputStart = rawOutput.length
+                markTiming(AuditTimingLabels.PIXIEWPS_START)
                 val pin = pixiewps.run(invocation, rawOutput, ::log)
                 val diagnosis = PixieDiagnosisParser.parse(rawOutput.substring(outputStart))
                 log("[*] Diagnóstico pixiewps: ${diagnosis.kind.name} -> ${diagnosis.action.name}")
-                diagnosis.mode?.let { log("[*] Modo detectado por pixiewps: $it") }
+                diagnosis.mode?.let {
+                    attackPixiewpsMode = it
+                    log("[*] Modo detectado por pixiewps: $it")
+                }
+                markTiming(AuditTimingLabels.PIXIEWPS_DONE)
 
                 if (pin != null) {
                     wpsPin = pin
@@ -397,6 +436,7 @@ internal class PixieDustRunner(
             if (targetSsid != null) {
                 stage(PixieDustStage.EXTRACTING_PSK)
                 log("[*] Obtaining WPA PSK via WPS provisioning...")
+                markTiming(AuditTimingLabels.PSK_START)
                 wpaPsk = pskExtractor.extract(
                     bssid = bssid,
                     iface = interfaceName,
@@ -411,6 +451,7 @@ internal class PixieDustRunner(
                 } else {
                     log("[-] WPA PSK not obtained")
                 }
+                markTiming(AuditTimingLabels.PSK_DONE)
             } else {
                 log("[*] Skipping PSK extraction (SSID unknown or empty)")
             }
@@ -662,6 +703,7 @@ internal class PixieDustRunner(
     @Synchronized
     private fun cleanup() {
         if (cleanupDone) return
+        markTiming(AuditTimingLabels.CLEANUP_START)
         stage(PixieDustStage.RESTORING)
         try {
             val dir = nativeBinaries.binaryDir()
@@ -683,6 +725,7 @@ internal class PixieDustRunner(
         }
         log("[*] Cleanup done")
         cleanupDone = true
+        markTiming(AuditTimingLabels.CLEANUP_DONE)
     }
 
     /**
@@ -747,6 +790,11 @@ internal class PixieDustRunner(
         onLog(message)
     }
 
+    /** Registra un hito de tiempo para la sección «Resumen» del log. */
+    private fun markTiming(label: String) {
+        auditTimings += PixieAuditLog.AuditTiming(label, System.nanoTime())
+    }
+
     /** Notifica un hito de progreso a la UI; nunca debe romper la auditoría. */
     private fun stage(value: PixieDustStage) {
         try {
@@ -767,18 +815,31 @@ internal class PixieDustRunner(
         rawOutput: StringBuilder
     ) {
         try {
+            // El hito final se marca aquí: este método es el único punto por
+            // el que pasan todas las salidas, incluidas las tempranas.
+            markTiming(AuditTimingLabels.END)
             // `Collections.synchronizedList` exige sincronizar la iteración:
-            // el hilo lector del supplicant aún podría estar añadiendo líneas.
+            // el hilo lector del supplicant aún podría estar añadiendo líneas
+            // (y cleanup, marcando hitos desde el hilo de cancelación).
             val events = synchronized(auditEvents) { auditEvents.toList() }
                 .filterNot {
                     it.startsWith("[supplicant]") ||
                         it.startsWith("[pixiewps-stderr]")
                 }
+            val timings = synchronized(auditTimings) { auditTimings.toList() }
             auditLog.persist(
                 result = result,
                 target = target,
                 eventLines = events,
                 rawLines = rawOutput.toString().lines(),
+                summary = PixieAuditLog.Summary(
+                    timings = timings,
+                    roundsUsed = attackRoundsUsed,
+                    maxRounds = MAX_ATTACK_ROUNDS,
+                    directedScan = target.freqMHz != null,
+                    fullBandFallbackUsed = attackFullBandFallback,
+                    pixiewpsMode = attackPixiewpsMode
+                ),
                 log = ::log
             )
         } catch (e: Exception) {

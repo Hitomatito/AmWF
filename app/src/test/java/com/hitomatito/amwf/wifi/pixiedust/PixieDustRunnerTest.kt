@@ -220,7 +220,8 @@ class PixieDustRunnerTest {
         val result: PixieDustResult?,
         val target: PixieAuditLog.Target,
         val eventLines: List<String>,
-        val rawLines: List<String>
+        val rawLines: List<String>,
+        val summary: PixieAuditLog.Summary
     )
 
     private class FakeAuditLog : AuditLogGateway {
@@ -230,9 +231,10 @@ class PixieDustRunnerTest {
             target: PixieAuditLog.Target,
             eventLines: List<String>,
             rawLines: List<String>,
+            summary: PixieAuditLog.Summary,
             log: (String) -> Unit
         ) {
-            calls += PersistedCall(result, target, eventLines, rawLines)
+            calls += PersistedCall(result, target, eventLines, rawLines, summary)
         }
     }
 
