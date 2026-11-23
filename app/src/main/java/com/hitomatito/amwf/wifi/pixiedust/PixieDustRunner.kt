@@ -245,6 +245,9 @@ internal class PixieDustRunner(
             var captureReason: String? = null
             var wpsPin: String? = null
             var pixieFailureReason: String? = null
+            // Ronda de rescate full-band: se consume una sola vez si el escaneo
+            // restringido al canal del objetivo nunca llegó a ver al AP.
+            var fullBandFallbackDone = false
 
             // Cada ronda captura claves DH frescas. El diagnóstico de pixiewps
             // de una ronda ajusta la siguiente (modo, tiempo y ventana M5/M7).
@@ -264,9 +267,12 @@ internal class PixieDustRunner(
                 supplicant.stopAndFlush(currentSupplicant, rawOutput, ::log)
                 currentSupplicant = null
                 stage(PixieDustStage.STARTING_SUPPLICANT)
+                // Tras el fallback full-band ya no se restringe: el objetivo no
+                // estaba en el canal que dijo el escaneo de la UI.
+                val roundFreqMHz = if (fullBandFallbackDone) null else freqMHz
                 val handle = supplicant.launch(
                     iface = interfaceName,
-                    freqMHz = freqMHz,
+                    freqMHz = roundFreqMHz,
                     rawOutput = rawOutput,
                     log = ::log
                 ) ?: run {
@@ -282,11 +288,17 @@ internal class PixieDustRunner(
                     round = round,
                     log = ::log,
                     rawOutput = rawOutput,
-                    assocRejectTracker = assocRejectTracker
+                    assocRejectTracker = assocRejectTracker,
+                    fullBandFallbackAvailable = freqMHz != null && !fullBandFallbackDone
                 )
                 m3Data = attempt.data
                 m5m7 = attempt.m5m7
                 captureReason = attempt.failureReason
+                if (attempt.fullBandFallback) {
+                    // La siguiente ronda escanea full-band: el objetivo no
+                    // estaba en el canal que reportó el escaneo de la UI.
+                    fullBandFallbackDone = true
+                }
 
                 if (m3Data == null) {
                     if (attempt.terminal) {
@@ -458,7 +470,8 @@ internal class PixieDustRunner(
         round: Int,
         log: (String) -> Unit,
         rawOutput: StringBuilder,
-        assocRejectTracker: M3Parser.AssocRejectTracker
+        assocRejectTracker: M3Parser.AssocRejectTracker,
+        fullBandFallbackAvailable: Boolean
     ): M3Attempt = coroutineScope {
         val maxAttempts = PixieTiming.ATTEMPTS_PER_ROUND
         // El motivo final se muestra solo cuando fallan todas las rondas: el
@@ -553,6 +566,23 @@ internal class PixieDustRunner(
                         val bssidSeen = M3Parser.bssidVisibleInSupplicantOutput(
                             rawOutput.toString(), bssid
                         )
+                        if (shouldFallbackToFullBandScan(bssidSeen, fullBandFallbackAvailable)) {
+                            // El escaneo restringido al canal del objetivo nunca
+                            // lo vio: puede haber cambiado de canal tras el
+                            // escaneo de la UI (auto-channel del router). Se pide
+                            // a runAttack una ronda full-band que lo encuentre
+                            // en el canal nuevo antes de dar por muerta la
+                            // auditoría.
+                            log("[*] El objetivo no apareció en el canal escaneado; reintentando con escaneo full-band (¿cambió de canal el router?)")
+                            // No terminal y sin motivo: runAttack consume el
+                            // reintento y relanza el supplicant ya sin freq_list.
+                            return@coroutineScope M3Attempt(
+                                data = null,
+                                failureReason = null,
+                                m5m7 = null,
+                                fullBandFallback = true
+                            )
+                        }
                         if (bssidSeen) {
                             log("[-] El AP aparece en los escaneos pero no respondió al registro WPS (posible bloqueo WPS o sesión atascada)")
                         }
@@ -765,7 +795,9 @@ internal class PixieDustRunner(
         val failureReason: String?,
         val m5m7: M3Parser.M5M7Capture?,
         /** true si el AP terminó la negociación y no tiene sentido reintentar. */
-        val terminal: Boolean = false
+        val terminal: Boolean = false,
+        /** true si esta ronda pide gastar el único reintento full-band de runAttack. */
+        val fullBandFallback: Boolean = false
     )
 
     companion object {
@@ -805,3 +837,19 @@ internal class PixieDustRunner(
         }
     }
 }
+
+/**
+ * Decide si conviene gastar el único reintento full-band del ataque: el AP no
+ * apareció en ningún escaneo o selección de BSS del supplicant.
+ *
+ * [fallbackAvailable] significa que esta ronda escaneó restringida al canal
+ * del objetivo (`freq_list`) y que el reintento aún no se consumió. Cubre el
+ * caso raro en que el router cambia de canal entre el escaneo de la UI y la
+ * auditoría (auto-channel tras un reinicio): sin este reintento, la auditoría
+ * reportaría "fuera de alcance" aunque el AP siguiera en alcance, solo que en
+ * otro canal.
+ */
+internal fun shouldFallbackToFullBandScan(
+    bssidSeen: Boolean,
+    fallbackAvailable: Boolean
+): Boolean = !bssidSeen && fallbackAvailable

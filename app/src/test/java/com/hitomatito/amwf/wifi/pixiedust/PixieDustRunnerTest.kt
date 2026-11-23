@@ -736,6 +736,34 @@ class PixieDustRunnerTest {
     }
 
     @Test
+    fun `el fallback full-band se consume una sola vez y solo con escaneo restringido`() {
+        // El AP nunca apareció y esta ronda escaneó restringida con el reintento
+        // aún disponible: se pide la ronda full-band.
+        assertTrue(
+            shouldFallbackToFullBandScan(
+                bssidSeen = false,
+                fallbackAvailable = true
+            )
+        )
+        // El reintento ya se gastó o esta ronda ya escaneó full-band (freq
+        // desconocida): no hay segunda oportunidad.
+        assertFalse(
+            shouldFallbackToFullBandScan(
+                bssidSeen = false,
+                fallbackAvailable = false
+            )
+        )
+        // El AP sí apareció en los escaneos: está en alcance pero mudo, no es
+        // un problema de canal.
+        assertFalse(
+            shouldFallbackToFullBandScan(
+                bssidSeen = true,
+                fallbackAvailable = true
+            )
+        )
+    }
+
+    @Test
     fun `cancel() es idempotente y no repite pkill ni el encendido del WiFi`() = runTest {
         val shell = ShellRecorder(wifiEnabledState = true)
         val runner = runnerWith(
