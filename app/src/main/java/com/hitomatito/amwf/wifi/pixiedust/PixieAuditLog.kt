@@ -92,11 +92,12 @@ internal object PixieAuditLog {
         summary: Summary,
         log: (String) -> Unit
     ) {
-        // Fecha + SSID + BSSID identifican un log de un vistazo: el nombre de
-        // la red es lo que el usuario recuerda y el BSSID desambigua entre
-        // bandas del mismo router. Sin UUID: dos auditorías del mismo AP no
-        // pueden terminar en el mismo segundo (cada una dura >=10 s), así
-        // que un nombre a resolución de segundos nunca pisa a otro.
+        // El nombre de la red abre el fichero (es lo que el usuario reconoce de
+        // un vistazo al listar la carpeta); la fecha y el BSSID van detrás:
+        // la fecha ordena sesiones del mismo AP y el BSSID desambigua bandas
+        // del mismo router. Sin UUID: dos auditorías del mismo AP no pueden
+        // terminar en el mismo segundo (cada una dura >=10 s), así que un
+        // nombre a resolución de segundos nunca pisa a otro.
         val timeText = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = buildAuditLogFileName(timeText, target.ssid, target.bssid)
 
@@ -408,8 +409,9 @@ internal fun sanitizeSsidForFileName(ssid: String?): String =
         .ifEmpty { "red_oculta" }
 
 /**
- * Ensambla el nombre del log: fecha, nombre saneado de la red y su MAC.
+ * Ensambla el nombre del log: el nombre saneado de la red abre (es lo que el
+ * usuario reconoce de un vistazo) y la fecha y la MAC van detrás — «lo demás».
  * Puro para poder fijar el formato en tests.
  */
 internal fun buildAuditLogFileName(timeText: String, ssid: String?, bssid: String): String =
-    "pixie_${timeText}_${sanitizeSsidForFileName(ssid)}_${auditBssidForFileName(bssid)}.log"
+    "pixie_${sanitizeSsidForFileName(ssid)}_${timeText}_${auditBssidForFileName(bssid)}.log"

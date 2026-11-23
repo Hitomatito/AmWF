@@ -210,14 +210,14 @@ class PixieAuditLogTest {
     }
 
     @Test
-    fun `el nombre del log lleva fecha red y BSSID`() {
+    fun `el nombre del log abre con la red y el resto va detras`() {
         assertEquals(
-            "pixie_20261123_140002_CHASKY_74da8813cea0.log",
+            "pixie_CHASKY_20261123_140002_74da8813cea0.log",
             buildAuditLogFileName("20261123_140002", "CHASKY", "74:da:88:13:ce:a0")
         )
         // Red oculta y BSSID inválido conservan sus marcadores fijos.
         assertEquals(
-            "pixie_20261123_140002_red_oculta_invalid.log",
+            "pixie_red_oculta_20261123_140002_invalid.log",
             buildAuditLogFileName("20261123_140002", null, "no-mac")
         )
     }

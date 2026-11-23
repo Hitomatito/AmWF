@@ -175,7 +175,7 @@ If an audit cannot proceed, AmWF detects the underlying reason and stops early t
 Upon successful audit:
 - The recovered **WPS PIN** (8 digits) and **WPA Key** (passphrase) are presented clearly on screen.
 - Tap the **Copiar clave** (**Copy key**) or **Copiar PIN** button to save credentials to the clipboard.
-- The audit report is saved locally to `/sdcard/AmWF/pixie-logs/` — one file per audit, named after the date, the network name and its MAC (e.g. `pixie_20261123_140002_CHASKY_74da8813cea0.log`), so you can spot the right log without opening any of them.
+- The audit report is saved locally to `/sdcard/AmWF/pixie-logs/` — one file per audit, named after the network first, then the date and its MAC (e.g. `pixie_CHASKY_20261123_140002_74da8813cea0.log`), so you can spot the right log without opening any of them.
 - Use **Borrar registros guardados / Delete saved logs** on the scan card to erase every saved audit log (the shared and the app-private locations) once you no longer need the credentials.
 
 > [!WARNING]
