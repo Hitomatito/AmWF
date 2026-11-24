@@ -290,6 +290,20 @@ class PixieDustActivity : AppCompatActivity() {
      */
     private fun configureSheetWindow(dialog: BottomSheetDialog, sheetContent: View) {
         val window = dialog.window ?: return
+        // El diálogo tiene ventana y tema propios: sin esto, Android pinta la
+        // navigation bar como una franja opaca al final del selector, ajena al
+        // difuminado de la Activity. Edge-to-edge + barra transparente la
+        // integran en el cristal (el padding se compensa abajo).
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(sheetContent) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            view.updatePadding(bottom = bars.bottom)
+            insets
+        }
         window.setDimAmount(SHEET_DIM_AMOUNT)
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         styleSheetSurface(dialog, sheetContent)
