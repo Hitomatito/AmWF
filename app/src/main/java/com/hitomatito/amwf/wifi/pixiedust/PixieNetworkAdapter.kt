@@ -8,10 +8,12 @@
 package com.hitomatito.amwf.wifi.pixiedust
 
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -30,6 +32,12 @@ import com.hitomatito.amwf.databinding.ItemPixieNetworkBinding
 class PixieNetworkAdapter(
     private val onNetworkClick: (PixieDustNetwork) -> Unit
 ) : ListAdapter<PixieNetworkAdapter.Item, PixieNetworkAdapter.NetworkViewHolder>(DiffCallback) {
+
+    private companion object {
+        const val GLASS_CARD_ALPHA = 0x8A
+        const val GLASS_CARD_SELECTED_ALPHA = 0xE6
+        const val GLASS_STROKE_ALPHA = 0x24
+    }
 
     data class Item(
         val network: PixieDustNetwork,
@@ -171,16 +179,23 @@ class PixieNetworkAdapter(
             }
 
             binding.rbSelected.isChecked = item.selected
-            binding.cardNetwork.strokeColor = ContextCompat.getColor(
-                context,
-                if (item.selected) R.color.md_theme_primary else R.color.card_stroke
-            )
+            // Cristal: las tarjetas dejan ver el contenido difuminado de la
+            // Activity detrás de toda la hoja, con un hairline claro que las
+            // define. La seleccionada se vuelve más opaca para destacar.
+            binding.cardNetwork.strokeColor = if (item.selected) {
+                ContextCompat.getColor(context, R.color.md_theme_primary)
+            } else {
+                Color.argb(GLASS_STROKE_ALPHA, 255, 255, 255)
+            }
             binding.cardNetwork.strokeWidth =
                 ((if (item.selected) 2 else 1) * density).toInt()
             binding.cardNetwork.setCardBackgroundColor(
-                ContextCompat.getColor(
-                    context,
-                    if (item.selected) R.color.md_theme_surfaceVariant else R.color.card_background
+                ColorUtils.setAlphaComponent(
+                    ContextCompat.getColor(
+                        context,
+                        if (item.selected) R.color.md_theme_surfaceVariant else R.color.card_background
+                    ),
+                    if (item.selected) GLASS_CARD_SELECTED_ALPHA else GLASS_CARD_ALPHA
                 )
             )
             binding.root.alpha = if (auditable) 1f else 0.7f

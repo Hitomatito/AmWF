@@ -10,9 +10,12 @@ package com.hitomatito.amwf.wifi.pixiedust
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.LightingColorFilter
 import android.graphics.RenderEffect
 import android.graphics.Shader
+import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +26,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -36,6 +41,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.shape.MaterialShapeDrawable
 import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.databinding.ActivityPixieDustBinding
@@ -258,7 +264,7 @@ class PixieDustActivity : AppCompatActivity() {
             behavior.maxHeight = (resources.displayMetrics.heightPixels * 0.92f).toInt()
             behavior.skipCollapsed = true
             behavior.state = BottomSheetBehavior.STATE_EXPANDED
-            configureSheetWindow(dialog)
+            configureSheetWindow(dialog, sheet.root)
         }
 
         sheetBinding = sheet
@@ -278,17 +284,51 @@ class PixieDustActivity : AppCompatActivity() {
      * queda detrás; la superficie de la lista sigue siendo opaca para que el
      * texto y los filtros se lean bien.
      */
-    private fun configureSheetWindow(dialog: BottomSheetDialog) {
+    private fun configureSheetWindow(dialog: BottomSheetDialog, sheetContent: View) {
         val window = dialog.window ?: return
         window.setDimAmount(SHEET_DIM_AMOUNT)
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        // La superficie de la hoja es opaca por defecto (colorSurface): sin
-        // este alpha el difuminado de la Activity solo se vería en la franja
-        // que queda por encima de la hoja, no en la ventana del selector.
-        // mutate() conserva la forma redondeada del MaterialShapeDrawable.
-        dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
-            ?.background?.mutate()?.alpha = SHEET_SURFACE_ALPHA
+        styleSheetSurface(dialog, sheetContent)
         setPickerBackgroundBlur(true)
+    }
+
+    /**
+     * Cristal de la hoja: relleno de superficie translúcido (deja ver el blur
+     * de la Activity en toda la ventana) y un hairline claro que define el
+     * borde. [mutate] conserva la forma redondeada del MaterialShapeDrawable
+     * de Material; las tarjetas aplican el mismo lenguaje visual en el adapter.
+     */
+    private fun styleSheetSurface(dialog: BottomSheetDialog, content: View) {
+        val background = dialog
+            .findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.background?.mutate() ?: return
+        val surface = ColorUtils.setAlphaComponent(
+            ContextCompat.getColor(this, R.color.md_theme_surface),
+            SHEET_SURFACE_ALPHA
+        )
+        if (background is MaterialShapeDrawable) {
+            background.fillColor = ColorStateList.valueOf(surface)
+            background.strokeColor = ColorStateList.valueOf(
+                Color.argb(GLASS_STROKE_ALPHA, 255, 255, 255)
+            )
+            background.strokeWidth = resources.displayMetrics.density
+        } else {
+            background.alpha = SHEET_SURFACE_ALPHA
+        }
+
+        // Reflejo de luz en el borde superior: da profundidad al cristal y
+        // hace perceptible el blur incluso donde el fondo es uniforme.
+        val corner = SHEET_CORNER_RADIUS_DP * resources.displayMetrics.density
+        GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                Color.argb(GLASS_SHEEN_ALPHA, 255, 255, 255),
+                Color.TRANSPARENT
+            )
+        ).apply {
+            cornerRadii = floatArrayOf(corner, corner, corner, corner, 0f, 0f, 0f, 0f)
+            content.background = this
+        }
     }
 
     /**
@@ -304,10 +344,18 @@ class PixieDustActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         window.decorView.setRenderEffect(
             if (enabled) {
-                RenderEffect.createBlurEffect(
-                    SHEET_BLUR_RADIUS_PX.toFloat(),
-                    SHEET_BLUR_RADIUS_PX.toFloat(),
-                    Shader.TileMode.CLAMP
+                // Blur amplio + realce de brillo: sobre un fondo oscuro y casi
+                // plano, un blur sin realce es imperceptible. El realce hace
+                // que las formas desenfocadas se lean como cristal esmerilado.
+                RenderEffect.createChainEffect(
+                    RenderEffect.createBlurEffect(
+                        SHEET_BLUR_RADIUS_PX.toFloat(),
+                        SHEET_BLUR_RADIUS_PX.toFloat(),
+                        Shader.TileMode.CLAMP
+                    ),
+                    RenderEffect.createColorFilterEffect(
+                        LightingColorFilter(0xFFFFFFFF.toInt(), 0x0A0A0A)
+                    )
                 )
             } else {
                 null
@@ -790,13 +838,16 @@ class PixieDustActivity : AppCompatActivity() {
     private companion object {
         private const val STATE_AWAITING_SETTINGS = "awaiting_settings_result"
         private const val STATE_PERMISSION_REQUESTED = "permission_request_attempted"
-        // Velo suave en vez del dim negro por defecto de Material, y radio de
-        // difuminado de la ventana (API 31+; en versiones anteriores se ignora).
-        private const val SHEET_DIM_AMOUNT = 0.32f
-        private const val SHEET_BLUR_RADIUS_PX = 24
-        // Opacidad de la superficie de la hoja: deja ver el contenido difuminado
-        // de la Activity a través de ella sin perder contraste en los textos.
-        private const val SHEET_SURFACE_ALPHA = 0xB3
+        // Poco dim para que el difuminado se aprecie, y radio generoso: con un
+        // fondo oscuro y casi uniforme, un blur débil no se nota.
+        private const val SHEET_DIM_AMOUNT = 0.18f
+        private const val SHEET_BLUR_RADIUS_PX = 56
+        // Superficie de cristal: translúcida en toda la hoja, con hairline y
+        // reflejo superior redondeado como las esquinas de Material.
+        private const val SHEET_SURFACE_ALPHA = 0x9E
+        private const val GLASS_STROKE_ALPHA = 0x24
+        private const val GLASS_SHEEN_ALPHA = 0x0F
+        private const val SHEET_CORNER_RADIUS_DP = 28f
 
         /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
         private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
