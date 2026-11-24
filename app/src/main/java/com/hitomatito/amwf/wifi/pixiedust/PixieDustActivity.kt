@@ -334,14 +334,18 @@ class PixieDustActivity : AppCompatActivity() {
             background.alpha = SHEET_SURFACE_ALPHA
         }
 
-        // Reflejo de luz en el borde superior: da profundidad al cristal y
-        // hace perceptible el blur incluso donde el fondo es uniforme.
+        // Reflejo en ambos bordes: arriba da profundidad al cristal y abajo
+        // evita que el pie se lea como una franja plana. El blur de la Activity
+        // no se aprecia en la parte inferior porque detrás solo hay fondo liso
+        // (desenfocar un color uniforme da ese mismo color); el reflejo es lo
+        // que mantiene el panel continuo de arriba abajo.
         val corner = SHEET_CORNER_RADIUS_DP * resources.displayMetrics.density
         GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(
                 Color.argb(GLASS_SHEEN_ALPHA, 255, 255, 255),
-                Color.TRANSPARENT
+                Color.TRANSPARENT,
+                Color.argb(GLASS_BOTTOM_SHEEN_ALPHA, 255, 255, 255)
             )
         ).apply {
             cornerRadii = floatArrayOf(corner, corner, corner, corner, 0f, 0f, 0f, 0f)
@@ -867,6 +871,7 @@ class PixieDustActivity : AppCompatActivity() {
         private const val SHEET_SURFACE_ALPHA = 0x9E
         private const val GLASS_STROKE_ALPHA = 0x24
         private const val GLASS_SHEEN_ALPHA = 0x0F
+        private const val GLASS_BOTTOM_SHEEN_ALPHA = 0x0A
         private const val SHEET_CORNER_RADIUS_DP = 28f
 
         /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
