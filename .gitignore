@@ -16,3 +16,7 @@ keystore.properties
 
 # Volcados de logcat locales (pueden contener datos del dispositivo)
 *.logcat
+
+# Archivo temporal de captura del proyecto para importar en Android Studio;
+# no es código fuente y nunca debe versionarse.
+AmWF_Capture_Minimal_AndroidStudio.zip
