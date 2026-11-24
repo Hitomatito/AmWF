@@ -45,12 +45,4 @@
             android:textAppearance="@style/TextAppearance.AmWF.BodySmall"
             tools:text="Recuperada el 23 nov 2026, 22:00" />
     </LinearLayout>
-
-    <ImageView
-        android:layout_width="18dp"
-        android:layout_height="18dp"
-        android:layout_marginStart="8dp"
-        android:contentDescription="@null"
-        android:src="@drawable/ic_info"
-        app:tint="@color/md_theme_outline" />
 </LinearLayout>
