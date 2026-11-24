@@ -58,7 +58,9 @@ data class PixieDustUiState(
     // una selección sobrescriban el error transitorio de errorMessage.
     val nativeError: String? = null,
     val selectedInterface: String = "wlan0",
-    val interfacesAvailable: Boolean = false
+    val interfacesAvailable: Boolean = false,
+    // Credenciales recuperadas en auditorías exitosas (bóveda persistente).
+    val vault: List<PixieVaultEntry> = emptyList()
 ) {
     fun copyWithConsole(line: String): PixieDustUiState {
         val updated = mutableListOf<String>()
@@ -117,6 +119,9 @@ sealed class PixieDustEvent {
 
     /** Los logs de auditoría guardados se borraron; [count] para el toast. */
     data class AuditLogsDeleted(val count: Int) : PixieDustEvent()
+
+    /** La entrada de la bóveda se olvidó; [ssid] para el toast. */
+    data class VaultEntryDeleted(val ssid: String) : PixieDustEvent()
 }
 
 /**
@@ -173,6 +178,15 @@ class PixieDustViewModel @JvmOverloads constructor(
      */
     @Volatile
     private var cleanupInProgress = false
+
+    init {
+        // La bóveda se carga sola al crear el ViewModel: la tarjeta de claves
+        // está visible en cuanto se abre la pantalla, sin botón que la pida.
+        viewModelScope.launch {
+            val entries = withContext(ioDispatcher) { PixieVaultStore.loadAll(appContext) }
+            _uiState.update { vaultLoadedState(it, entries) }
+        }
+    }
 
     // ========================================================================
     // Interfaces
@@ -559,6 +573,7 @@ class PixieDustViewModel @JvmOverloads constructor(
                     is PixieDustResult.Success -> {
                         addConsoleLine(localeContext.getString(R.string.pixie_console_attack_success, result.wpsPin ?: "N/A"))
                         result.wpaPsk?.let { addConsoleLine(localeContext.getString(R.string.pixie_console_wpa_key, it)) }
+                        saveVaultEntry(result, finishedAt)
                     }
                     is PixieDustResult.Failure -> {
                         addConsoleLine(localeContext.getString(R.string.pixie_console_attack_failed, result.reason))
@@ -699,6 +714,42 @@ class PixieDustViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             val deleted = withContext(ioDispatcher) { PixieAuditLog.deleteAll(appContext) }
             emitEvent(PixieDustEvent.AuditLogsDeleted(deleted))
+        }
+    }
+
+    /**
+     * Guarda en la bóveda la clave WPA recién recuperada. Solo entra si hay
+     * SSID, PSK y BSSID utilizables; la PSK nunca pasa por el logger (el
+     * registro de sesión ya la imprime a propósito, el logger de diagnóstico
+     * jamás).
+     */
+    private suspend fun saveVaultEntry(result: PixieDustResult.Success, atMs: Long) {
+        val bssid = result.bssid.trim()
+        val ssid = result.ssid.orEmpty().trim()
+        val psk = result.wpaPsk?.trim().orEmpty()
+        if (ssid.isBlank() || psk.isBlank() || !PixieVaultStore.isValidBssid(bssid)) return
+        val entry = PixieVaultEntry(
+            bssid = bssid,
+            ssid = ssid,
+            wpaPsk = psk,
+            wpsPin = result.wpsPin?.trim()?.takeIf { it.isNotBlank() },
+            obtainedAtMs = atMs
+        )
+        withContext(ioDispatcher) { PixieVaultStore.save(appContext, entry) }
+        _uiState.update { vaultUpsertState(it, entry) }
+    }
+
+    /**
+     * Olvida una entrada de la bóveda (prefs + estado). [emitEvent] lleva el
+     * SSID para el toast de confirmación.
+     */
+    fun deleteVaultEntry(bssid: String) {
+        viewModelScope.launch {
+            val entry = _uiState.value.vault
+                .firstOrNull { it.bssid.equals(bssid, ignoreCase = true) }
+            withContext(ioDispatcher) { PixieVaultStore.delete(appContext, bssid) }
+            _uiState.update { vaultRemoveState(it, bssid) }
+            if (entry != null) emitEvent(PixieDustEvent.VaultEntryDeleted(entry.ssid))
         }
     }
 

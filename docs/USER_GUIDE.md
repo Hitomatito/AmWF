@@ -178,6 +178,14 @@ Upon successful audit:
 - The audit report is saved locally to `/sdcard/AmWF/pixie-logs/` — one file per audit, named after the network first, then the date and its MAC (e.g. `pixie_CHASKY_20261123_140002_74da8813cea0.log`), so you can spot the right log without opening any of them.
 - Use **Borrar registros guardados / Delete saved logs** on the scan card to erase every saved audit log (the shared and the app-private locations) once you no longer need the credentials.
 
+### 4.6 Recovered Keys Vault
+Every audit that ends with a WPA key also saves it to the app's private vault, shown in the **Recovered keys** card at the bottom of the audit screen:
+
+- Each row is a network whose password you recovered, with the date it was obtained. Re-auditing the same AP refreshes its row instead of duplicating it.
+- Tapping a row opens a dialog with a **scannable QR code** (standard `WIFI:` payload) so another device can join the network by just scanning it — plus the password in plain sight, a **Copy password** button, and **Forget** to remove that entry from the vault.
+- The vault lives in the app's private storage (never on the shared `/sdcard`) and is never included in diagnostic exports. Diagnostics redact SSIDs; the vault's keys never leave the app.
+- **Forget** only removes the vault entry; the audit log file on `/sdcard` is untouched — delete it from the scan card as described above.
+
 > [!WARNING]
 > **Plaintext Credential Notice:** Audit log files store the discovered WPS PIN and WPA passphrase in plaintext for verification. Store them securely and never post them on public issue trackers.
 

@@ -228,6 +228,13 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Bóveda: claves recuperadas en auditorías exitosas. Ocupa la
+                 zona baja de la pantalla y siempre es visible, con un estado
+                 vacío explicativo cuando aún no hay nada. -->
+            <include
+                android:id="@+id/cardVault"
+                layout="@layout/pixie_card_vault" />
+
             <TextView
                 android:id="@+id/tvLegalFooter"
                 android:layout_width="match_parent"

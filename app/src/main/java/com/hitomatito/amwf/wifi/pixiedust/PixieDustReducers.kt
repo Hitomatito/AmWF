@@ -243,6 +243,34 @@ fun clearResultState(state: PixieDustUiState): PixieDustUiState = state.copy(
     errorMessage = null
 )
 
+/** Bóveda cargada de disco al abrir la pantalla. */
+fun vaultLoadedState(
+    state: PixieDustUiState,
+    entries: List<PixieVaultEntry>
+): PixieDustUiState = state.copy(vault = entries)
+
+/**
+ * Inserta o actualiza la entrada de un AP auditado con éxito. La clave es el
+ * BSSID: re-auditar el mismo AP refresca su entrada (y su fecha) en lugar de
+ * duplicarla. El orden es siempre «la más reciente primero».
+ */
+fun vaultUpsertState(
+    state: PixieDustUiState,
+    entry: PixieVaultEntry
+): PixieDustUiState = state.copy(
+    vault = (
+        state.vault.filterNot { it.bssid.equals(entry.bssid, ignoreCase = true) } + entry
+        ).sortedByDescending { it.obtainedAtMs }
+)
+
+/** La entrada se olvidó: desaparece de la bóveda visible. */
+fun vaultRemoveState(
+    state: PixieDustUiState,
+    bssid: String
+): PixieDustUiState = state.copy(
+    vault = state.vault.filterNot { it.bssid.equals(bssid, ignoreCase = true) }
+)
+
 /**
  * Línea tal como debe verse en la consola de la sesión.
  *

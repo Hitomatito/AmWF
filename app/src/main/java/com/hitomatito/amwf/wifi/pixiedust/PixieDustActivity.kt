@@ -11,6 +11,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.LightingColorFilter
 import android.graphics.RenderEffect
@@ -46,9 +47,16 @@ import com.google.android.material.shape.MaterialShapeDrawable
 import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.databinding.ActivityPixieDustBinding
+import com.hitomatito.amwf.databinding.DialogPixieVaultBinding
+import com.hitomatito.amwf.databinding.ItemPixieVaultEntryBinding
 import com.hitomatito.amwf.databinding.SheetPixieNetworkPickerBinding
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Pantalla de auditoría WPS Pixie Dust.
@@ -83,6 +91,8 @@ class PixieDustActivity : AppCompatActivity() {
     private var hadSession = false
     private var lastListSignature = ""
     private var activeFilter = NetworkFilter.ALL
+    // Evita reconstruir las filas de la bóveda en cada emisión de estado.
+    private var lastVaultSignature = ""
 
     // Permite retomar el escaneo al volver de Ajustes (permisos o ubicación).
     // Se guarda en el estado de la instancia para sobrevivir a rotaciones y a
@@ -427,6 +437,14 @@ class PixieDustActivity : AppCompatActivity() {
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
+
+                        is PixieDustEvent.VaultEntryDeleted -> {
+                            Toast.makeText(
+                                this@PixieDustActivity,
+                                getString(R.string.pixie_vault_deleted_toast, event.ssid),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
             }
@@ -675,6 +693,10 @@ class PixieDustActivity : AppCompatActivity() {
         val running = state.session.isAttacking
         binding.cardScan.visibility = if (running) View.GONE else View.VISIBLE
         binding.tvLegalFooter.visibility = if (running) View.GONE else View.VISIBLE
+        // La bóveda acompaña a la tarjeta de escaneo: fuera de la auditoría
+        // llena la zona baja de la pantalla; durante el ataque no compite.
+        binding.cardVault.root.visibility = if (running) View.GONE else View.VISIBLE
+        updateVaultCard(state)
 
         val busy = state.session.isAttacking || state.scan.isScanning
         // La barra solo existe para poder detener lo que está en marcha.
@@ -864,6 +886,80 @@ class PixieDustActivity : AppCompatActivity() {
     /** Traduce el chip marcado (o ninguno) al filtro que aplica la lista. */
     private fun networkFilterForChip(chipId: Int?): NetworkFilter =
         chipId?.let(FILTER_BY_CHIP::get) ?: NetworkFilter.ALL
+
+    /**
+     * Pinta la bóveda de claves recuperadas. Las filas solo se reconstruyen
+     * cuando cambia la firma (BSSID + fecha): el resto de emisiones de estado
+     * no debe parpadear la tarjeta.
+     */
+    private fun updateVaultCard(state: PixieDustUiState) {
+        val card = binding.cardVault
+        val empty = state.vault.isEmpty()
+        card.tvVaultEmpty.visibility = if (empty) View.VISIBLE else View.GONE
+        card.layoutVaultEntries.visibility = if (empty) View.GONE else View.VISIBLE
+
+        val signature = state.vault.joinToString("|") { "${it.bssid}:${it.obtainedAtMs}" }
+        if (signature == lastVaultSignature) return
+        lastVaultSignature = signature
+
+        card.layoutVaultEntries.removeAllViews()
+        val dateFormat = DateFormat.getDateTimeInstance(
+            DateFormat.MEDIUM,
+            DateFormat.SHORT,
+            resources.configuration.locales[0]
+        )
+        state.vault.forEach { entry ->
+            val row = ItemPixieVaultEntryBinding.inflate(layoutInflater, card.layoutVaultEntries, false)
+            row.tvVaultSsid.text = entry.ssid
+            row.tvVaultDate.text = getString(R.string.pixie_vault_obtained_at, dateFormat.format(Date(entry.obtainedAtMs)))
+            row.root.setOnClickListener { showVaultEntryDialog(entry) }
+            card.layoutVaultEntries.addView(row.root)
+        }
+    }
+
+    /**
+     * Diálogo de una clave recuperada: QR para que otro dispositivo se conecte
+     * y la contraseña a la vista, con copiar y olvidar. El QR se genera fuera
+     * del hilo principal; mientras llega, el diálogo ya muestra la contraseña.
+     */
+    private fun showVaultEntryDialog(entry: PixieVaultEntry) {
+        val dialogBinding = DialogPixieVaultBinding.inflate(layoutInflater)
+        dialogBinding.tvVaultPsk.text = entry.wpaPsk
+        dialogBinding.ivVaultQr.contentDescription =
+            getString(R.string.pixie_vault_qr_description_arg, entry.ssid)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(entry.ssid)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.pixie_vault_copy_password) { _, _ ->
+                viewModel.emitEvent(PixieDustEvent.CopyToClipboard(entry.wpaPsk))
+            }
+            .setNegativeButton(R.string.pixie_vault_forget) { _, _ ->
+                viewModel.deleteVaultEntry(entry.bssid)
+            }
+            .setNeutralButton(R.string.pixie_vault_dismiss, null)
+            .show()
+
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.Default) { buildWifiQrBitmap(entry) }
+            if (!isFinishing && !isDestroyed) dialogBinding.ivVaultQr.setImageBitmap(bitmap)
+        }
+    }
+
+    /** Matriz QR → Bitmap blanco/negro puro (máximo contraste para el escáner). */
+    private fun buildWifiQrBitmap(entry: PixieVaultEntry): Bitmap {
+        val size = 512
+        val matrix = QRCodeWriter().encode(
+            wifiQrPayload(entry.ssid, entry.wpaPsk),
+            BarcodeFormat.QR_CODE,
+            size,
+            size
+        )
+        val pixels = IntArray(size * size) { index ->
+            if (matrix[index % size, index / size]) Color.BLACK else Color.WHITE
+        }
+        return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888)
+    }
 
     private companion object {
         private const val STATE_AWAITING_SETTINGS = "awaiting_settings_result"

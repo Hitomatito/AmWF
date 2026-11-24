@@ -264,6 +264,19 @@
     <string name="pixie_console_cleanup_wait">Esperando a que termine la limpieza de la auditoría anterior…</string>
     <string name="pixie_console_cleanup_busy">La limpieza de la auditoría anterior seguía en curso; podría interferir con esta</string>
     <string name="pixie_delete_logs">Borrar registros guardados</string>
+
+    <!-- Bóveda de claves recuperadas (QR + contraseña). -->
+    <string name="pixie_section_vault">Claves recuperadas</string>
+    <string name="pixie_vault_subtitle">Redes cuya clave WPA obtuviste con una auditoría</string>
+    <string name="pixie_vault_empty">Aún no has recuperado ninguna clave. Las auditorías exitosas guardarán aquí la contraseña de la red para consultarla y compartirla como QR.</string>
+    <string name="pixie_vault_obtained_at">Recuperada el %1$s</string>
+    <string name="pixie_vault_dialog_hint">Escanea el código con otro dispositivo para conectarse a la red.</string>
+    <string name="pixie_vault_password_label">Contraseña WPA</string>
+    <string name="pixie_vault_copy_password">Copiar contraseña</string>
+    <string name="pixie_vault_forget">Olvidar</string>
+    <string name="pixie_vault_dismiss">Cerrar</string>
+    <string name="pixie_vault_qr_description_arg">Código QR para conectarse a la red %1$s</string>
+    <string name="pixie_vault_deleted_toast">Clave de «%1$s» olvidada</string>
     <string name="pixie_logs_delete_title">¿Borrar los registros de auditoría?</string>
     <string name="pixie_logs_delete_message">Se eliminarán de forma permanente todos los logs guardados en /sdcard/AmWF/pixie-logs y en el almacenamiento interno. Contienen credenciales en texto claro; esta acción no se puede deshacer.</string>
     <string name="pixie_logs_delete_confirm">Borrar</string>

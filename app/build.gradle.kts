@@ -103,6 +103,8 @@ dependencies {
     // ViewModel + Lifecycle (UI state, ciclo de vida, repeatOnLifecycle)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // QR de conexión WiFi para compartir claves obtenidas (bóveda Pixie Dust)
+    implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)

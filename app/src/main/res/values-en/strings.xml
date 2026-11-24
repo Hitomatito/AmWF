@@ -263,6 +263,19 @@
     <string name="pixie_console_cleanup_wait">Waiting for the previous audit\'s cleanup to finish…</string>
     <string name="pixie_console_cleanup_busy">The previous audit\'s cleanup was still running; it may interfere with this one</string>
     <string name="pixie_delete_logs">Delete saved logs</string>
+
+    <!-- Vault of recovered keys (QR + password). -->
+    <string name="pixie_section_vault">Recovered keys</string>
+    <string name="pixie_vault_subtitle">Networks whose WPA key you recovered through an audit</string>
+    <string name="pixie_vault_empty">No keys recovered yet. Successful audits will save the network password here so you can check it and share it as a QR.</string>
+    <string name="pixie_vault_obtained_at">Recovered on %1$s</string>
+    <string name="pixie_vault_dialog_hint">Scan the code with another device to join the network.</string>
+    <string name="pixie_vault_password_label">WPA password</string>
+    <string name="pixie_vault_copy_password">Copy password</string>
+    <string name="pixie_vault_forget">Forget</string>
+    <string name="pixie_vault_dismiss">Close</string>
+    <string name="pixie_vault_qr_description_arg">QR code to join network %1$s</string>
+    <string name="pixie_vault_deleted_toast">Key for “%1$s” forgotten</string>
     <string name="pixie_logs_delete_title">Delete the saved audit logs?</string>
     <string name="pixie_logs_delete_message">Every log saved to /sdcard/AmWF/pixie-logs and to internal storage will be permanently deleted. They contain credentials in plain text; this cannot be undone.</string>
     <string name="pixie_logs_delete_confirm">Delete</string>

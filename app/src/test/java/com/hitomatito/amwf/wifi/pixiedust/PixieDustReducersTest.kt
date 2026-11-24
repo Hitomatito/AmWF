@@ -451,4 +451,59 @@ class PixieDustReducersTest {
         val exact = "x".repeat(200)
         assertEquals(exact, consoleDisplayLine(exact))
     }
+
+    // ------------------------------------------------------------------
+    // Bóveda de claves recuperadas
+    // ------------------------------------------------------------------
+
+    private fun vaultEntry(
+        bssid: String,
+        at: Long,
+        ssid: String = "CHASKY"
+    ) = PixieVaultEntry(
+        bssid = bssid,
+        ssid = ssid,
+        wpaPsk = "clave",
+        wpsPin = "12345670",
+        obtainedAtMs = at
+    )
+
+    @Test
+    fun `vaultUpsertState reemplaza por bssid y ordena la mas reciente primero`() {
+        // Re-auditar el mismo AP refresca su entrada; no la duplica.
+        val state = PixieDustUiState(
+            vault = listOf(vaultEntry("aa:aa:aa:aa:aa:01", at = 100L, ssid = "VIEJA"))
+        )
+
+        val updated = vaultUpsertState(
+            state,
+            vaultEntry("AA:AA:AA:AA:AA:01", at = 300L, ssid = "NUEVA")
+        )
+        val after = vaultUpsertState(
+            updated,
+            vaultEntry("bb:bb:bb:bb:bb:02", at = 200L, ssid = "OTRA")
+        )
+
+        assertEquals(
+            listOf("NUEVA", "OTRA"),
+            after.vault.map { it.ssid }
+        )
+        // El bssid coincide ignorando mayúsculas: queda UNA sola entrada.
+        assertEquals(1, after.vault.count { it.bssid.equals("aa:aa:aa:aa:aa:01", true) })
+        assertTrue(after.vault.none { it.ssid == "VIEJA" })
+    }
+
+    @Test
+    fun `vaultRemoveState borra solo la entrada pedida`() {
+        val state = PixieDustUiState(
+            vault = listOf(
+                vaultEntry("aa:aa:aa:aa:aa:01", at = 100L),
+                vaultEntry("bb:bb:bb:bb:bb:02", at = 200L)
+            )
+        )
+
+        val removed = vaultRemoveState(state, "AA:AA:AA:AA:AA:01")
+
+        assertEquals(listOf("bb:bb:bb:bb:bb:02"), removed.vault.map { it.bssid })
+    }
 }
