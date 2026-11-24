@@ -46,6 +46,7 @@ Explore our comprehensive technical and user documentation:
 | [🤝 Contributing Guidelines](CONTRIBUTING.md) | Code architecture rules, Conventional Commits, testing requirements, and i18n conventions. |
 | [📦 Native Binaries Setup](BINARIES_SETUP.md) | Provenance, patch recipes, and build details for bundled ARM native tools. |
 | [🛡️ Security Policy](SECURITY.md) | Safe harbor, supported versions, and responsible vulnerability reporting. |
+| [🦊 F-Droid Submission](docs/FDROID.md) | Upstream checklist, ready-to-copy `fdroiddata` metadata and review notes. |
 
 ---
 
