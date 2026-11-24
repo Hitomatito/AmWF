@@ -18,6 +18,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -44,6 +45,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.shape.MaterialShapeDrawable
+import com.google.android.material.shape.ShapeAppearanceModel
 import com.hitomatito.amwf.LocaleHelper
 import com.hitomatito.amwf.R
 import com.hitomatito.amwf.databinding.ActivityPixieDustBinding
@@ -85,6 +87,7 @@ class PixieDustActivity : AppCompatActivity() {
     // del blur cada vez que se abre el selector.
     private var cachedPickerBlurEffect: RenderEffect? = null
     private var cachedSheetSheen: GradientDrawable? = null
+    private var cachedVaultDialogBackground: Drawable? = null
 
     // Evita repetir auto-scroll y animaciones en cada emisión de estado.
     private var wasAttacking = false
@@ -921,6 +924,12 @@ class PixieDustActivity : AppCompatActivity() {
      * Diálogo de una clave recuperada: QR para que otro dispositivo se conecte
      * y la contraseña a la vista, con copiar y olvidar. El QR se genera fuera
      * del hilo principal; mientras llega, el diálogo ya muestra la contraseña.
+     *
+     * El diálogo comparte el lenguaje visual de la hoja de redes: la Activity
+     * detrás se difumina y el panel se vuelve cristal translúcido con
+     * hairline (los botones estándar de Material quedan sobre el mismo panel).
+     * El QR vive sobre un card BLANCO puro: es la única excepción de color del
+     * tema porque el contraste del escáner lo exige.
      */
     private fun showVaultEntryDialog(entry: PixieVaultEntry) {
         val dialogBinding = DialogPixieVaultBinding.inflate(layoutInflater)
@@ -940,10 +949,43 @@ class PixieDustActivity : AppCompatActivity() {
             .setNeutralButton(R.string.pixie_vault_dismiss, null)
             .show()
 
+        dialog.window?.let { window ->
+            window.setDimAmount(SHEET_DIM_AMOUNT)
+            window.setBackgroundDrawable(vaultDialogBackground())
+        }
+        setPickerBackgroundBlur(true)
+        dialog.setOnDismissListener { setPickerBackgroundBlur(false) }
+
         lifecycleScope.launch {
             val bitmap = withContext(Dispatchers.Default) { buildWifiQrBitmap(entry) }
             if (!isFinishing && !isDestroyed) dialogBinding.ivVaultQr.setImageBitmap(bitmap)
         }
+    }
+
+    /**
+     * Cristal del diálogo de la bóveda: misma superficie translúcida con
+     * hairline que la hoja de redes, algo más opaca porque el diálogo es más
+     * pequeño y el texto necesita todo el contraste disponible. Cacheado
+     * porque el drawable se recrearía en cada apertura.
+     */
+    private fun vaultDialogBackground(): Drawable {
+        cachedVaultDialogBackground?.let { return it }
+        val shape = MaterialShapeDrawable()
+        shape.fillColor = ColorStateList.valueOf(
+            ColorUtils.setAlphaComponent(
+                ContextCompat.getColor(this, R.color.md_theme_surface),
+                VAULT_DIALOG_SURFACE_ALPHA
+            )
+        )
+        shape.strokeColor = ColorStateList.valueOf(
+            Color.argb(GLASS_STROKE_ALPHA, 255, 255, 255)
+        )
+        shape.strokeWidth = resources.displayMetrics.density
+        val corner = SHEET_CORNER_RADIUS_DP * resources.displayMetrics.density
+        shape.shapeAppearanceModel = ShapeAppearanceModel.builder()
+            .setAllCornerSizes(corner)
+            .build()
+        return shape.also { cachedVaultDialogBackground = it }
     }
 
     /** Matriz QR → Bitmap blanco/negro puro (máximo contraste para el escáner). */
@@ -975,6 +1017,9 @@ class PixieDustActivity : AppCompatActivity() {
         private const val GLASS_SHEEN_ALPHA = 0x0F
         private const val GLASS_BOTTOM_SHEEN_ALPHA = 0x0A
         private const val SHEET_CORNER_RADIUS_DP = 28f
+        // El diálogo de la bóveda es más pequeño: algo más opaco que la hoja
+        // para que la contraseña se lea sin competencia del fondo difuminado.
+        private const val VAULT_DIALOG_SURFACE_ALPHA = 0xE6
 
         /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
         private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
