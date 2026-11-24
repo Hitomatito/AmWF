@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fila de la bóveda: mismo cristal que la tarjeta contenedora, algo más
+     opaca para que el SSID y la fecha mantengan contraste sobre ella. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/glass_row_background" />
+    <corners android:radius="16dp" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/glass_card_stroke" />
+</shape>

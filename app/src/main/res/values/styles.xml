@@ -8,6 +8,14 @@
         <item name="strokeWidth">1dp</item>
     </style>
 
+    <!-- Variante cristal de la tarjeta: translúcida con hairline, para
+         superficies que deben dejar pasar el difuminado de la Activity
+         detrás (bóveda de claves). Las tarjetas normales siguen opacas. -->
+    <style name="Widget.AmWF.Card.Glass">
+        <item name="cardBackgroundColor">@color/glass_card_background</item>
+        <item name="strokeColor">@color/glass_card_stroke</item>
+    </style>
+
     <style name="TextAppearance.AmWF.ScreenTitle" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textColor">@color/md_theme_onSurface</item>
         <item name="android:textStyle">bold</item>
