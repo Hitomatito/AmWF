@@ -83,6 +83,10 @@ class PixieDustActivity : AppCompatActivity() {
     // Hoja inferior que contiene la búsqueda, los filtros y la lista de redes.
     private var sheetBinding: SheetPixieNetworkPickerBinding? = null
     private var sheetDialog: BottomSheetDialog? = null
+    // Diálogo del QR de la bóveda: se guarda para cerrarlo si la Activity
+    // muere (rotación) — no sobrevive a la recreación y dejaría una ventana
+    // huérfana sobre la Activity nueva.
+    private var vaultDialog: AlertDialog? = null
     // RenderEffect reutilizable: crearlo una vez evita reconstruir los shaders
     // del blur cada vez que se abre el selector.
     private var cachedPickerBlurEffect: RenderEffect? = null
@@ -201,6 +205,7 @@ class PixieDustActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         sheetDialog?.dismiss()
+        vaultDialog?.dismiss()
         setPickerBackgroundBlur(false)
         super.onDestroy()
     }
@@ -941,6 +946,7 @@ class PixieDustActivity : AppCompatActivity() {
             .setTitle(entry.ssid)
             .setView(dialogBinding.root)
             .show()
+        vaultDialog = dialog
 
         // Acciones en baldosas dentro del panel: nada de texto suelto del
         // sistema. Copiar mantiene el diálogo abierto (el QR sigue a la vista);
@@ -959,7 +965,10 @@ class PixieDustActivity : AppCompatActivity() {
             window.setBackgroundDrawable(vaultDialogBackground())
         }
         setPickerBackgroundBlur(true)
-        dialog.setOnDismissListener { setPickerBackgroundBlur(false) }
+        dialog.setOnDismissListener {
+            vaultDialog = null
+            setPickerBackgroundBlur(false)
+        }
 
         lifecycleScope.launch {
             val bitmap = withContext(Dispatchers.Default) { buildWifiQrBitmap(entry) }
