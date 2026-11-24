@@ -5,9 +5,10 @@ Audita solo redes de tu propiedad o con permiso explícito. Consulta el aviso le
 Funciones:
 
 • Modo monitor — captura tráfico 802.11 con el adaptador WiFi integrado del móvil, sin dongle USB.
-• Verificación de compatibilidad — detección de chipset y driver más pruebas de captura e inyección con barra de progreso; el WiFi se restaura siempre al terminar. Nada se ejecuta automáticamente.
+• Verificación de compatibilidad — detección de chipset y driver más pruebas de captura e inyección con barra de progreso; el WiFi se restaura siempre al terminar. Nada se ejecuta automáticamente y el resultado se conserva entre reinicios con su fecha.
 • Auditoría WPS Pixie Dust — escanea las redes cercanas, ve cuáles tienen WPS activo y audita con un solo toque. Cuando es posible, recupera el PIN WPS y la clave WPA.
-• Progreso claro — rastreador por fases, temporizador de sesión y consola plegable con cada paso.
+• Bóveda de claves — las contraseñas obtenidas se guardan en el almacenamiento privado de la app: consúltalas cuando quieras, muéstralas como código QR para que otro dispositivo se conecte u olvídalas con un toque.
+• Progreso claro — indicador de estado, temporizador de sesión y consola plegable con cada paso.
 • Privacidad desde el diseño — AmWF no tiene permiso de Internet y no incluye analíticas ni anuncios; el informe de diagnóstico exportable redacta las direcciones MAC y los SSIDs.
 
 Requisitos:
@@ -17,4 +18,4 @@ Requisitos:
 • Android 7.0 o superior
 • Toolchain nativo incluido: pixiewps, wpa_supplicant 2.11, libnl 3.2.25 (arm64-v8a y armeabi-v7a)
 
-Los logs de auditoría se guardan en local y pueden contener credenciales en texto plano; nunca salen del dispositivo. Código fuente GPL-3.0-or-later. Interfaz en español e inglés.
+Los logs de auditoría y la bóveda de claves se guardan en local y pueden contener credenciales en texto plano; nunca salen del dispositivo. Código fuente GPL-3.0-or-later. Interfaz en español e inglés.
