@@ -143,10 +143,13 @@ internal fun encodeSnapshot(snapshot: CompatResultStore.Snapshot): String {
 }
 
 internal fun decodeSnapshot(raw: String): CompatResultStore.Snapshot? {
-    // lineSequence emite una última línea vacía cuando el texto termina en \n:
-    // es el terminador del formato, no contenido a validar (una vacía INTERNA
-    // sigue siendo inválida y anula el snapshot).
-    val lines = raw.lineSequence().toList().dropLastWhile { it.isEmpty() }
+    // El terminador del formato no es contenido a validar, y adopta dos formas:
+    //  - `lineSequence()` emite una línea vacía cuando el texto acaba en \n;
+    //  - el XmlSerializer de SharedPreferences INDENTA esa última línea con
+    //    espacios (el valor guardado acaba en "\n    "), así que no basta
+    //    isEmpty(): una línea en blanco (isBlank) también es el terminador.
+    // Una línea en blanco INTERNA sigue siendo inválida y anula el snapshot.
+    val lines = raw.lineSequence().toList().dropLastWhile { it.isBlank() }
     if (lines.isEmpty() || lines.first() != FORMAT_HEADER) return null
 
     val scalars = mutableMapOf<String, String>()

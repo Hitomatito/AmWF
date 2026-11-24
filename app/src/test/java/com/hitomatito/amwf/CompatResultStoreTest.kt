@@ -151,6 +151,27 @@ class CompatResultStoreTest {
     }
 
     @Test
+    fun `la indentacion del XmlSerializer de SharedPreferences no rompe el decode`() {
+        // REGRESIÓN DE CAMPO: SharedPreferences guarda el valor con saltos de
+        // línea y su XmlSerializer añade 4 espacios de indentación tras el
+        // último salto ("...\n    "). Los tests sintéticos no lo reproducían y
+        // el snapshot se descartaba siempre en el dispositivo. Las líneas en
+        // blanco al final SON el terminador del formato, no contenido.
+        val encoded = encodeSnapshot(snapshotOf(sampleResult()))
+        val fromXml = encoded + "    "
+
+        assertEquals(snapshotOf(sampleResult()), decodeSnapshot(fromXml))
+    }
+
+    @Test
+    fun `una linea en blanco interna sigue anulando el snapshot`() {
+        val good = encodeSnapshot(snapshotOf(sampleResult()))
+        val broken = good.replace("model=2107113SG", "\n    \nmodel=2107113SG")
+
+        assertNull(decodeSnapshot(broken))
+    }
+
+    @Test
     fun `todo lo malformado se trata como ausente`() {
         val good = encodeSnapshot(snapshotOf(sampleResult()))
 
