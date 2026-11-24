@@ -464,7 +464,6 @@ class PixieDustReducersTest {
         bssid = bssid,
         ssid = ssid,
         wpaPsk = "clave",
-        wpsPin = "12345670",
         obtainedAtMs = at
     )
 

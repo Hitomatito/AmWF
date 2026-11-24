@@ -33,7 +33,6 @@ data class PixieVaultEntry(
     val bssid: String,
     val ssid: String,
     val wpaPsk: String,
-    val wpsPin: String?,
     val obtainedAtMs: Long
 )
 
@@ -111,7 +110,6 @@ internal fun encodeEntry(entry: PixieVaultEntry): String = buildString {
     appendLine(ENTRY_HEADER)
     appendLine("ssid=${esc(entry.ssid)}")
     appendLine("psk=${esc(entry.wpaPsk)}")
-    appendLine("pin=${entry.wpsPin?.let(::esc) ?: "~"}")
     appendLine("at=${entry.obtainedAtMs}")
 }
 
@@ -121,20 +119,27 @@ internal fun decodeEntry(raw: String): PixieVaultEntry? {
     // terminador del formato, no contenido: una línea en blanca INTERNA sigue
     // siendo inválida y anula la entrada.
     val lines = raw.lineSequence().toList().dropLastWhile { it.isBlank() }
-    if (lines.size != 5 || lines.first() != ENTRY_HEADER) return null
+    // Formato actual: 4 líneas. Se siguen leyendo las entradas de 5 líneas
+    // guardadas antes de retirar el PIN de la bóveda; el campo pin se ignora.
+    if (lines.size !in 4..5 || lines.first() != ENTRY_HEADER) return null
 
     val scalars = mutableMapOf<String, String>()
     for (line in lines.drop(1)) {
         val key = line.substringBefore("=", "")
         val value = line.substringAfter("=", "")
-        if (key.isEmpty() || key !in setOf("ssid", "psk", "pin", "at")) return null
-        scalars[key] = value
+        if (key.isEmpty() || key !in setOf("ssid", "psk", "at", "pin")) return null
+        if (key != "pin") scalars[key] = value
     }
+    // Comprobar las claves requeridas antes de getValue: una entrada con claves
+    // duplicadas podría dejar fuera «psk» y lanzar NoSuchElementException
+    // fuera del catch al cargar la bóveda en el ViewModel.
+    if (!scalars.containsKey("ssid") || !scalars.containsKey("psk") ||
+        !scalars.containsKey("at")
+    ) return null
 
     return try {
         val ssid = unesc(scalars.getValue("ssid"))
         val psk = unesc(scalars.getValue("psk"))
-        val pin = scalars.getValue("pin").let { if (it == "~") null else unesc(it) }
         val at = scalars.getValue("at").toLongOrNull() ?: error("bad at")
         // Una entrada sin SSID ni clave no tiene sentido en la bóveda.
         if (ssid.isBlank() || psk.isBlank()) return null
@@ -142,7 +147,6 @@ internal fun decodeEntry(raw: String): PixieVaultEntry? {
             bssid = "", // lo aporta la clave de prefs; no se serializa
             ssid = ssid,
             wpaPsk = psk,
-            wpsPin = pin,
             obtainedAtMs = at
         )
     } catch (_: IllegalStateException) {

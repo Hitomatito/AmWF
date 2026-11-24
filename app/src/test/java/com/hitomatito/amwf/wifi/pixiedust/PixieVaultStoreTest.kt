@@ -18,13 +18,11 @@ class PixieVaultStoreTest {
     private fun entry(
         ssid: String = "CHASKY",
         psk: String = "clave-segura",
-        pin: String? = "12345670",
         at: Long = 1_764_000_000_000L
     ) = PixieVaultEntry(
         bssid = "ec:a2:a0:7e:37:19",
         ssid = ssid,
         wpaPsk = psk,
-        wpsPin = pin,
         obtainedAtMs = at
     )
 
@@ -49,10 +47,25 @@ class PixieVaultStoreTest {
     }
 
     @Test
-    fun `un pin null viaja con la marca y vuelve como null`() {
-        val restored = decodeEntry(encodeEntry(entry(pin = null)))!!
+    fun `las entradas guardadas con pin se leen ignorando el pin`() {
+        // Migración: las entradas anteriores tenían 5 líneas con pin=...; el
+        // PIN ya no se persiste ni se modela, pero la clave recuperada debe
+        // seguir apareciendo en la bóveda del usuario.
+        val legacy = encodeEntry(entry()).replace(
+            "at=1764000000000",
+            "pin=12345670\nat=1764000000000"
+        )
 
-        assertNull(restored.wpsPin)
+        assertEquals(entry().copy(bssid = ""), decodeEntry(legacy))
+    }
+
+    @Test
+    fun `un campo requerido duplicado se trata como ausente sin lanzar`() {
+        // Sin la guarda explícita de claves, getValue lanzaría
+        // NoSuchElementException al cargar una entrada corrupta desde prefs.
+        val roto = encodeEntry(entry()).replace("psk=clave-segura", "ssid=otra")
+
+        assertNull(decodeEntry(roto))
     }
 
     @Test

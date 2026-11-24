@@ -732,7 +732,6 @@ class PixieDustViewModel @JvmOverloads constructor(
             bssid = bssid,
             ssid = ssid,
             wpaPsk = psk,
-            wpsPin = result.wpsPin?.trim()?.takeIf { it.isNotBlank() },
             obtainedAtMs = atMs
         )
         withContext(ioDispatcher) { PixieVaultStore.save(appContext, entry) }
