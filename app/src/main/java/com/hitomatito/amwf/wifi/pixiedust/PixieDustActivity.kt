@@ -10,6 +10,11 @@ package com.hitomatito.amwf.wifi.pixiedust
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
@@ -171,6 +176,7 @@ class PixieDustActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         sheetDialog?.dismiss()
+        setPickerBackgroundBlur(false)
         super.onDestroy()
     }
 
@@ -242,6 +248,7 @@ class PixieDustActivity : AppCompatActivity() {
             sheetBinding = null
             sheetDialog = null
             lastListSignature = ""
+            setPickerBackgroundBlur(false)
         }
         dialog.setOnShowListener {
             val behavior = dialog.behavior
@@ -250,6 +257,7 @@ class PixieDustActivity : AppCompatActivity() {
             behavior.maxHeight = (resources.displayMetrics.heightPixels * 0.92f).toInt()
             behavior.skipCollapsed = true
             behavior.state = BottomSheetBehavior.STATE_EXPANDED
+            configureSheetWindow(dialog)
         }
 
         sheetBinding = sheet
@@ -260,6 +268,44 @@ class PixieDustActivity : AppCompatActivity() {
 
     private fun closeNetworkPicker() {
         sheetDialog?.dismiss()
+    }
+
+    /**
+     * Fondo de la hoja de redes: se sustituye el relleno opaco del tema del
+     * diálogo (lo que se veía como un fondo negro) por una ventana transparente
+     * con atenuación suave. En Android 12+ se difumina además la Activity que
+     * queda detrás; la superficie de la lista sigue siendo opaca para que el
+     * texto y los filtros se lean bien.
+     */
+    private fun configureSheetWindow(dialog: BottomSheetDialog) {
+        val window = dialog.window ?: return
+        window.setDimAmount(SHEET_DIM_AMOUNT)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        setPickerBackgroundBlur(true)
+    }
+
+    /**
+     * Difuminado de la pantalla de auditoría mientras la hoja está visible.
+     * Se aplica al decor de la Activity (no al del diálogo) con RenderEffect:
+     * a diferencia de Window.setBackgroundBlurRadius, no depende de que el OEM
+     * habilite el blur entre ventanas — MIUI lo ignora — y funciona en cualquier
+     * Android 12+. El diálogo es otra ventana, así que su contenido no se
+     * difumina. La hoja vacía [setPickerBackgroundBlur] al cerrarse y al
+     * destruirse la Activity para no dejar la pantalla borrosa.
+     */
+    private fun setPickerBackgroundBlur(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        window.decorView.setRenderEffect(
+            if (enabled) {
+                RenderEffect.createBlurEffect(
+                    SHEET_BLUR_RADIUS_PX.toFloat(),
+                    SHEET_BLUR_RADIUS_PX.toFloat(),
+                    Shader.TileMode.CLAMP
+                )
+            } else {
+                null
+            }
+        )
     }
 
     private fun setupObservers() {
@@ -737,6 +783,10 @@ class PixieDustActivity : AppCompatActivity() {
     private companion object {
         private const val STATE_AWAITING_SETTINGS = "awaiting_settings_result"
         private const val STATE_PERMISSION_REQUESTED = "permission_request_attempted"
+        // Velo suave en vez del dim negro por defecto de Material, y radio de
+        // difuminado de la ventana (API 31+; en versiones anteriores se ignora).
+        private const val SHEET_DIM_AMOUNT = 0.32f
+        private const val SHEET_BLUR_RADIUS_PX = 24
 
         /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
         private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
