@@ -17,6 +17,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
@@ -281,6 +282,12 @@ class PixieDustActivity : AppCompatActivity() {
         val window = dialog.window ?: return
         window.setDimAmount(SHEET_DIM_AMOUNT)
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        // La superficie de la hoja es opaca por defecto (colorSurface): sin
+        // este alpha el difuminado de la Activity solo se vería en la franja
+        // que queda por encima de la hoja, no en la ventana del selector.
+        // mutate() conserva la forma redondeada del MaterialShapeDrawable.
+        dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.background?.mutate()?.alpha = SHEET_SURFACE_ALPHA
         setPickerBackgroundBlur(true)
     }
 
@@ -787,6 +794,9 @@ class PixieDustActivity : AppCompatActivity() {
         // difuminado de la ventana (API 31+; en versiones anteriores se ignora).
         private const val SHEET_DIM_AMOUNT = 0.32f
         private const val SHEET_BLUR_RADIUS_PX = 24
+        // Opacidad de la superficie de la hoja: deja ver el contenido difuminado
+        // de la Activity a través de ella sin perder contraste en los textos.
+        private const val SHEET_SURFACE_ALPHA = 0xB3
 
         /** Fuente única chips ↔ filtros; el inverso se deriva del mismo mapa. */
         private val CHIP_BY_FILTER: Map<NetworkFilter, Int> = mapOf(
