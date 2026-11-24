@@ -24,6 +24,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -72,6 +73,9 @@ class PixieDustActivity : AppCompatActivity() {
     // Hoja inferior que contiene la búsqueda, los filtros y la lista de redes.
     private var sheetBinding: SheetPixieNetworkPickerBinding? = null
     private var sheetDialog: BottomSheetDialog? = null
+    // RenderEffect reutilizable: crearlo una vez evita reconstruir los shaders
+    // del blur cada vez que se abre el selector.
+    private var cachedPickerBlurEffect: RenderEffect? = null
 
     // Evita repetir auto-scroll y animaciones en cada emisión de estado.
     private var wasAttacking = false
@@ -342,25 +346,27 @@ class PixieDustActivity : AppCompatActivity() {
      */
     private fun setPickerBackgroundBlur(enabled: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        window.decorView.setRenderEffect(
-            if (enabled) {
-                // Blur amplio + realce de brillo: sobre un fondo oscuro y casi
-                // plano, un blur sin realce es imperceptible. El realce hace
-                // que las formas desenfocadas se lean como cristal esmerilado.
-                RenderEffect.createChainEffect(
-                    RenderEffect.createBlurEffect(
-                        SHEET_BLUR_RADIUS_PX.toFloat(),
-                        SHEET_BLUR_RADIUS_PX.toFloat(),
-                        Shader.TileMode.CLAMP
-                    ),
-                    RenderEffect.createColorFilterEffect(
-                        LightingColorFilter(0xFFFFFFFF.toInt(), 0x0A0A0A)
-                    )
-                )
-            } else {
-                null
-            }
-        )
+        // El efecto se crea una sola vez: abrir/cerrar la hoja no debe
+        // reconstruir un RenderEffect (y sus shaders) en cada ocasión.
+        window.decorView.setRenderEffect(if (enabled) pickerBlurEffect() else null)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun pickerBlurEffect(): RenderEffect {
+        cachedPickerBlurEffect?.let { return it }
+        // Radio moderado: el coste del blur gaussiano crece con el radio y la
+        // pantalla completa es ~2,6 Mpx. El realce de brillo hace perceptible
+        // el desenfoque sobre un fondo oscuro sin necesidad de un radio mayor.
+        return RenderEffect.createChainEffect(
+            RenderEffect.createBlurEffect(
+                SHEET_BLUR_RADIUS_PX.toFloat(),
+                SHEET_BLUR_RADIUS_PX.toFloat(),
+                Shader.TileMode.CLAMP
+            ),
+            RenderEffect.createColorFilterEffect(
+                LightingColorFilter(0xFFFFFFFF.toInt(), 0x0A0A0A)
+            )
+        ).also { cachedPickerBlurEffect = it }
     }
 
     private fun setupObservers() {
@@ -841,7 +847,7 @@ class PixieDustActivity : AppCompatActivity() {
         // Poco dim para que el difuminado se aprecie, y radio generoso: con un
         // fondo oscuro y casi uniforme, un blur débil no se nota.
         private const val SHEET_DIM_AMOUNT = 0.18f
-        private const val SHEET_BLUR_RADIUS_PX = 56
+        private const val SHEET_BLUR_RADIUS_PX = 32
         // Superficie de cristal: translúcida en toda la hoja, con hairline y
         // reflejo superior redondeado como las esquinas de Material.
         private const val SHEET_SURFACE_ALPHA = 0x9E
