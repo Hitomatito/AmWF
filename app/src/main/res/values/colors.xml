@@ -34,4 +34,8 @@
     <color name="glass_card_background">#8A162422</color>
     <color name="glass_row_background">#B3162422</color>
     <color name="glass_card_stroke">#24FFFFFF</color>
+    <!-- Baldosa de la contraseña recuperada: el naranja de la app (`managed`)
+         translúcido, para que la clave destaque sobre el cristal. -->
+    <color name="vault_psk_tint">#29FF7043</color>
+    <color name="vault_psk_stroke">#4DFF7043</color>
 </resources>

@@ -940,14 +940,19 @@ class PixieDustActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle(entry.ssid)
             .setView(dialogBinding.root)
-            .setPositiveButton(R.string.pixie_vault_copy_password) { _, _ ->
-                viewModel.emitEvent(PixieDustEvent.CopyToClipboard(entry.wpaPsk))
-            }
-            .setNegativeButton(R.string.pixie_vault_forget) { _, _ ->
-                viewModel.deleteVaultEntry(entry.bssid)
-            }
-            .setNeutralButton(R.string.pixie_vault_dismiss, null)
             .show()
+
+        // Acciones en baldosas dentro del panel: nada de texto suelto del
+        // sistema. Copiar mantiene el diálogo abierto (el QR sigue a la vista);
+        // olvidar y cerrar lo terminan.
+        dialogBinding.btnVaultCopy.setOnClickListener {
+            viewModel.emitEvent(PixieDustEvent.CopyToClipboard(entry.wpaPsk))
+        }
+        dialogBinding.btnVaultForget.setOnClickListener {
+            viewModel.deleteVaultEntry(entry.bssid)
+            dialog.dismiss()
+        }
+        dialogBinding.btnVaultDismiss.setOnClickListener { dialog.dismiss() }
 
         dialog.window?.let { window ->
             window.setDimAmount(SHEET_DIM_AMOUNT)
