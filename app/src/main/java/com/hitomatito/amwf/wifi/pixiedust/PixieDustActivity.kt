@@ -76,6 +76,7 @@ class PixieDustActivity : AppCompatActivity() {
     // RenderEffect reutilizable: crearlo una vez evita reconstruir los shaders
     // del blur cada vez que se abre el selector.
     private var cachedPickerBlurEffect: RenderEffect? = null
+    private var cachedSheetSheen: GradientDrawable? = null
 
     // Evita repetir auto-scroll y animaciones en cada emisión de estado.
     private var wasAttacking = false
@@ -339,8 +340,14 @@ class PixieDustActivity : AppCompatActivity() {
         // no se aprecia en la parte inferior porque detrás solo hay fondo liso
         // (desenfocar un color uniforme da ese mismo color); el reflejo es lo
         // que mantiene el panel continuo de arriba abajo.
+        content.background = sheetSheen()
+    }
+
+    /** Reflejo cacheado: no recrear el drawable en cada apertura de la hoja. */
+    private fun sheetSheen(): GradientDrawable {
+        cachedSheetSheen?.let { return it }
         val corner = SHEET_CORNER_RADIUS_DP * resources.displayMetrics.density
-        GradientDrawable(
+        return GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(
                 Color.argb(GLASS_SHEEN_ALPHA, 255, 255, 255),
@@ -349,8 +356,7 @@ class PixieDustActivity : AppCompatActivity() {
             )
         ).apply {
             cornerRadii = floatArrayOf(corner, corner, corner, corner, 0f, 0f, 0f, 0f)
-            content.background = this
-        }
+        }.also { cachedSheetSheen = it }
     }
 
     /**
